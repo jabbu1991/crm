@@ -31,6 +31,7 @@
   <a href="{{ url_for('states') }}" class="{{ 'active' if ep in ('states', 'state_view') }}">State-wise Leads</a>
   <a href="{{ url_for('product_leads') }}" class="{{ 'active' if ep in ('product_leads', 'product_lead_list') }}">Product-wise Leads</a>
   <a href="{{ url_for('followups') }}" class="{{ 'active' if ep == 'followups' }}">Follow-ups</a>
+  <a href="{{ url_for('export_page') }}" class="{{ 'active' if ep.startswith('export') }}">Export</a>
   {% if is_admin() %}
   <a href="{{ url_for('reports') }}" class="{{ 'active' if ep == 'reports' }}">Reports</a>
   <a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Export data{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Export data</h1>
+  <a class="btn btn-primary" href="{{ url_for('export_zip') }}">⬇ Download everything (ZIP)</a>
+</div>
+<div class="card export-scope">
+  {% if global_export %}
+    <b>All organizations.</b> As Super Admin you are exporting every organization's data. Each file has an Organization column. Each client's access log records the export.
+  {% elif viewing %}
+    <b>{{ g.org.name }} only</b> (viewing as Super Admin). This export is recorded in their access log.
+  {% elif is_admin() %}
+    <b>All of {{ g.org.name }}</b>: every staff member's leads and records.
+  {% else %}
+    <b>Your data:</b> the leads you created or that are assigned to you, with their follow-ups and history.
+  {% endif %}
+</div>
+<div class="cards export-cards">
+  {% for key, label, desc, count in exports %}
+  <a class="card export-card" href="{{ url_for('export_csv', name=key) }}">
+    <div><h3>{{ label }}</h3><p>{{ desc }}</p></div>
+    <span class="export-count">{{ count }} rows · CSV ⬇</span>
+  </a>
+  {% endfor %}
+</div>
+<p class="muted small">Files open directly in Excel or Google Sheets. Passwords are never exported. To export only some leads (one state, one product, a date range), use the filters on the Leads page and click Export CSV there.</p>
+{% endblock %}

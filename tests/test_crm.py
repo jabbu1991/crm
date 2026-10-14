@@ -143,8 +143,11 @@ def test_staff_cannot_see_other_staff_leads(world):
     assert l2 not in lead_ids(w["a_s1"].get("/leads?q=S2").get_data(as_text=True))
     assert l2 not in lead_ids(w["a_s1"].get(f"/leads?staff={w['uid']('a_staff2')}").get_data(as_text=True))
     # staff may not export, see reports, staff list or org settings
-    for url in ("/leads/export", "/reports", "/staff", "/organization", "/admin/organizations"):
+    for url in ("/reports", "/staff", "/organization", "/admin/organizations"):
         assert w["a_s1"].get(url).status_code == 403, url
+    # staff can export, but only their own leads
+    exported = w["a_s1"].get("/leads/export").get_data(as_text=True)
+    assert "Lead of S1" in exported and "Lead of S2" not in exported
     # staff can delete nothing
     assert w["a_s1"].post(f"/leads/{l1}/delete").status_code == 403
 
@@ -648,3 +651,45 @@ def test_website_enquiry_creates_agency_lead(world, monkeypatch):
     codes = [c.post("/enquiry", data=form, headers={"Origin": "https://realviewcreativestudio.in"}).status_code
              for _ in range(11)]
     assert codes[-1] == 429
+
+
+def test_exports_follow_each_role_scope(world):
+    import zipfile as zf
+    w = world
+    add_lead(w["a_s1"], w["proj_a"], "=HYPERLINK(evil)", "6100000001", products=[w["prod_a1"]],
+             extra={"next_follow_up": "2030-01-01"})
+    add_lead(w["a_s2"], w["proj_a"], "S2 customer", "6100000002")
+    add_lead(w["b_admin"], w["proj_b"], "B customer", "6100000003")
+
+    def csv_of(b, name):
+        r = b.get(f"/export/{name}.csv")
+        assert r.status_code == 200, (name, r.status_code)
+        return r.get_data(as_text=True)
+
+    # Staff: own leads only, and only their own user row.
+    leads = csv_of(w["a_s1"], "leads")
+    assert "HYPERLINK" in leads and "S2 customer" not in leads and "B customer" not in leads
+    assert "'=HYPERLINK(evil)" in leads  # formula neutralised for Excel
+    users = csv_of(w["a_s1"], "users")
+    assert "a_staff1" in users and "a_staff2" not in users
+    assert "2030-01-01" in csv_of(w["a_s1"], "followups")
+    assert "Interested" in csv_of(w["a_s1"], "lead-products")
+    assert w["a_s1"].get("/export/organizations.csv").status_code == 404
+    # Org admin: whole org, nothing from Org B.
+    leads = csv_of(w["a_admin"], "leads")
+    assert "HYPERLINK" in leads and "S2 customer" in leads and "B customer" not in leads
+    assert "a_staff2" in csv_of(w["a_admin"], "users") and "b_admin" not in csv_of(w["a_admin"], "users")
+    assert "B Product" not in csv_of(w["a_admin"], "products")
+    # Super Admin (agency workspace): every organization, with an Organization column.
+    leads = csv_of(w["sup"], "leads")
+    assert all(x in leads for x in ("HYPERLINK", "S2 customer", "B customer", "Org A", "Org B"))
+    assert "ORGB" in csv_of(w["sup"], "organizations")
+    # ZIP holds one CSV per dataset.
+    r = w["sup"].get("/export/all.zip")
+    names = zf.ZipFile(io.BytesIO(r.data)).namelist()
+    assert "leads.csv" in names and "organizations.csv" in names and len(names) == 8
+    staff_zip = zf.ZipFile(io.BytesIO(w["a_s1"].get("/export/all.zip").data))
+    assert "organizations.csv" not in staff_zip.namelist()
+    assert "B customer" not in staff_zip.read("leads.csv").decode("utf-8-sig")
+    # Clients see the Super Admin's export in their access log.
+    assert "exported" in w["a_admin"].get("/organization").get_data(as_text=True)

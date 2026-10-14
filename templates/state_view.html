@@ -4,7 +4,7 @@
 {% set fixed = {'state': state} %}{% if params.country %}{% set _ = fixed.update(country=params.country) %}{% endif %}
 <div class="page-head">
   <h1><a href="{{ url_for('states') }}" class="muted">State-wise</a> › {{ state }}{% if params.country %} <small class="muted">{{ params.country }}</small>{% endif %}</h1>
-  {% if is_admin() %}<a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>{% endif %}
+  <a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>
 </div>
 <div class="stats compact-stats"><div class="stat"><b>{{ total }}</b><span>{{ 'leads' if not params.q and params|length <= 2 else 'matching leads' }} in {{ state }}</span></div></div>
 <div class="quicksort">

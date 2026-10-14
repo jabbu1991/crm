@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <h1><a href="{{ url_for('product_leads') }}" class="muted">Product-wise</a> › {{ product.name }}{% if product.code %} <small class="muted">{{ product.code }}</small>{% endif %}</h1>
-  {% if is_admin() %}<a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>{% endif %}
+  <a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>
 </div>
 {% if stats %}
 <div class="stats">

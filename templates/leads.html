@@ -6,7 +6,7 @@
   <div class="actions">
     <a class="btn btn-primary" href="{{ url_for('lead_new', project=params.get('project')) }}">+ Add lead</a>
     <a class="btn" href="{{ url_for('leads_import') }}">Import CSV</a>
-    {% if is_admin() %}<a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>{% endif %}
+    <a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>
   </div>
 </div>
 

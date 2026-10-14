@@ -26,6 +26,7 @@ A multi-tenant lead-management CRM for a **marketing agency and the client busin
 - **State-wise Leads:** every state with its lead count. Click a state to see its leads, with search, filters, sorting, pagination and export. Spellings like "kerala" or "KL" are stored as "Kerala".
 - **Product-wise Leads:** for each product: interested leads, distinct customers, hot, still interested, ordered, purchased, lost/dropped and conversion rate. Click a product to see its leads.
 - **Follow-ups:** schedule, complete or cancel follow-ups. Separate lists for overdue, today, upcoming and completed.
+- **Export:** every role can download its own scope as CSV files or one ZIP: leads, product interest, follow-ups, activity history, projects, products and users. A Super Admin exports all organizations at once. Spreadsheet formulas in cell values are neutralised.
 - **Dashboards:** separate views for Super Admin, Organization Admin and Staff, all built from live queries within the user's permissions.
 
 ## Run it

@@ -19,6 +19,7 @@ import os
 import secrets
 import sqlite3
 import time
+import zipfile
 from datetime import date, datetime, timedelta
 from functools import wraps
 
@@ -1034,7 +1035,7 @@ def leads():
 
 
 @app.route("/leads/export")
-@admin_required
+@login_required
 def leads_export():
     clauses, args = lead_filters(clean_params())
     sort = request.args.get("sort") if request.args.get("sort") in SORTABLE else "created"
@@ -1044,7 +1045,7 @@ def leads_export():
                      {LEAD_FROM} WHERE {' AND '.join(clauses)}
                      ORDER BY {SORTABLE[sort]} {'ASC' if request.args.get('dir') == 'asc' else 'DESC'}""", args)
     out = io.StringIO()
-    writer = csv.writer(out)
+    writer = SafeCsvWriter(out)
     writer.writerow(["ID", "Project", "Project Code", "Customer Name", "Phone", "WhatsApp", "Email", "Place",
                      "District", "State", "Country", "Products", "Requirement", "Status", "Buying Possibility",
                      "Lead Quality", "Priority", "Source", "Next Follow-up", "Assigned To", "Created By",
@@ -1448,6 +1449,228 @@ def followups():
                    [t, t, t] + sargs, one=True)
     return render_template("followups.html", rows=rows, view=view, counts=counts, staff_id=staff_id,
                            staff=org_users(active_only=False) if is_admin() else [])
+
+
+# ---------------------------------------------------------------- data export (every role, own scope)
+
+class SafeCsvWriter:
+    """csv.writer that neutralises spreadsheet formulas (=, @, +/- not followed by a digit)."""
+
+    def __init__(self, out):
+        self.w = csv.writer(out)
+
+    @staticmethod
+    def _cell(v):
+        if v is None:
+            return ""
+        v = str(v) if not isinstance(v, str) else v
+        if v and (v[0] in "=@\t\r" or (v[0] in "+-" and not v[1:2].isdigit())):
+            return "'" + v
+        return v
+
+    def writerow(self, row):
+        self.w.writerow([self._cell(v) for v in row])
+
+
+def export_is_global():
+    """Super Admin in the agency workspace exports every organization; everyone else their own scope."""
+    return is_super() and not g.get("viewing")
+
+
+def export_lead_where(a="l"):
+    return ("1=1", []) if export_is_global() else lead_scope(a)
+
+
+def export_org_where(a):
+    return ("1=1", []) if export_is_global() else (f"{a}.org_id = ?", [org_id()])
+
+
+def _export_leads():
+    where, args = export_lead_where()
+    rows = query(f"""SELECT {LEAD_COLUMNS}, o.name org_name,
+                       (SELECT GROUP_CONCAT(pr.name || ' [' || lp.stage || ']', '; ') FROM lead_products lp
+                          JOIN products pr ON pr.id = lp.product_id WHERE lp.lead_id = l.id) product_stages
+                     {LEAD_FROM} JOIN organizations o ON o.id = l.org_id
+                     WHERE {where} ORDER BY o.name, l.created_at DESC""", args)
+    head = ["Organization", "Lead ID", "Project", "Project Code", "Customer Name", "Phone", "WhatsApp", "Email",
+            "Place", "District", "State", "Country", "Products [stage]", "Requirement", "Status",
+            "Buying Possibility", "Lead Quality", "Priority", "Source", "Next Follow-up", "Assigned To",
+            "Created By", "Created At", "Updated By", "Updated At", "Notes"]
+    return head, [[r["org_name"], r["id"], r["project_name"], r["project_code"], r["customer_name"], r["phone"],
+                   r["whatsapp"], r["email"], r["place"], r["district"], r["state"], r["country"],
+                   r["product_stages"], r["requirement"], r["status"], r["buying_possibility"], r["lead_quality"],
+                   r["priority"], r["source"], r["next_follow_up"], r["assigned_name"], r["staff_name"],
+                   r["created_at"], r["updated_by_name"], r["updated_at"], r["notes"]] for r in rows]
+
+
+def _export_lead_products():
+    where, args = export_lead_where()
+    rows = query(f"""SELECT o.name org_name, l.id lead_id, l.customer_name, l.phone, pr.name, pr.code, lp.stage,
+                       l.status, lp.created_at, lp.updated_at, u.name updated_by
+                     FROM lead_products lp JOIN leads l ON l.id = lp.lead_id JOIN products pr ON pr.id = lp.product_id
+                     JOIN organizations o ON o.id = l.org_id LEFT JOIN users u ON u.id = lp.updated_by
+                     WHERE {where} ORDER BY o.name, pr.name, l.id""", args)
+    head = ["Organization", "Lead ID", "Customer Name", "Phone", "Product", "Product Code", "Product Stage",
+            "Lead Status", "Linked At", "Stage Updated At", "Stage Updated By"]
+    return head, [list(r) for r in rows]
+
+
+def _export_followups():
+    where, args = export_lead_where()
+    rows = query(f"""SELECT o.name, l.id, l.customer_name, l.phone, f.due_date, f.note, f.status, cu.name,
+                       f.created_at, co.name, f.completed_at, f.outcome
+                     FROM follow_ups f JOIN leads l ON l.id = f.lead_id JOIN organizations o ON o.id = l.org_id
+                     JOIN users cu ON cu.id = f.created_by LEFT JOIN users co ON co.id = f.completed_by
+                     WHERE {where} ORDER BY o.name, f.due_date""", args)
+    head = ["Organization", "Lead ID", "Customer Name", "Phone", "Due Date", "Task", "Status", "Created By",
+            "Created At", "Completed By", "Completed At", "Outcome"]
+    return head, [list(r) for r in rows]
+
+
+def _export_activity():
+    where, args = export_lead_where()
+    rows = query(f"""SELECT o.name, l.id, l.customer_name, u.name, a.action, a.created_at
+                     FROM lead_activity a JOIN leads l ON l.id = a.lead_id JOIN organizations o ON o.id = l.org_id
+                     JOIN users u ON u.id = a.user_id WHERE {where} ORDER BY o.name, a.id""", args)
+    return ["Organization", "Lead ID", "Customer Name", "By", "Action", "At"], [list(r) for r in rows]
+
+
+def _export_projects():
+    if export_is_global():
+        where, args = "1=1", []
+    else:
+        where, args = project_scope()
+    rows = query(f"""SELECT o.name, p.name, p.code, p.client_name, p.campaign_type, p.start_date, p.end_date, p.status,
+                       (SELECT GROUP_CONCAT(su.name, ', ') FROM project_staff ps JOIN users su ON su.id = ps.user_id
+                          WHERE ps.project_id = p.id),
+                       (SELECT GROUP_CONCAT(pr.name, ', ') FROM project_products pp JOIN products pr
+                          ON pr.id = pp.product_id WHERE pp.project_id = p.id),
+                       p.description, p.created_at
+                     FROM projects p JOIN organizations o ON o.id = p.org_id WHERE {where} ORDER BY o.name, p.name""", args)
+    head = ["Organization", "Project", "Code", "Client", "Campaign Type", "Start", "End", "Status", "Assigned Staff",
+            "Products", "Description", "Created At"]
+    return head, [list(r) for r in rows]
+
+
+def _export_products():
+    where, args = export_org_where("pr")
+    if not is_admin():
+        where += " AND pr.active = 1"
+    rows = query(f"""SELECT o.name, pr.name, pr.code, pr.category, pr.description,
+                       CASE pr.active WHEN 1 THEN 'Active' ELSE 'Inactive' END, u.name, pr.created_at
+                     FROM products pr JOIN organizations o ON o.id = pr.org_id LEFT JOIN users u ON u.id = pr.created_by
+                     WHERE {where} ORDER BY o.name, pr.name""", args)
+    head = ["Organization", "Product / Service", "Code", "Category", "Description", "Status", "Created By",
+            "Created At"]
+    return head, [list(r) for r in rows]
+
+
+def _export_users():
+    if export_is_global():
+        where, args = "1=1", []
+    elif is_admin():
+        where, args = "u.org_id = ?", [org_id()]
+    else:
+        where, args = "u.id = ?", [g.user["id"]]
+    rows = query(f"""SELECT o.name, u.name, u.username, u.email, u.phone, u.designation, u.role,
+                       CASE u.active WHEN 1 THEN 'Active' ELSE 'Deactivated' END, u.last_login_at, u.created_at,
+                       (SELECT COUNT(*) FROM leads l WHERE l.entered_by = u.id)
+                     FROM users u JOIN organizations o ON o.id = u.org_id WHERE {where} ORDER BY o.name, u.name""", args)
+    head = ["Organization", "Name", "Username", "Email", "Phone", "Designation", "Role", "Status", "Last Login",
+            "Created At", "Leads Created"]
+    return head, [[*r[:6], ROLE_LABELS.get(r[6], r[6]), *r[7:]] for r in rows]
+
+
+def _export_organizations():
+    rows = query("""SELECT o.name, o.code, CASE o.kind WHEN 'agency' THEN 'Agency' ELSE 'Client' END, o.status,
+                      o.contact_name, o.phone, o.email, o.address, o.created_at,
+                      (SELECT COUNT(*) FROM users u WHERE u.org_id = o.id),
+                      (SELECT COUNT(*) FROM leads l WHERE l.org_id = o.id)
+                    FROM organizations o ORDER BY o.kind, o.name""")
+    head = ["Organization", "Code", "Type", "Status", "Contact", "Phone", "Email", "Address", "Created At", "Users",
+            "Leads"]
+    return head, [list(r) for r in rows]
+
+
+EXPORTS = {
+    "leads": ("Leads", "Every lead with contact details, products, status and who created it", _export_leads),
+    "lead-products": ("Product interest", "Each lead × product with its stage (Interested / Ordered / Purchased)",
+                      _export_lead_products),
+    "followups": ("Follow-ups", "Scheduled and completed follow-ups", _export_followups),
+    "activity": ("Activity history", "Every change and note on each lead", _export_activity),
+    "projects": ("Projects & campaigns", "Projects with dates, staff and products", _export_projects),
+    "products": ("Products & services", "Product catalogue", _export_products),
+    "users": ("Staff & users", "Accounts (no passwords) with lead counts", _export_users),
+    "organizations": ("Organizations", "All organizations with user and lead counts (Super Admin only)",
+                      _export_organizations),
+}
+
+
+def allowed_exports():
+    return [k for k in EXPORTS if k != "organizations" or export_is_global()]
+
+
+def _csv_bytes(head, rows):
+    out = io.StringIO()
+    w = SafeCsvWriter(out)
+    w.writerow(head)
+    for r in rows:
+        w.writerow(r)
+    return ("﻿" + out.getvalue()).encode("utf-8")
+
+
+def _export_audit(what, count):
+    """Record exports by a Super Admin in the affected organizations' access logs."""
+    if not is_super():
+        return
+    if g.get("viewing"):
+        audit(f"Super Admin exported {what}", f"{count} rows")
+    elif export_is_global():
+        for (oid,) in query("SELECT id FROM organizations WHERE kind = 'client'"):
+            audit(f"Super Admin exported {what} for all organizations", org=oid)
+
+
+def _export_scope_label():
+    if export_is_global():
+        return "all-organizations"
+    base = "".join(ch if ch.isalnum() else "-" for ch in g.org["code"].lower())
+    return base if is_admin() else f"{base}-{g.user['username'].lower()}"
+
+
+@app.route("/export")
+@login_required
+def export_page():
+    counts = {k: len(EXPORTS[k][2]()[1]) for k in allowed_exports()}
+    return render_template("export.html", exports=[(k, *EXPORTS[k][:2], counts[k]) for k in allowed_exports()],
+                           global_export=export_is_global())
+
+
+@app.route("/export/<name>.csv")
+@login_required
+def export_csv(name):
+    if name not in allowed_exports():
+        abort(404)
+    head, rows = EXPORTS[name][2]()
+    _export_audit(EXPORTS[name][0].lower(), len(rows))
+    filename = f"{_export_scope_label()}-{name}-{datetime.now():%Y%m%d-%H%M}.csv"
+    return Response(_csv_bytes(head, rows), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@app.route("/export/all.zip")
+@login_required
+def export_zip():
+    buf = io.BytesIO()
+    total = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in allowed_exports():
+            head, rows = EXPORTS[name][2]()
+            total += len(rows)
+            zf.writestr(f"{name}.csv", _csv_bytes(head, rows))
+    _export_audit("all data (ZIP)", total)
+    filename = f"{_export_scope_label()}-export-{datetime.now():%Y%m%d-%H%M}.zip"
+    return Response(buf.getvalue(), mimetype="application/zip",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
 # ---------------------------------------------------------------- reports (admins)
