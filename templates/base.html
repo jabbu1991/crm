@@ -26,7 +26,7 @@
   <a href="{{ url_for('dashboard') }}" class="{{ 'active' if ep == 'dashboard' }}">Dashboard</a>
   <a href="{{ url_for('projects') }}" class="{{ 'active' if ep.startswith('project_') or ep == 'projects' }}">Projects</a>
   <a href="{{ url_for('leads') }}" class="{{ 'active' if ep in ('leads', 'lead_view', 'lead_edit', 'leads_import') }}">Leads</a>
-  <a href="{{ url_for('lead_new') }}" class="nav-cta {{ 'active' if ep == 'lead_new' }}">+ Add Lead</a>
+  {% if not viewing %}<a href="{{ url_for('lead_new') }}" class="nav-cta {{ 'active' if ep == 'lead_new' }}">+ Add Lead</a>{% endif %}
   <a href="{{ url_for('products') }}" class="{{ 'active' if ep in ('products', 'product_new', 'product_edit') }}">Products &amp; Services</a>
   <a href="{{ url_for('states') }}" class="{{ 'active' if ep in ('states', 'state_view') }}">State-wise Leads</a>
   <a href="{{ url_for('product_leads') }}" class="{{ 'active' if ep in ('product_leads', 'product_lead_list') }}">Product-wise Leads</a>
@@ -41,6 +41,12 @@
   {% endif %}
 </nav>
 {% endif %}
+{% endif %}
+{% if viewing %}
+<div class="view-banner">
+  <span>👁 Viewing <b>{{ g.org.name }}</b> as Super Admin · read-only · this visit is recorded in their access log</span>
+  <form method="post" action="{{ url_for('admin_view_exit') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">Exit to {{ g.home_org.name }}</button></form>
+</div>
 {% endif %}
 <main class="container">
   {% with messages = get_flashed_messages(with_categories=true) %}

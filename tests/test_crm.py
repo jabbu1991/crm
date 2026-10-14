@@ -234,14 +234,42 @@ def test_org_b_admin_manages_only_org_b(world):
     assert role == "staff" and org == w["org_b"]
 
 
-def test_super_admin_does_not_see_client_leads(world):
+def test_super_admin_views_client_workspace_read_only(world):
     w = world
-    add_lead(w["a_admin"], w["proj_a"], "Private A lead", "7000000001")
-    for url in ("/", "/leads", "/admin/organizations", f"/admin/organizations/{w['org_a']}/users", "/states"):
-        assert "Private A lead" not in w["sup"].get(url).get_data(as_text=True), url
-    dash = w["sup"].get("/").get_data(as_text=True)
-    assert "Org A" in dash and "Agency control panel" in dash
-
+    lid = add_lead(w["a_admin"], w["proj_a"], "Private A lead", "7000000001")
+    sup = w["sup"]
+    # Not visible from the agency workspace by default.
+    for url in ("/", "/leads", "/admin/organizations", "/states"):
+        assert "Private A lead" not in sup.get(url).get_data(as_text=True), url
+    assert sup.get(f"/leads/{lid}").status_code == 404
+    # Only a Super Admin can open a client workspace.
+    assert w["b_admin"].post(f"/admin/organizations/{w['org_a']}/view").status_code == 403
+    # Open Org A: its leads, reports and staff become visible.
+    r = sup.post(f"/admin/organizations/{w['org_a']}/view")
+    assert "Viewing <b>Org A</b>" in r.text and "Private A lead" in r.text
+    assert sup.get(f"/leads/{lid}").status_code == 200
+    assert "Private A lead" in sup.get("/states/view?state=Kerala").get_data(as_text=True)
+    assert "Anu Staff1" in sup.get("/staff").get_data(as_text=True)
+    assert "Private A lead" in sup.get("/leads/export").get_data(as_text=True)
+    # Read-only: every write and every form page is refused.
+    for url, data in ((f"/leads/{lid}/status", {"status": "Lost"}), (f"/leads/{lid}/delete", {}),
+                      ("/products/new", {"name": "X"}), (f"/staff/{w['uid']('a_staff1')}/toggle", {}),
+                      ("/organization", {"name": "Hacked"})):
+        assert sup.post(url, data).status_code == 403, url
+    for url in ("/leads/new", f"/leads/{lid}/edit", "/projects/new", "/staff/new"):
+        assert sup.get(url).status_code == 403, url
+    with w["db"]() as conn:
+        assert conn.execute("SELECT status FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "New"
+    # Org B's data is still not visible while viewing Org A.
+    lb = add_lead(w["b_admin"], w["proj_b"], "Private B lead", "7000000002")
+    assert sup.get(f"/leads/{lb}").status_code == 404
+    # Exit returns to the agency workspace.
+    sup.post("/admin/view/exit")
+    assert "Private A lead" not in sup.get("/leads").get_data(as_text=True)
+    # Org A's admin sees every visit and the export in the access log.
+    log = w["a_admin"].get("/organization").get_data(as_text=True)
+    assert "opened the workspace" in log and "exported leads" in log and "closed the workspace" in log
+    assert "No Super Admin access recorded" in w["b_admin"].get("/organization").get_data(as_text=True)
 
 def test_database_triggers_reject_cross_tenant_rows(world):
     w = world
@@ -537,7 +565,7 @@ def test_migration_from_v0_preserves_data(tmp_path, monkeypatch):
     assert crm_db.migrate(db_path) is None  # idempotent, no second backup
 
     with sqlite3.connect(db_path) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION
         roles = dict(c.execute("SELECT username, role FROM users"))
         assert roles == {"oldadmin": "super_admin", "oldadmin2": "org_admin", "oldstaff": "staff"}
         assert c.execute("SELECT COUNT(*) FROM leads WHERE org_id IS NULL").fetchone()[0] == 0

@@ -8,7 +8,7 @@ A multi-tenant lead-management CRM for a **marketing agency and the client busin
 
 | Role | Who | Can do |
 |---|---|---|
-| **Super Admin** | Agency owner | Everything an Organization Admin can do in the agency workspace. Also creates, edits, activates and deactivates client organizations; manages their admin accounts (invite links, password resets, deactivation); sees totals per organization. Does **not** see client leads. |
+| **Super Admin** | Agency owner | Everything an Organization Admin can do in the agency workspace. Also creates, edits, activates and deactivates client organizations; manages their admin accounts (invite links, password resets, deactivation); sees totals per organization. **Open workspace** shows a client's leads, reports and staff read-only; every visit and export is written to that client's access log (Organization Settings). |
 | **Organization Admin** | Agency or client administrator | Sees all leads in their organization. Manages projects, products and staff accounts; runs reports and CSV export; edits organization settings. |
 | **Staff** | Telecallers, sales executives | Adds leads. Sees and updates only the leads they created or that are assigned to them, plus their own dashboard and follow-ups. |
 
@@ -51,7 +51,7 @@ Then, as Super Admin: **Client Organizations → New client organization** creat
 - SQLite file: `instance/crm.db`. Back up the whole `instance/` folder regularly.
 - The schema version is stored in the database (`PRAGMA user_version`). When the app starts on an older database, it:
   1. **copies the whole database** to `instance/backups/crm-<date>-pre-v1.db`;
-  2. adds the new tables and columns in one transaction (nothing is deleted);
+  2. adds the new tables and columns in one transaction per version (nothing is deleted);
   3. moves existing users, projects and leads into the agency organization, standardises state names, and turns each distinct old "requirement" into a product, linked to its leads as *Interested*.
 - Tenant safety is enforced twice: in the application, where every query is filtered by the logged-in user's organization and role, and in the database, where triggers reject any row that links data across organizations or changes a lead's creator.
 

@@ -3,6 +3,7 @@
 The schema version lives in SQLite's PRAGMA user_version:
   0 = original single-workspace CRM
   1 = multi-tenant organizations, products, follow-ups, password tokens
+  2 = audit log (Super Admin access to client workspaces)
 Before migrating a database that already holds data, a full backup is written to
 instance/backups/. Migrations only ADD tables/columns; no existing data is dropped.
 """
@@ -12,7 +13,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -346,6 +347,20 @@ def _split_triggers(script):
     return [s.strip() + " END;" for s in script.split("END;") if s.strip()]
 
 
+def _migrate_v2(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        action TEXT NOT NULL,
+        detail TEXT,
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id, id)")
+
+
+MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2)]
+
+
 def migrate(db_path):
     """Bring the database at db_path up to SCHEMA_VERSION. Returns the backup path, if one was made."""
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -355,14 +370,15 @@ def migrate(db_path):
     try:
         conn.executescript(SCHEMA_V0)
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version < 1:
-            if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
-                backup_path = backup_database(db_path, "pre-v1")
+        pending = [(v, fn) for v, fn in MIGRATIONS if v > version]
+        if pending and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
+            backup_path = backup_database(db_path, f"pre-v{pending[0][0]}")
+        for v, fn in pending:
             conn.execute("PRAGMA foreign_keys = OFF")
             conn.execute("BEGIN")
             try:
-                _migrate_v1(conn)
-                conn.execute("PRAGMA user_version = 1")
+                fn(conn)
+                conn.execute(f"PRAGMA user_version = {v}")
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")

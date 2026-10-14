@@ -15,6 +15,7 @@
       <td class="num">{{ o.active_users }}/{{ o.users }}</td><td class="num">{{ o.projects }}</td><td class="num">{{ o.leads }}</td>
       <td class="small">{{ o.created_at[:10] }}</td>
       <td class="nowrap">
+        {% if o.kind != 'agency' %}<form method="post" action="{{ url_for('admin_view_enter', oid=o.id) }}" class="inline">{{ csrf() }}<button class="linkbtn dark"><b>Open workspace</b></button></form> ·{% endif %}
         <a href="{{ url_for('admin_org_users', oid=o.id) }}">Accounts</a> ·
         <a href="{{ url_for('admin_org_edit', oid=o.id) }}">Edit</a>
         {% if o.kind != 'agency' %} ·
@@ -26,5 +27,5 @@
   </tbody>
 </table>
 </div>
-<p class="muted small">As Super Admin you manage organization accounts and see totals only. Each client's leads, customers and reports are visible only to that client's own users. Your agency's own work happens in the agency workspace (Dashboard, Projects, Leads…).</p>
+<p class="muted small"><b>Open workspace</b> shows a client's leads, reports and staff exactly as their admin sees them, read-only. Each visit and export is recorded in that client's access log (Organization Settings), so clients can see when you looked. Your agency's own work happens in the agency workspace (Dashboard, Projects, Leads…).</p>
 {% endblock %}

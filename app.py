@@ -172,11 +172,35 @@ def load_user():
             session.clear()
         else:
             g.user, g.org = user, org
+            # Super Admin viewing a client's workspace (read-only).
+            view_id = session.get("view_org")
+            if view_id and user["role"] == SUPER_ADMIN and view_id != org["id"]:
+                viewed = query("SELECT * FROM organizations WHERE id = ?", (view_id,), one=True)
+                if viewed:
+                    g.home_org, g.org, g.viewing = org, viewed, True
+                else:
+                    session.pop("view_org", None)
+
+    if g.get("viewing") and request.endpoint not in VIEW_ALLOWED_ENDPOINTS and (
+            request.method == "POST" or request.endpoint in WRITE_FORM_ENDPOINTS):
+        abort(403, "Read-only: you are viewing a client's workspace. Exit to make changes.")
 
     if request.method == "POST" and request.endpoint != "website_enquiry":
         token = session.get("csrf_token")
         if not token or not secrets.compare_digest(token, request.form.get("csrf_token", "")):
             abort(400, "Invalid form token. Please reload the page and try again.")
+
+
+# While a Super Admin views a client workspace, these are the only POSTs allowed,
+# and these form pages are hidden (their submit would be refused anyway).
+VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static"}
+WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
+                        "product_edit", "staff_new", "staff_edit", "account"}
+
+
+def audit(action, detail="", org=None):
+    execute("INSERT INTO audit_log (org_id, user_id, action, detail, created_at) VALUES (?,?,?,?,?)",
+            (org or org_id(), g.user["id"], action, detail, now()))
 
 
 @app.after_request
@@ -239,7 +263,7 @@ def super_required(view):
 @app.context_processor
 def inject_globals():
     return dict(
-        csrf_token=csrf_token, brand=BRAND, is_admin=is_admin, is_super=is_super, ROLE_LABELS=ROLE_LABELS,
+        csrf_token=csrf_token, brand=BRAND, is_admin=is_admin, viewing=bool(g.get('viewing')), is_super=is_super, ROLE_LABELS=ROLE_LABELS,
         LEAD_STATUSES=LEAD_STATUSES, BUYING_POSSIBILITIES=BUYING_POSSIBILITIES, LEAD_QUALITIES=LEAD_QUALITIES,
         LEAD_SOURCES=LEAD_SOURCES, PRIORITIES=PRIORITIES, PRODUCT_STAGES=PRODUCT_STAGES,
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
@@ -1031,6 +1055,8 @@ def leads_export():
                          r["requirement"], r["status"], r["buying_possibility"], r["lead_quality"], r["priority"],
                          r["source"], r["next_follow_up"], r["assigned_name"], r["staff_name"], r["created_at"],
                          r["updated_by_name"], r["updated_at"], r["notes"]])
+    if g.get("viewing"):
+        audit("Super Admin exported leads (CSV)", f"{len(rows)} leads")
     filename = f"leads-{datetime.now():%Y%m%d-%H%M}.csv"
     return Response("﻿" + out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename={filename}"})
@@ -1630,7 +1656,9 @@ def organization_settings():
                   projects=scalar("SELECT COUNT(*) FROM projects WHERE org_id = ?", (org_id(),)),
                   products=scalar("SELECT COUNT(*) FROM products WHERE org_id = ?", (org_id(),)),
                   leads=scalar("SELECT COUNT(*) FROM leads WHERE org_id = ?", (org_id(),)))
-    return render_template("organization.html", org=org, counts=counts)
+    access_log = query("""SELECT a.*, u.name user_name FROM audit_log a JOIN users u ON u.id = a.user_id
+                          WHERE a.org_id = ? ORDER BY a.id DESC LIMIT 30""", (org_id(),))
+    return render_template("organization.html", org=org, counts=counts, access_log=access_log)
 
 
 # ---------------------------------------------------------------- super admin: organizations
@@ -1724,6 +1752,32 @@ def admin_org_toggle(oid):
         execute("UPDATE organizations SET status = ?, updated_at = ? WHERE id = ?", (new, now(), oid))
         flash(f"'{org['name']}' is now {new}." + (" Its users can no longer log in." if new == "Inactive" else ""),
               "success")
+    return redirect(url_for("admin_orgs"))
+
+
+@app.route("/admin/organizations/<int:oid>/view", methods=["POST"])
+@super_required
+def admin_view_enter(oid):
+    """Open a client's workspace read-only. Every visit is written to that client's access log."""
+    org = org_or_404(oid)
+    home = g.get("home_org") or g.org
+    if org["id"] == home["id"]:
+        return admin_view_exit()
+    if session.get("view_org") != oid:
+        if g.get("viewing"):
+            audit("Super Admin closed the workspace", org=g.org["id"])
+        session["view_org"] = oid
+        g.org = org
+        audit("Super Admin opened the workspace (read-only)", org=oid)
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/admin/view/exit", methods=["POST"])
+@super_required
+def admin_view_exit():
+    if g.get("viewing"):
+        audit("Super Admin closed the workspace")
+    session.pop("view_org", None)
     return redirect(url_for("admin_orgs"))
 
 
@@ -1848,8 +1902,10 @@ def bad_request(e):
 
 
 @app.errorhandler(403)
-def forbidden(_e):
-    return render_template("error.html", code=403, message="You don't have permission to do that."), 403
+def forbidden(e):
+    desc = getattr(e, "description", "") or ""
+    message = desc if desc.startswith("Read-only") else "You don't have permission to do that."
+    return render_template("error.html", code=403, message=message), 403
 
 
 @app.errorhandler(404)

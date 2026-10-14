@@ -25,7 +25,17 @@
     <dt>Products</dt><dd><a href="{{ url_for('products') }}">{{ counts.products }}</a></dd>
     <dt>Leads</dt><dd><a href="{{ url_for('leads') }}">{{ counts.leads }}</a></dd>
   </dl>
-  <p class="muted small">Everyone in this organization logs in at the same web address. Data is visible only inside this organization.</p>
+  <p class="muted small">Everyone in this organization logs in at the same web address. Your data is visible to your own users and, read-only, to the {{ brand.company }} Super Admin for support. Every such visit is listed below.</p>
 </section>
 </div>
+<section class="card">
+  <h2>Super Admin access log</h2>
+  <table class="table compact">
+    <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+    <tbody>
+    {% for a in access_log %}<tr><td class="nowrap">{{ a.created_at }}</td><td>{{ a.user_name }}</td><td>{{ a.action }}{% if a.detail %} <span class="muted">({{ a.detail }})</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No Super Admin access recorded.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endblock %}

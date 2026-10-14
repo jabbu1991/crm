@@ -3,7 +3,7 @@
 {% block content %}
 {% set mine = not is_admin() %}
 
-{% if is_super() %}
+{% if is_super() and not viewing %}
 <section class="card super-card">
   <h2>Agency control panel <a class="small" href="{{ url_for('admin_orgs') }}">Manage client organizations →</a></h2>
   <div class="stats compact-stats">
@@ -16,19 +16,20 @@
   <table class="table compact">
     <thead><tr><th>Organization</th><th>Type</th><th>Status</th><th class="num">Users</th><th class="num">Projects</th><th class="num">Leads</th></tr></thead>
     <tbody>
-    {% for o in orgs %}<tr><td><b>{{ o.name }}</b> <small class="muted">{{ o.code }}</small></td><td>{{ 'Agency' if o.kind == 'agency' else 'Client' }}</td>
+    {% for o in orgs %}<tr><td><b>{{ o.name }}</b> <small class="muted">{{ o.code }}</small>
+      {% if o.kind != 'agency' and not viewing %}<form method="post" action="{{ url_for('admin_view_enter', oid=o.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linkbtn dark small">open →</button></form>{% endif %}</td><td>{{ 'Agency' if o.kind == 'agency' else 'Client' }}</td>
       <td><span class="badge {{ o.status|badge }}">{{ o.status }}</span></td><td class="num">{{ o.active_users }}/{{ o.users }}</td>
       <td class="num">{{ o.projects }}</td><td class="num">{{ o.leads }}</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>
-  <p class="muted small">Client totals are counts only. Client lead details stay private to each organization.</p>
+  <p class="muted small">Open a client to see their leads and reports (read-only). Visits are shown in the client's access log.</p>
 </section>
 {% endif %}
 
 <div class="page-head">
   <h1>{{ 'My dashboard' if mine else 'Dashboard · ' ~ g.org.name }}</h1>
-  <a class="btn btn-primary" href="{{ url_for('lead_new') }}">+ Add Lead</a>
+  {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('lead_new') }}">+ Add Lead</a>{% endif %}
 </div>
 
 <div class="stats">
