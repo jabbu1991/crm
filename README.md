@@ -20,6 +20,10 @@ A lead-management CRM web application built for **marketing agencies** that run 
 
 ## Run it
 
+**Windows (easiest):** download and unzip the project, then double-click **`start.bat`**. It installs what's needed, starts the CRM and opens your browser. Keep its window open while you use the CRM.
+
+**Any system:**
+
 Requires Python 3.9+.
 
 ```bash
