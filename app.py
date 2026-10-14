@@ -24,6 +24,7 @@ from functools import wraps
 
 from flask import (Flask, Response, abort, flash, g, redirect, render_template,
                    request, session, url_for)
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import crm_db
@@ -67,6 +68,11 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.environ.get("CRM_SECURE_COOKIES") == "1",
     PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
 )
+if os.environ.get("CRM_BEHIND_PROXY") == "1":
+    # Hosted behind an HTTPS proxy (e.g. Render): trust its X-Forwarded-* headers so
+    # generated links (invites, password resets) use https and the public hostname.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+SETUP_KEY = os.environ.get("CRM_SETUP_KEY", "")
 
 
 # ---------------------------------------------------------------- database
@@ -280,7 +286,9 @@ def setup():
         agency, name, username = (clean(request.form.get(k)) for k in ("agency", "name", "username"))
         password = request.form.get("password") or ""
         problem = password_problem(password)
-        if not agency or not name or not username:
+        if SETUP_KEY and not secrets.compare_digest(SETUP_KEY, request.form.get("setup_key") or ""):
+            flash("Setup key is incorrect. Find it in your hosting dashboard (CRM_SETUP_KEY).", "error")
+        elif not agency or not name or not username:
             flash("Agency name, your name and a username are required.", "error")
         elif problem:
             flash(problem, "error")
@@ -299,7 +307,7 @@ def setup():
             start_session(query("SELECT * FROM users WHERE id = ?", (uid,), one=True))
             flash("Super Admin account created. Add your agency's projects, or create client organizations.", "success")
             return redirect(url_for("dashboard"))
-    return render_template("setup.html")
+    return render_template("setup.html", need_key=bool(SETUP_KEY))
 
 
 _failed_logins = {}

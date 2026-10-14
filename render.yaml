@@ -1,0 +1,31 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> pick this repository.
+# Every push to the branch below redeploys automatically. Data lives on the
+# persistent disk (/var/data), so it survives redeploys.
+services:
+  - type: web
+    name: agency-crm
+    runtime: python
+    plan: starter                      # a persistent disk needs a paid plan
+    branch: claude/marketing-agency-crm-y3shvh
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    # One worker: SQLite and the in-memory login throttle expect a single process.
+    startCommand: gunicorn --workers 1 --threads 4 --timeout 60 --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /login
+    disk:
+      name: crm-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CRM_DB_PATH
+        value: /var/data/crm.db
+      - key: CRM_SECRET_KEY
+        generateValue: true
+      - key: CRM_SETUP_KEY             # needed once, on the first-run setup page
+        generateValue: true
+      - key: CRM_SECURE_COOKIES
+        value: "1"
+      - key: CRM_BEHIND_PROXY
+        value: "1"

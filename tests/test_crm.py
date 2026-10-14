@@ -571,3 +571,19 @@ def test_names_are_escaped_in_pages(world):
     for url in ("/projects", "/staff", "/leads/new"):
         html = w["a_admin"].get(url).get_data(as_text=True)
         assert "<script>alert(2)" not in html and "confirm('" not in html, url
+
+
+def test_setup_key_required_when_configured(tmp_path, monkeypatch):
+    db_path = str(tmp_path / "fresh.db")
+    monkeypatch.setattr(crm, "DB_PATH", db_path)
+    monkeypatch.setattr(crm, "SETUP_KEY", "s3cret-key")
+    crm_db.migrate(db_path)
+    b = Browser()
+    assert "Setup key" in b.get("/setup").get_data(as_text=True)
+    form = {"agency": "Ag", "name": "Owner", "username": "owner", "password": PW}
+    r = b.post("/setup", dict(form, setup_key="wrong"))
+    assert "Setup key is incorrect" in r.text
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    r = b.post("/setup", dict(form, setup_key="s3cret-key"))
+    assert "Agency control panel" in r.text

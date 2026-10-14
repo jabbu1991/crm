@@ -71,6 +71,19 @@ The tests create the accounts Super Admin, Org A Admin, Org A Staff 1, Org A Sta
 | `CRM_DB_PATH` | `instance/crm.db` | Database file location |
 | `CRM_SECRET_KEY` | auto-generated | Session signing key (set a fixed value in production) |
 | `CRM_SECURE_COOKIES` | off | Set to `1` when served over HTTPS |
+| `CRM_BEHIND_PROXY` | off | Set to `1` behind an HTTPS proxy/load balancer (Render, nginx) so links use https |
+| `CRM_SETUP_KEY` | none | If set, the first-run setup page requires this key |
+
+## Hosting online (Render)
+
+`render.yaml` describes the whole setup: a web service, a 1 GB persistent disk for the database, and generated secrets.
+
+1. Sign up at render.com with your GitHub account and give Render access to this repository.
+2. Add a payment method. The Starter plan plus the disk is about US$7–8 a month.
+3. Go to **New → Blueprint**, pick this repository, and click **Apply**.
+4. When it's live, open **agency-crm → Environment**, reveal **CRM_SETUP_KEY**, and enter it on the first-run setup page.
+
+Every push to the branch named in `render.yaml` redeploys automatically. Data on the disk is kept between deploys. Render takes daily disk snapshots, and the app writes its own backup before any schema upgrade.
 
 ## Production
 
