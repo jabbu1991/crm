@@ -1,0 +1,73 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% block title %}{{ 'Edit lead' if lead else 'New lead' }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'Edit lead' if lead else 'New lead entry' }}</h1>
+  {% if lead %}<span class="muted">Entered by <b>{{ lead.staff_name }}</b> on {{ lead.created_at }}</span>
+  {% else %}<span class="entered-by">Entered by: <b>{{ g.user.name }}</b>{% if g.user.designation %} · {{ g.user.designation }}{% endif %}</span>{% endif %}
+</div>
+
+{% if duplicates %}
+<div class="card warn-card">
+  <h2>Possible duplicate{{ 's' if duplicates|length > 1 }}</h2>
+  <ul>{% for d in duplicates %}<li><a href="{{ url_for('lead_view', lid=d.id) }}" target="_blank">{{ d.customer_name }}</a> · {{ d.phone }} {{ d.email }} · {{ d.status }} · entered by {{ d.staff_name }} on {{ d.created_at[:10] }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if not projects_all %}
+<div class="card empty"><h2>No active project</h2><p>Leads are saved under a project (client). {% if g.user.role == 'admin' %}<a href="{{ url_for('project_new') }}">Create a project first →</a>{% else %}Ask your admin to create one.{% endif %}</p></div>
+{% else %}
+<form method="post" class="card form lead-form">
+  {{ csrf() }}
+  <fieldset>
+    <legend>Project</legend>
+    <label>Project / client *
+      <select name="project_id" required>
+        <option value="">— Choose project —</option>
+        {% for p in projects_all %}<option value="{{ p.id }}" {{ 'selected' if data.project_id == p.id }}>{{ p.name }}{% if p.client_name %} ({{ p.client_name }}){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Customer details</legend>
+    <label>Customer name *<input name="customer_name" required value="{{ data.customer_name or '' }}" autofocus></label>
+    <div class="row-3">
+      <label>Phone number<input type="tel" name="phone" id="phone" value="{{ data.phone or '' }}"></label>
+      <label>WhatsApp number
+        <input type="tel" name="whatsapp" id="whatsapp" value="{{ data.whatsapp or '' }}">
+        <span class="check"><input type="checkbox" id="same_wa" onclick="if(this.checked)document.getElementById('whatsapp').value=document.getElementById('phone').value"> Same as phone</span>
+      </label>
+      <label>Email<input type="email" name="email" value="{{ data.email or '' }}"></label>
+    </div>
+    <div class="row-2">
+      <label>Place (city / town)<input name="place" list="places" value="{{ data.place or '' }}"></label>
+      <label>State<input name="state" list="states" value="{{ data.state or '' }}"></label>
+    </div>
+    <datalist id="places">{% for p in places %}<option value="{{ p }}">{% endfor %}</datalist>
+    <datalist id="states">{% for s in states %}<option value="{{ s }}">{% endfor %}</datalist>
+  </fieldset>
+
+  <fieldset>
+    <legend>Requirement &amp; qualification</legend>
+    <label>Requirement (product / service)<input name="requirement" list="requirements" value="{{ data.requirement or '' }}" placeholder="e.g. 2BHK Flat, Hyundai Creta, Website design">
+      <small class="muted">Pick an existing requirement from the list so reports group them together.</small></label>
+    <datalist id="requirements">{% for r in requirements %}<option value="{{ r }}">{% endfor %}</datalist>
+    <div class="row-4">
+      <label>Status<select name="status">{% for s in LEAD_STATUSES %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Buying possibility<select name="buying_possibility"><option value="">—</option>{% for s in BUYING_POSSIBILITIES %}<option {{ 'selected' if data.buying_possibility == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Lead quality<select name="lead_quality"><option value="">—</option>{% for s in LEAD_QUALITIES %}<option {{ 'selected' if data.lead_quality == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Lead source<select name="source"><option value="">—</option>{% for s in LEAD_SOURCES %}<option {{ 'selected' if data.source == s }}>{{ s }}</option>{% endfor %}</select></label>
+    </div>
+    <label>Notes / remarks<textarea name="notes" rows="3">{{ data.notes or '' }}</textarea></label>
+  </fieldset>
+
+  {% if duplicates %}<label class="check warn"><input type="checkbox" name="confirm_duplicate" value="1"> Save anyway (this is a new enquiry)</label>{% endif %}
+  <div class="actions">
+    <button class="btn btn-primary">{{ 'Save changes' if lead else 'Save lead' }}</button>
+    {% if not lead %}<button class="btn" name="save_and_new" value="1">Save &amp; add another</button>{% endif %}
+    <a class="btn" href="{{ url_for('lead_view', lid=lead.id) if lead else url_for('leads') }}">Cancel</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% macro bars(rows, filter_key, extra={}) -%}
+{% set maxc = (rows|map(attribute='c')|max) if rows else 1 %}
+<ul class="bars">
+{% for r in rows %}
+  <li><a href="{{ url_for('leads', **dict(extra, **{filter_key: r.k})) }}">
+    <span class="bar-label"><span class="badge {{ r.k|badge }}">{{ r.k }}</span></span>
+    <span class="bar-track"><span class="bar-fill" style="width: {{ (r.c / maxc * 100)|round }}%"></span></span>
+    <span class="bar-count">{{ r.c }}</span></a></li>
+{% else %}<li class="muted">No data yet.</li>{% endfor %}
+</ul>
+{%- endmacro %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}

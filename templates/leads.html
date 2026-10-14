@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Leads{% endblock %}
+{% macro th(key, label) -%}
+  {% set new_dir = 'desc' if (sort == key and direction == 'asc') else 'asc' %}
+  <th class="sortable {{ 'sorted' if sort == key }}"><a href="{{ url_for('leads', **dict(params, sort=key, dir=new_dir)) }}">{{ label }}{% if sort == key %} {{ '▲' if direction == 'asc' else '▼' }}{% endif %}</a></th>
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <h1>Leads{% if project %} · {{ project.name }}{% endif %} <small class="muted">({{ leads|length }})</small></h1>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('lead_new', project=params.get('project')) }}">+ New lead</a>
+    <a class="btn" href="{{ url_for('leads_import') }}">Import CSV</a>
+    <a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>
+  </div>
+</div>
+
+<div class="quicksort">
+  <span class="muted">Sort by:</span>
+  {% for key, label in [('name','Name'), ('phone','Number'), ('email','Email'), ('place','Place'), ('state','State'), ('requirement','Requirement'), ('quality','Lead quality'), ('possibility','Buying possibility'), ('status','Status'), ('created','Date')] %}
+    <a class="chip {{ 'on' if sort == key }}" href="{{ url_for('leads', **dict(params, sort=key, dir=('desc' if key == 'created' else 'asc'))) }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<form method="get" class="card filters">
+  <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ direction }}">
+  <input type="search" name="q" value="{{ params.q or '' }}" placeholder="Search name, phone, email, place, requirement…" class="grow">
+  <select name="project"><option value="">All projects</option>{% for p in projects_all %}<option value="{{ p.id }}" {{ 'selected' if params.project == p.id|string }}>{{ p.name }}</option>{% endfor %}</select>
+  <select name="requirement"><option value="">All requirements</option>{% for r in requirements %}<option {{ 'selected' if params.requirement == r }}>{{ r }}</option>{% endfor %}</select>
+  <select name="status"><option value="">All statuses</option>{% for s in LEAD_STATUSES %}<option {{ 'selected' if params.status == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="quality"><option value="">Any quality</option>{% for s in LEAD_QUALITIES %}<option {{ 'selected' if params.quality == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="possibility"><option value="">Any possibility</option>{% for s in BUYING_POSSIBILITIES %}<option {{ 'selected' if params.possibility == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="state"><option value="">All states</option>{% for s in states %}<option {{ 'selected' if params.state == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="place"><option value="">All places</option>{% for s in places %}<option {{ 'selected' if params.place == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="source"><option value="">Any source</option>{% for s in LEAD_SOURCES %}<option {{ 'selected' if params.source == s }}>{{ s }}</option>{% endfor %}</select>
+  <select name="staff"><option value="">Any staff</option>{% for s in staff %}<option value="{{ s.id }}" {{ 'selected' if params.staff == s.id|string }}>{{ s.name }}</option>{% endfor %}</select>
+  <label class="inline-label">From <input type="date" name="date_from" value="{{ params.date_from or '' }}"></label>
+  <label class="inline-label">To <input type="date" name="date_to" value="{{ params.date_to or '' }}"></label>
+  <button class="btn btn-primary">Apply</button>
+  <a class="btn" href="{{ url_for('leads') }}">Clear</a>
+</form>
+
+<div class="card table-wrap">
+<table class="table leads-table">
+  <thead><tr>
+    {{ th('name', 'Customer') }}{{ th('phone', 'Phone') }}<th>WhatsApp</th>{{ th('email', 'Email') }}
+    {{ th('place', 'Place') }}{{ th('state', 'State') }}{{ th('requirement', 'Requirement') }}
+    {{ th('status', 'Status') }}{{ th('possibility', 'Buying poss.') }}{{ th('quality', 'Quality') }}
+    {% if not project %}{{ th('project', 'Project') }}{% endif %}{{ th('staff', 'Entered by') }}{{ th('created', 'Date') }}
+  </tr></thead>
+  <tbody>
+  {% for l in leads %}
+    <tr>
+      <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a></td>
+      <td class="nowrap">{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}</td>
+      <td class="nowrap">{% if l.whatsapp %}<a href="https://wa.me/{{ l.whatsapp|replace(' ','')|replace('+','')|replace('-','') }}" target="_blank" rel="noopener">{{ l.whatsapp }}</a>{% endif %}</td>
+      <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}</td>
+      <td>{{ l.place or '' }}</td><td>{{ l.state or '' }}</td><td>{{ l.requirement or '' }}</td>
+      <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
+      <td>{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}</td>
+      <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
+      {% if not project %}<td>{{ l.project_name }}</td>{% endif %}
+      <td>{{ l.staff_name }}</td><td class="nowrap">{{ l.created_at[:10] }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="13" class="muted center">No leads match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

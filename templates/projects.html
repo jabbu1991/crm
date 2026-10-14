@@ -1,0 +1,33 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Projects <small class="muted">(clients)</small></h1>
+  {% if g.user.role == 'admin' %}<a class="btn btn-primary" href="{{ url_for('project_new') }}">+ New project</a>{% endif %}
+</div>
+<div class="cards">
+{% for p in projects %}
+  <div class="card project-card {{ 'archived' if p.status != 'Active' }}">
+    <div class="project-head">
+      <h2><a href="{{ url_for('leads', project=p.id) }}">{{ p.name }}</a></h2>
+      <span class="badge {{ p.status|badge }}">{{ p.status }}</span>
+    </div>
+    {% if p.client_name %}<div><b>Client:</b> {{ p.client_name }}</div>{% endif %}
+    {% if p.client_phone or p.client_email %}<div class="muted small">{{ p.client_phone }} {{ p.client_email }}</div>{% endif %}
+    {% if p.description %}<p class="small">{{ p.description }}</p>{% endif %}
+    <div class="project-count"><b>{{ p.lead_count }}</b> leads</div>
+    <div class="actions">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('lead_new', project=p.id) }}">+ Add lead</a>
+      <a class="btn btn-sm" href="{{ url_for('leads', project=p.id) }}">View leads</a>
+      <a class="btn btn-sm" href="{{ url_for('dashboard', project=p.id) }}">Dashboard</a>
+      {% if g.user.role == 'admin' %}
+      <a class="btn btn-sm" href="{{ url_for('project_edit', pid=p.id) }}">Edit</a>
+      <form method="post" action="{{ url_for('project_delete', pid=p.id) }}" onsubmit="return confirm('Delete project {{ p.name|e }} and ALL {{ p.lead_count }} of its leads? This cannot be undone.')">{{ csrf() }}<button class="btn btn-sm btn-danger">Delete</button></form>
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="card empty"><h2>No projects yet</h2><p>Create a project for each client your agency runs campaigns for.</p></div>
+{% endfor %}
+</div>
+{% endblock %}

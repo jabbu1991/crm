@@ -1,0 +1,20 @@
+{% extends 'base.html' %}{% block title %}My account{% endblock %}
+{% block content %}
+<h1>My account</h1>
+<div class="card narrow">
+  <dl class="details">
+    <dt>Name</dt><dd>{{ g.user.name }}</dd>
+    <dt>Username</dt><dd>{{ g.user.username }}</dd>
+    <dt>Role</dt><dd>{{ g.user.role }}</dd>
+    <dt>Phone</dt><dd>{{ g.user.phone or '—' }}</dd>
+    <dt>Email</dt><dd>{{ g.user.email or '—' }}</dd>
+  </dl>
+  <h2>Change password</h2>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Current password<input type="password" name="current_password" required></label>
+    <label>New password<input type="password" name="new_password" required minlength="6"></label>
+    <button class="btn btn-primary">Change password</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% block title %}{{ 'Edit project' if project else 'New project' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Edit project' if project else 'New project' }}</h1>
+<form method="post" class="card form narrow">
+  {{ csrf() }}
+  <label>Project name *<input name="name" required value="{{ data.name or '' }}" placeholder="e.g. ABC Motors – Diwali Campaign"></label>
+  <label>Client / company name<input name="client_name" value="{{ data.client_name or '' }}"></label>
+  <div class="row-2">
+    <label>Client phone<input name="client_phone" value="{{ data.client_phone or '' }}"></label>
+    <label>Client email<input type="email" name="client_email" value="{{ data.client_email or '' }}"></label>
+  </div>
+  <label>Description<textarea name="description" rows="3">{{ data.description or '' }}</textarea></label>
+  <label>Status
+    <select name="status">{% for s in ['Active', 'Paused', 'Completed'] %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select>
+  </label>
+  <div class="actions"><button class="btn btn-primary">Save project</button><a class="btn" href="{{ url_for('projects') }}">Cancel</a></div>
+</form>
+{% endblock %}

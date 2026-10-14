@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h1>Agency<span class="accent">CRM</span></h1>
+  <p class="muted">Log in with your staff account.</p>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username<input name="username" required autofocus value="{{ request.form.username }}"></label>
+    <label>Password<input type="password" name="password" required></label>
+    <button class="btn btn-primary">Log in</button>
+  </form>
+</div>
+{% endblock %}

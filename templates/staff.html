@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Staff{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Staff</h1><a class="btn btn-primary" href="{{ url_for('staff_new') }}">+ Add staff</a></div>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Name</th><th>Username</th><th>Designation</th><th>Phone</th><th>Email</th><th>Role</th><th>Status</th><th class="num">Leads entered</th><th></th></tr></thead>
+  <tbody>
+  {% for s in staff %}
+    <tr class="{{ 'inactive' if not s.active }}">
+      <td><b>{{ s.name }}</b></td><td>{{ s.username }}</td><td>{{ s.designation or '' }}</td><td>{{ s.phone or '' }}</td><td>{{ s.email or '' }}</td>
+      <td>{{ s.role }}</td><td>{{ 'Active' if s.active else 'Disabled' }}</td>
+      <td class="num"><a href="{{ url_for('leads', staff=s.id) }}">{{ s.lead_count }}</a></td>
+      <td><a href="{{ url_for('staff_edit', uid=s.id) }}">Edit</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

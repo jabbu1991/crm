@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% block title %}Import leads{% endblock %}
+{% block content %}
+<h1>Import leads from CSV</h1>
+<form method="post" enctype="multipart/form-data" class="card form narrow">
+  {{ csrf() }}
+  <label>Project *<select name="project_id" required><option value="">— Choose project —</option>{% for p in projects_all %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+  <label>CSV file *<input type="file" name="file" accept=".csv,text/csv" required></label>
+  <button class="btn btn-primary">Import</button>
+  <div class="help">
+    <p>The first row must be column headers. Recognised headers (case-insensitive):</p>
+    <p><code>Name</code>, <code>Phone</code>, <code>WhatsApp</code>, <code>Email</code>, <code>Place</code> / <code>City</code>, <code>State</code>, <code>Requirement</code> / <code>Product</code>, <code>Status</code>, <code>Buying Possibility</code>, <code>Lead Quality</code>, <code>Source</code>, <code>Notes</code>.</p>
+    <p>Imported leads are recorded as entered by <b>{{ g.user.name }}</b>. Rows without a name or any contact detail are skipped. Export files from this CRM can be re-imported.</p>
+  </div>
+</form>
+{% endblock %}

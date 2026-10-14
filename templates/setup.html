@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% block title %}Setup{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h1>Welcome to Agency CRM</h1>
+  <p class="muted">Create the administrator account to get started.</p>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Your name *<input name="name" required value="{{ request.form.name }}"></label>
+    <label>Username *<input name="username" required value="{{ request.form.username }}"></label>
+    <label>Phone<input name="phone" value="{{ request.form.phone }}"></label>
+    <label>Email<input type="email" name="email" value="{{ request.form.email }}"></label>
+    <label>Password * <small>(min 6 characters)</small><input type="password" name="password" required minlength="6"></label>
+    <button class="btn btn-primary">Create admin account</button>
+  </form>
+</div>
+{% endblock %}

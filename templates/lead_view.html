@@ -1,0 +1,53 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% block title %}{{ lead.customer_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ lead.customer_name }} <span class="badge {{ lead.status|badge }}">{{ lead.status }}</span></h1>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('lead_edit', lid=lead.id) }}">Edit</a>
+    {% if g.user.role == 'admin' %}
+    <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm('Delete this lead?')">{{ csrf() }}<button class="btn btn-danger">Delete</button></form>
+    {% endif %}
+  </div>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Customer</h2>
+    <dl class="details">
+      <dt>Phone</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% else %}—{% endif %}</dd>
+      <dt>WhatsApp</dt><dd>{% if lead.whatsapp %}<a href="https://wa.me/{{ lead.whatsapp|replace(' ','')|replace('+','')|replace('-','') }}" target="_blank" rel="noopener">{{ lead.whatsapp }}</a>{% else %}—{% endif %}</dd>
+      <dt>Email</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}—{% endif %}</dd>
+      <dt>Place</dt><dd>{{ lead.place or '—' }}</dd>
+      <dt>State</dt><dd>{{ lead.state or '—' }}</dd>
+    </dl>
+    <h2>Requirement</h2>
+    <dl class="details">
+      <dt>Requirement</dt><dd>{{ lead.requirement or '—' }}</dd>
+      <dt>Buying possibility</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>
+      <dt>Lead quality</dt><dd>{% if lead.lead_quality %}<span class="badge {{ lead.lead_quality|badge }}">{{ lead.lead_quality }}</span>{% else %}—{% endif %}</dd>
+      <dt>Source</dt><dd>{{ lead.source or '—' }}</dd>
+      <dt>Notes</dt><dd class="prewrap">{{ lead.notes or '—' }}</dd>
+    </dl>
+    <h2>Record</h2>
+    <dl class="details">
+      <dt>Project</dt><dd><a href="{{ url_for('leads', project=lead.project_id) }}">{{ lead.project_name }}</a></dd>
+      <dt>Entered by</dt><dd><b>{{ lead.staff_name }}</b> on {{ lead.created_at }}</dd>
+      {% if lead.updated_by_name %}<dt>Last updated</dt><dd>{{ lead.updated_by_name }} on {{ lead.updated_at }}</dd>{% endif %}
+    </dl>
+  </section>
+  <section class="card">
+    <h2>Follow-up</h2>
+    <form method="post" action="{{ url_for('lead_quick_status', lid=lead.id) }}" class="form">
+      {{ csrf() }}
+      <label>Change status<select name="status">{% for s in LEAD_STATUSES %}<option {{ 'selected' if lead.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Add a note (call summary, next step…)<textarea name="note" rows="3"></textarea></label>
+      <button class="btn btn-primary">Save</button>
+    </form>
+    <h2>History</h2>
+    <ul class="timeline">
+      {% for a in activity %}<li><div class="prewrap">{{ a.action }}</div><small class="muted">{{ a.user_name }} · {{ a.created_at }}</small></li>
+      {% else %}<li class="muted">No activity yet.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}
