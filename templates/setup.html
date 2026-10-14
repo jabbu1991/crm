@@ -1,6 +1,7 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Setup{% endblock %}
 {% block content %}
 <div class="auth-card">
+  <img class="auth-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="{{ brand.company }}">
   <h1>Welcome to {{ brand.product }}</h1>
   <p class="byline">by {{ brand.company }}</p>
   <p class="muted">Create your agency workspace and the Super Admin (owner) account.</p>

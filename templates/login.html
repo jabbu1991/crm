@@ -1,6 +1,7 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Log in{% endblock %}
 {% block content %}
 <div class="auth-card">
+  <img class="auth-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="{{ brand.company }}">
   <h1>{{ brand.product.rsplit(' ', 1)[0] }}<span class="accent">{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></h1>
   <p class="byline">by {{ brand.company }}</p>
   <p class="muted">Log in with your own account. You'll be taken to your organization's workspace.</p>

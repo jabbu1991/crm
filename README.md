@@ -75,6 +75,14 @@ The tests create the accounts Super Admin, Org A Admin, Org A Staff 1, Org A Sta
 | `CRM_SECURE_COOKIES` | off | Set to `1` when served over HTTPS |
 | `CRM_BEHIND_PROXY` | off | Set to `1` behind an HTTPS proxy/load balancer (Render, nginx) so links use https |
 | `CRM_SETUP_KEY` | none | If set, the first-run setup page requires this key |
+| `CRM_ENQUIRY_ORIGINS` | none | Comma-separated website origins allowed to post to `/enquiry` |
+| `CRM_PRODUCT_NAME` / `CRM_COMPANY_NAME` / `CRM_COMPANY_URL` | Real View CRM / Real View Creative Studio / realviewcreativestudio.in | Branding |
+
+## Agency website
+
+`website/` is the Real View Creative Studio website: one static page with no build step, published free on Render as `realview-website`. Edit `website/index.html` for text and `website/main.js` for the WhatsApp number.
+
+The contact form opens WhatsApp with the visitor's details filled in. When the CRM is online, the form also posts to `/enquiry` on the CRM, which saves the enquiry as a lead in the agency workspace (project "Website Enquiries", source "Website"). This only works for the origins listed in `CRM_ENQUIRY_ORIGINS`, is rate-limited per IP, and uses a honeypot field to catch bots.
 
 ## Hosting online (Render)
 

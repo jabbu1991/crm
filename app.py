@@ -1,4 +1,4 @@
-"""Realview CRM (by Realview Creative Studio) - multi-tenant lead management for a marketing agency and its client companies.
+"""Real View CRM (by Real View Creative Studio) - multi-tenant lead management for a marketing agency and its client companies.
 
 Run:  python app.py   (then open http://localhost:5000)
 
@@ -75,10 +75,12 @@ if os.environ.get("CRM_BEHIND_PROXY") == "1":
 SETUP_KEY = os.environ.get("CRM_SETUP_KEY", "")
 # Product branding (can be overridden per deployment).
 BRAND = {
-    "product": os.environ.get("CRM_PRODUCT_NAME", "Realview CRM"),
-    "company": os.environ.get("CRM_COMPANY_NAME", "Realview Creative Studio"),
-    "website": os.environ.get("CRM_COMPANY_URL", ""),
+    "product": os.environ.get("CRM_PRODUCT_NAME", "Real View CRM"),
+    "company": os.environ.get("CRM_COMPANY_NAME", "Real View Creative Studio"),
+    "website": os.environ.get("CRM_COMPANY_URL", "https://realviewcreativestudio.in"),
 }
+# Website origins allowed to post enquiries to /enquiry (comma-separated). Empty = disabled.
+ENQUIRY_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("CRM_ENQUIRY_ORIGINS", "").split(",") if o.strip()}
 
 
 # ---------------------------------------------------------------- database
@@ -171,7 +173,7 @@ def load_user():
         else:
             g.user, g.org = user, org
 
-    if request.method == "POST":
+    if request.method == "POST" and request.endpoint != "website_enquiry":
         token = session.get("csrf_token")
         if not token or not secrets.compare_digest(token, request.form.get("csrf_token", "")):
             abort(400, "Invalid form token. Please reload the page and try again.")
@@ -1772,6 +1774,70 @@ def admin_org_add_admin(oid):
     _, link, expires = create_user(oid, admin, "invite", "")
     return render_template("password_link.html", user=admin, link=link, expires=expires, purpose="invite",
                            back=url_for("admin_org_users", oid=oid), org=org)
+
+
+# ---------------------------------------------------------------- public website enquiries
+
+_enquiry_hits = {}
+
+
+@app.route("/enquiry", methods=["POST", "OPTIONS"])
+def website_enquiry():
+    """Save a website contact-form submission as a lead in the agency workspace.
+
+    Only accepted from the origins in CRM_ENQUIRY_ORIGINS. No session or CSRF token is involved:
+    the lead's organization, project and creator are fixed server-side, never taken from the form.
+    """
+    origin = (request.headers.get("Origin") or "").rstrip("/")
+    if not ENQUIRY_ORIGINS or origin not in ENQUIRY_ORIGINS:
+        abort(403)
+    headers = {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+    if request.method == "OPTIONS":
+        return "", 204, dict(headers, **{"Access-Control-Allow-Methods": "POST"})
+
+    now_ts = time.time()
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    hits = [t for t in _enquiry_hits.get(ip, []) if now_ts - t < 3600]
+    if len(hits) >= 10:
+        return {"ok": False, "error": "rate_limited"}, 429, headers
+    _enquiry_hits[ip] = hits + [now_ts]
+
+    f = request.form
+    if f.get("website"):  # honeypot field humans never see
+        return {"ok": True}, 200, headers
+    name, phone = clean(f.get("name"))[:120], clean(f.get("phone"))[:40]
+    business, service = clean(f.get("business"))[:120], clean(f.get("service"))[:120]
+    message = clean(f.get("message"))[:2000]
+    if not name or len(phone_key(phone)) < 6:
+        return {"ok": False, "error": "name_and_phone_required"}, 400, headers
+
+    db = get_db()
+    org = db.execute("SELECT id FROM organizations WHERE kind = 'agency' ORDER BY id LIMIT 1").fetchone()
+    owner = org and db.execute("SELECT id FROM users WHERE org_id = ? AND role = ? AND active = 1 ORDER BY id LIMIT 1",
+                               (org[0], SUPER_ADMIN)).fetchone()
+    if not owner:
+        return {"ok": False, "error": "not_set_up"}, 503, headers
+    oid, uid, ts = org[0], owner[0], now()
+    project = db.execute("SELECT id FROM projects WHERE org_id = ? AND code = 'WEB'", (oid,)).fetchone()
+    pid = project[0] if project else db.execute(
+        "INSERT INTO projects (org_id, name, code, campaign_type, description, status, created_by, created_at,"
+        " updated_at) VALUES (?, 'Website Enquiries', 'WEB', 'Lead Generation',"
+        " 'Leads from the website contact form', 'Active', ?, ?, ?)", (oid, uid, ts, ts)).lastrowid
+    requirement = " · ".join(x for x in (service, business and f"Business: {business}") if x)
+    lead_id = db.execute(
+        "INSERT INTO leads (org_id, project_id, customer_name, phone, whatsapp, phone_norm, requirement, notes,"
+        " status, priority, source, country, entered_by, assigned_to, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?, 'New', 'High', 'Website', 'India', ?,?,?,?)",
+        (oid, pid, name, phone, phone, phone_key(phone), requirement, message, uid, uid, ts, ts)).lastrowid
+    product = db.execute("SELECT id FROM products WHERE org_id = ? AND active = 1 AND name = ? COLLATE NOCASE",
+                         (oid, service)).fetchone() if service else None
+    if product:
+        db.execute("INSERT INTO lead_products (lead_id, product_id, org_id, stage, created_at, updated_at)"
+                   " VALUES (?,?,?, 'Interested', ?, ?)", (lead_id, product[0], oid, ts, ts))
+    db.execute("INSERT INTO lead_activity (lead_id, user_id, action, created_at) VALUES (?,?,?,?)",
+               (lead_id, uid, "Enquiry received from the website contact form", ts))
+    db.commit()
+    return {"ok": True}, 201, headers
 
 
 # ---------------------------------------------------------------- errors

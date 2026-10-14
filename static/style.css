@@ -200,3 +200,6 @@ form.inline { display: inline; }
 .byline { margin: -8px 0 16px; color: var(--muted); font-size: 13px; letter-spacing: .02em; }
 .site-footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 24px; }
 .site-footer a { color: var(--muted); text-decoration: underline; }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand-logo { width: 30px; height: 30px; border-radius: 8px; background: #fff; padding: 1px; }
+.auth-logo { width: 64px; height: 64px; border-radius: 14px; display: block; margin-bottom: 12px; }

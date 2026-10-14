@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ brand.product }}{% endblock %} · {{ g.org.name if g.org else brand.product }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% if g.user %}
 {% set ep = request.endpoint or '' %}
 <header class="topbar">
-  <a class="brand" href="{{ url_for('dashboard') }}" title="{{ brand.product }} by {{ brand.company }}">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
+  <a class="brand" href="{{ url_for('dashboard') }}" title="{{ brand.product }} by {{ brand.company }}"><img class="brand-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
   <div class="orgname" title="Current organization">
     {{ g.org.name }}{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
   </div>

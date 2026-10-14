@@ -587,3 +587,36 @@ def test_setup_key_required_when_configured(tmp_path, monkeypatch):
         assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
     r = b.post("/setup", dict(form, setup_key="s3cret-key"))
     assert "Agency control panel" in r.text
+
+
+def test_website_enquiry_creates_agency_lead(world, monkeypatch):
+    w = world
+    c = crm.app.test_client()
+    form = {"name": "Web Visitor", "phone": "+91 98470 12345", "business": "Cafe X",
+            "service": "Performance Ads", "message": "Need Meta ads"}
+    # disabled unless origins are configured
+    assert c.post("/enquiry", data=form, headers={"Origin": "https://realviewcreativestudio.in"}).status_code == 403
+    monkeypatch.setattr(crm, "ENQUIRY_ORIGINS", {"https://realviewcreativestudio.in"})
+    assert c.post("/enquiry", data=form, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert c.post("/enquiry", data={"name": "x"}, headers={"Origin": "https://realviewcreativestudio.in"}).status_code == 400
+    # a field trying to target another organization is ignored
+    r = c.post("/enquiry", data=dict(form, org_id=w["org_a"], project_id=w["proj_a"]),
+               headers={"Origin": "https://realviewcreativestudio.in"})
+    assert r.status_code == 201 and r.headers["Access-Control-Allow-Origin"] == "https://realviewcreativestudio.in"
+    with w["db"]() as conn:
+        org_kind, project_code, source, creator_role = conn.execute(
+            "SELECT o.kind, p.code, l.source, u.role FROM leads l JOIN organizations o ON o.id = l.org_id"
+            " JOIN projects p ON p.id = l.project_id JOIN users u ON u.id = l.entered_by"
+            " WHERE l.customer_name = 'Web Visitor'").fetchone()
+    assert (org_kind, project_code, source, creator_role) == ("agency", "WEB", "Website", "super_admin")
+    assert "Web Visitor" in w["sup"].get("/leads").get_data(as_text=True)
+    assert "Web Visitor" not in w["a_admin"].get("/leads").get_data(as_text=True)
+    # honeypot: pretend success, store nothing
+    c.post("/enquiry", data=dict(form, name="Bot", website="http://spam"), headers={"Origin": "https://realviewcreativestudio.in"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM leads WHERE customer_name = 'Bot'").fetchone()[0] == 0
+    # rate limit: 10 per hour per IP
+    crm._enquiry_hits.clear()
+    codes = [c.post("/enquiry", data=form, headers={"Origin": "https://realviewcreativestudio.in"}).status_code
+             for _ in range(11)]
+    assert codes[-1] == 429
