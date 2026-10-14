@@ -1,0 +1,21 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ 'Edit product' if product else 'Add product' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Edit product / service' if product else 'Add product / service' }}</h1>
+<form method="post" class="card form narrow">
+  {{ csrf() }}
+  <div class="row-2">
+    <label>Name *<input name="name" required value="{{ data.name or '' }}" placeholder="e.g. Hyundai Creta, 2BHK Flat, SEO package"></label>
+    <label>Product code<input name="code" value="{{ data.code or '' }}" maxlength="30"></label>
+  </div>
+  <label>Category<input name="category" value="{{ data.category or '' }}" placeholder="e.g. SUV, Apartment, Service"></label>
+  <label>Description<textarea name="description" rows="3">{{ data.description or '' }}</textarea></label>
+  <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if data.active }}> Active (staff can select it on new leads)</label>
+  {% if product %}<p class="muted small">Created {{ product.created_at }}.</p>{% endif %}
+  <div class="actions">
+    <button class="btn btn-primary">Save</button>
+    {% if not product %}<button class="btn" name="save_and_new" value="1">Save &amp; add another</button>{% endif %}
+    <a class="btn" href="{{ url_for('products') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

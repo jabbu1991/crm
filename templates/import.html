@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
 {% block title %}Import leads{% endblock %}
 {% block content %}
 <h1>Import leads from CSV</h1>
@@ -9,8 +9,8 @@
   <button class="btn btn-primary">Import</button>
   <div class="help">
     <p>The first row must be column headers. Recognised headers (case-insensitive):</p>
-    <p><code>Name</code>, <code>Phone</code>, <code>WhatsApp</code>, <code>Email</code>, <code>Place</code> / <code>City</code>, <code>State</code>, <code>Requirement</code> / <code>Product</code>, <code>Status</code>, <code>Buying Possibility</code>, <code>Lead Quality</code>, <code>Source</code>, <code>Notes</code>.</p>
-    <p>Imported leads are recorded as entered by <b>{{ g.user.name }}</b>. Rows without a name or any contact detail are skipped. Export files from this CRM can be re-imported.</p>
+    <p><code>Name</code>, <code>Phone</code>, <code>WhatsApp</code>, <code>Email</code>, <code>Place</code> / <code>City</code>, <code>District</code>, <code>State</code>, <code>Country</code>, <code>Products</code> (comma-separated names of existing products), <code>Requirement</code>, <code>Status</code>, <code>Buying Possibility</code>, <code>Lead Quality</code>, <code>Priority</code>, <code>Source</code>, <code>Notes</code>.</p>
+    <p>Imported leads are created by <b>{{ g.user.name }}</b> in <b>{{ g.org.name }}</b>. State names like "kerala" or "KL" are standardised to "Kerala". Rows without a name or any contact are skipped.</p>
   </div>
 </form>
 {% endblock %}

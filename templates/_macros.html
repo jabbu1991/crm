@@ -1,12 +1,99 @@
-{% macro bars(rows, filter_key, extra={}) -%}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro bars(rows, filter_key, endpoint='leads', label_key='k', id_key=None) -%}
 {% set maxc = (rows|map(attribute='c')|max) if rows else 1 %}
 <ul class="bars">
 {% for r in rows %}
-  <li><a href="{{ url_for('leads', **dict(extra, **{filter_key: r.k})) }}">
-    <span class="bar-label"><span class="badge {{ r.k|badge }}">{{ r.k }}</span></span>
+  {% set fv = r[id_key] if id_key else r[label_key] %}
+  <li><a href="{{ url_for(endpoint, **{filter_key: fv}) }}">
+    <span class="bar-label"><span class="badge {{ r[label_key]|badge }}">{{ r[label_key] }}</span></span>
     <span class="bar-track"><span class="bar-fill" style="width: {{ (r.c / maxc * 100)|round }}%"></span></span>
     <span class="bar-count">{{ r.c }}</span></a></li>
 {% else %}<li class="muted">No data yet.</li>{% endfor %}
 </ul>
 {%- endmacro %}
-{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro pager(page, pages, total, endpoint, params, url_args={}) -%}
+{% if pages > 1 %}
+<div class="pager">
+  <span class="muted">Page {{ page }} of {{ pages }} · {{ total }} leads</span>
+  {% if page > 1 %}<a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=1)) }}">« First</a>
+  <a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=page - 1)) }}">‹ Prev</a>{% endif %}
+  {% if page < pages %}<a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=page + 1)) }}">Next ›</a>
+  <a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=pages)) }}">Last »</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro th(key, label, c) -%}
+  {% set nd = 'desc' if (c.sort == key and c.direction == 'asc') else 'asc' %}
+  <th class="sortable {{ 'sorted' if c.sort == key }}"><a href="{{ url_for(c.endpoint, **dict(dict(c.params, **c.url_args), sort=key, dir=nd, page=1)) }}">{{ label }}{% if c.sort == key %} {{ '▲' if c.direction == 'asc' else '▼' }}{% endif %}</a></th>
+{%- endmacro %}
+
+{% macro lead_table(leads, params, sort, direction, endpoint, url_args={}, show_project=True, show_stage=False) -%}
+{% set ctx = dict(sort=sort, direction=direction, endpoint=endpoint, params=params, url_args=url_args) %}
+<div class="card table-wrap">
+<table class="table leads-table">
+  <thead><tr>
+    {{ th('name', 'Customer', ctx) }}{{ th('phone', 'Phone', ctx) }}<th>WhatsApp</th>{{ th('email', 'Email', ctx) }}
+    {{ th('place', 'Place', ctx) }}{{ th('district', 'District', ctx) }}{{ th('state', 'State', ctx) }}{{ th('requirement', 'Products', ctx) }}
+    {% if show_stage %}<th>Product stage</th>{% endif %}
+    {{ th('status', 'Status', ctx) }}{{ th('quality', 'Quality', ctx) }}{{ th('possibility', 'Buying poss.', ctx) }}{{ th('priority', 'Priority', ctx) }}
+    {{ th('followup', 'Next follow-up', ctx) }}
+    {% if show_project %}{{ th('project', 'Project', ctx) }}{% endif %}{{ th('staff', 'Created by', ctx) }}{{ th('assigned', 'Assigned', ctx) }}{{ th('created', 'Created', ctx) }}
+  </tr></thead>
+  <tbody>
+  {% for l in leads %}
+    <tr>
+      <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a></td>
+      <td>{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}</td>
+      <td>{% if l.whatsapp %}<a href="https://wa.me/{{ l.whatsapp|replace(' ','')|replace('+','')|replace('-','') }}" target="_blank" rel="noopener">{{ l.whatsapp }}</a>{% endif %}</td>
+      <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}</td>
+      <td>{{ l.place or '' }}</td><td>{{ l.district or '' }}</td>
+      <td>{{ l.state or '' }}{% if l.country and l.country != 'India' %} <small class="muted">({{ l.country }})</small>{% endif %}</td>
+      <td class="wrap">{{ l.product_names or '' }}</td>
+      {% if show_stage %}<td><span class="badge {{ l.product_stage|badge }}">{{ l.product_stage }}</span></td>{% endif %}
+      <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
+      <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
+      <td>{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}</td>
+      <td>{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}</td>
+      <td class="{{ 'overdue' if l.next_follow_up and l.next_follow_up < today }}">{{ l.next_follow_up or '' }}</td>
+      {% if show_project %}<td>{{ l.project_name }}</td>{% endif %}
+      <td>{{ l.staff_name }}</td><td>{{ l.assigned_name or '' }}</td><td>{{ l.created_at[:10] }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="18" class="muted center">No leads match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{%- endmacro %}
+
+{# Filter bar. `fixed` holds keys that are locked by the page (e.g. state, product) and rendered hidden. #}
+{% macro lead_filter_form(params, o, action, fixed={}, show=('q','project','product','status','quality','possibility','priority','state','district','place','source','staff','assigned','dates','followup')) -%}
+<form method="get" action="{{ action }}" class="card filters">
+  {% for k, v in fixed.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  {% if params.sort %}<input type="hidden" name="sort" value="{{ params.sort }}"><input type="hidden" name="dir" value="{{ params.dir }}">{% endif %}
+  {% if 'q' in show %}<input type="search" name="q" value="{{ params.q or '' }}" placeholder="Search name, phone, WhatsApp, email…" class="grow">{% endif %}
+  {% if 'project' in show %}<select name="project"><option value="">All projects</option>{% for p in o.projects_all %}<option value="{{ p.id }}" {{ 'selected' if params.project == p.id|string }}>{{ p.name }}</option>{% endfor %}</select>{% endif %}
+  {% if 'product' in show %}<select name="product"><option value="">All products</option>{% for p in o.products_all %}<option value="{{ p.id }}" {{ 'selected' if params.product == p.id|string }}>{{ p.name }}{{ '' if p.active else ' (inactive)' }}</option>{% endfor %}</select>{% endif %}
+  {% if 'stage' in show %}<select name="stage"><option value="">Any product stage</option>{% for s in PRODUCT_STAGES %}<option {{ 'selected' if params.stage == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'status' in show %}<select name="status"><option value="">All statuses</option>{% for s in LEAD_STATUSES %}<option {{ 'selected' if params.status == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'quality' in show %}<select name="quality"><option value="">Any quality</option>{% for s in LEAD_QUALITIES %}<option {{ 'selected' if params.quality == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'possibility' in show %}<select name="possibility"><option value="">Any possibility</option>{% for s in BUYING_POSSIBILITIES %}<option {{ 'selected' if params.possibility == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'priority' in show %}<select name="priority"><option value="">Any priority</option>{% for s in PRIORITIES %}<option {{ 'selected' if params.priority == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'state' in show %}<select name="state"><option value="">All states</option>{% for s in o.states %}<option {{ 'selected' if params.state == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'district' in show and o.districts %}<select name="district"><option value="">All districts</option>{% for s in o.districts %}<option {{ 'selected' if params.district == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'place' in show %}<select name="place"><option value="">All places</option>{% for s in o.places %}<option {{ 'selected' if params.place == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if 'source' in show %}<select name="source"><option value="">Any source</option>{% for s in LEAD_SOURCES %}<option {{ 'selected' if params.source == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
+  {% if is_admin() and 'staff' in show %}<select name="staff"><option value="">Created by: anyone</option>{% for s in o.staff %}<option value="{{ s.id }}" {{ 'selected' if params.staff == s.id|string }}>{{ s.name }}</option>{% endfor %}</select>{% endif %}
+  {% if is_admin() and 'assigned' in show %}<select name="assigned"><option value="">Assigned: anyone</option>{% for s in o.staff %}<option value="{{ s.id }}" {{ 'selected' if params.assigned == s.id|string }}>{{ s.name }}</option>{% endfor %}</select>{% endif %}
+  {% if 'followup' in show %}<select name="followup"><option value="">Any follow-up</option><option value="due" {{ 'selected' if params.followup == 'due' }}>Follow-up due</option><option value="scheduled" {{ 'selected' if params.followup == 'scheduled' }}>Has follow-up</option></select>{% endif %}
+  {% if 'dates' in show %}
+  <label class="inline-label">From <input type="date" name="date_from" value="{{ params.date_from or '' }}"></label>
+  <label class="inline-label">To <input type="date" name="date_to" value="{{ params.date_to or '' }}"></label>
+  {% endif %}
+  <button class="btn btn-primary">Apply</button>
+  <a class="btn" href="{{ action }}{% if fixed %}?{% for k, v in fixed.items() %}{{ k }}={{ v|urlencode }}{{ '&' if not loop.last }}{% endfor %}{% endif %}">Clear</a>
+</form>
+{%- endmacro %}

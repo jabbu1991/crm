@@ -1,13 +1,14 @@
-{% extends 'base.html' %}{% block title %}Log in{% endblock %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Log in{% endblock %}
 {% block content %}
 <div class="auth-card">
   <h1>Agency<span class="accent">CRM</span></h1>
-  <p class="muted">Log in with your staff account.</p>
+  <p class="muted">Log in with your own account. You'll be taken to your organization's workspace.</p>
   <form method="post" class="form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Username<input name="username" required autofocus value="{{ request.form.username }}"></label>
-    <label>Password<input type="password" name="password" required></label>
+    {{ csrf() }}
+    <label>Username or email<input name="username" required autofocus value="{{ request.form.username }}" autocomplete="username"></label>
+    <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
     <button class="btn btn-primary">Log in</button>
   </form>
+  <p class="muted small">Forgot your password? Ask your organization's administrator for a reset link.</p>
 </div>
 {% endblock %}

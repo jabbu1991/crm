@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <h1>Reports · leads by {{ label }}</h1>
-  <a class="btn" href="{{ url_for('leads_export', **params) }}">Export these leads (CSV)</a>
+  <div class="actions"><a class="btn" href="{{ url_for('product_leads') }}">Product-wise report</a><a class="btn" href="{{ url_for('leads_export', **params) }}">Export these leads (CSV)</a></div>
 </div>
 <div class="tabs">
   {% for key, (lbl, _) in GROUPABLE.items() %}<a class="{{ 'on' if key == by }}" href="{{ url_for('reports', by=key, **params) }}">{{ lbl }}</a>{% endfor %}
@@ -20,20 +20,20 @@
 </form>
 <div class="card table-wrap">
 <table class="table">
-  <thead><tr><th>{{ label }}</th><th class="num">Leads</th><th class="num">Share</th><th class="num">Hot</th><th class="num">Warm</th><th class="num">Cold</th><th class="num">High possibility</th><th class="num">Converted</th><th></th></tr></thead>
+  <thead><tr><th>{{ label }}</th><th class="num">Leads</th><th class="num">Share</th><th class="num">Hot</th><th class="num">Warm</th><th class="num">Cold</th><th class="num">High possibility</th><th class="num">Converted</th><th class="num">Lost</th><th></th></tr></thead>
   <tbody>
   {% for r in groups %}
-    {% set fv = r.staff_id if by == 'staff' else (r.project_id if by == 'project' else r.grp) %}
+    {% set fv = r.group_id if by in ('staff', 'assigned', 'project') else r.grp %}
     <tr>
       <td><b>{{ r.grp }}</b></td><td class="num">{{ r.total }}</td>
       <td class="num">{{ (r.total / grand_total * 100)|round(1) }}%</td>
       <td class="num">{{ r.hot or 0 }}</td><td class="num">{{ r.warm or 0 }}</td><td class="num">{{ r.cold or 0 }}</td>
-      <td class="num">{{ r.high_possibility or 0 }}</td><td class="num">{{ r.converted or 0 }}</td>
-      <td class="nowrap"><a href="{{ url_for('leads', **dict(params, **{by: fv})) }}">View leads →</a></td>
+      <td class="num">{{ r.high_possibility or 0 }}</td><td class="num">{{ r.converted or 0 }}</td><td class="num">{{ r.lost or 0 }}</td>
+      <td class="nowrap">{% if fv is not none %}<a href="{{ url_for('leads', **dict(params, **{by: fv})) }}">View leads →</a>{% endif %}</td>
     </tr>
-  {% else %}<tr><td colspan="9" class="muted center">No leads yet.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="10" class="muted center">No leads yet.</td></tr>{% endfor %}
   </tbody>
-  {% if groups %}<tfoot><tr><th>Total</th><th class="num">{{ grand_total }}</th><th colspan="7"></th></tr></tfoot>{% endif %}
+  {% if groups %}<tfoot><tr><th>Total</th><th class="num">{{ grand_total }}</th><th colspan="8"></th></tr></tfoot>{% endif %}
 </table>
 </div>
 {% endblock %}

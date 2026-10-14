@@ -1,0 +1,34 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Follow-ups{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'My follow-ups' if not is_admin() else 'Follow-ups' }}</h1>
+  {% if is_admin() %}
+  <form method="get" class="inline"><input type="hidden" name="view" value="{{ view }}">
+    <select name="staff" onchange="this.form.submit()"><option value="">All staff</option>{% for s in staff %}<option value="{{ s.id }}" {{ 'selected' if staff_id == s.id }}>{{ s.name }}</option>{% endfor %}</select></form>
+  {% endif %}
+</div>
+<div class="tabs">
+  {% for key, label in [('due', 'Due now'), ('overdue', 'Overdue (' ~ (counts.overdue or 0) ~ ')'), ('today', 'Today (' ~ (counts.today or 0) ~ ')'), ('upcoming', 'Upcoming (' ~ (counts.upcoming or 0) ~ ')'), ('done', 'Completed')] %}
+  <a class="{{ 'on' if view == key }}" href="{{ url_for('followups', view=key, staff=staff_id) }}">{{ label }}</a>{% endfor %}
+</div>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Due</th><th>Customer</th><th>Phone</th><th>Lead status</th><th>Task</th><th>Assigned</th>{% if view == 'done' %}<th>Result</th>{% else %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for f in rows %}
+    <tr>
+      <td class="nowrap {{ 'overdue' if f.status == 'Pending' and f.due_date < today }}">{{ f.due_date }}</td>
+      <td><a href="{{ url_for('lead_view', lid=f.lead_id) }}"><b>{{ f.customer_name }}</b></a></td>
+      <td class="nowrap">{% if f.phone %}<a href="tel:{{ f.phone }}">{{ f.phone }}</a>{% endif %}</td>
+      <td><span class="badge {{ f.lead_status|badge }}">{{ f.lead_status }}</span></td>
+      <td>{{ f.note or '' }}</td><td>{{ f.assigned_name or '' }}</td>
+      {% if view == 'done' %}<td><span class="badge {{ f.status|badge }}">{{ f.status }}</span> {{ f.outcome or '' }} <small class="muted">{{ f.completed_by_name }} · {{ f.completed_at }}</small></td>
+      {% else %}<td><form method="post" action="{{ url_for('followup_complete', fid=f.id) }}" class="inline-form">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}">
+        <input name="outcome" placeholder="Outcome"><button class="btn btn-sm" name="action" value="done">Done</button></form></td>{% endif %}
+    </tr>
+  {% else %}<tr><td colspan="7" class="muted center">Nothing here.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

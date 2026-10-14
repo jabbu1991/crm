@@ -1,0 +1,27 @@
+{% extends 'base.html' %}{% from '_macros.html' import lead_filter_form with context %}
+{% block title %}Product-wise Leads{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Product-wise leads</h1>
+  {% if is_admin() %}<a class="btn" href="{{ url_for('products') }}">Manage products</a>{% endif %}
+</div>
+{{ lead_filter_form(params, dict(projects_all=projects_all, products_all=products_all, staff=staff, states=states, places=places, districts=districts), url_for('product_leads'), show=('project','status','quality','possibility','state','staff','dates')) }}
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Product / service</th><th class="num" title="Distinct leads linked to this product">Interested leads</th><th class="num" title="Distinct customers (same phone/email counted once)">Customers</th>
+    <th class="num">Hot</th><th class="num">Still interested</th><th class="num">Ordered</th><th class="num">Purchased</th><th class="num">Lost / dropped</th><th class="num" title="Purchased ÷ interested leads">Conversion</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="{{ 'inactive' if not r.active }}">
+      <td><a href="{{ url_for('product_lead_list', pid=r.id, **params) }}"><b>{{ r.name }}</b></a>{% if r.code %} <small class="muted">{{ r.code }}</small>{% endif %}{% if r.category %}<div class="small muted">{{ r.category }}</div>{% endif %}</td>
+      <td class="num"><b>{{ r.total_leads }}</b></td><td class="num">{{ r.customers }}</td><td class="num">{{ r.hot }}</td>
+      <td class="num">{{ r.open_interest }}</td><td class="num">{{ r.ordered }}</td><td class="num">{{ r.purchased }}</td><td class="num">{{ r.lost }}</td>
+      <td class="num">{{ ((r.purchased / r.total_leads * 100)|round(1) ~ '%') if r.total_leads else '—' }}</td>
+      <td class="nowrap"><a href="{{ url_for('product_lead_list', pid=r.id, **params) }}">View leads →</a></td>
+    </tr>
+  {% else %}<tr><td colspan="10" class="muted center">No products yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">A lead counts as <b>Interested</b> when the product is ticked on the lead. <b>Ordered</b> and <b>Purchased</b> are counted only when someone sets that stage on the lead page; interest is never treated as an order. One lead can be interested in several products, and each lead is counted once per product.</p>
+{% endblock %}

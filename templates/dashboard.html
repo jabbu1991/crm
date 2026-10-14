@@ -1,82 +1,100 @@
-{% extends 'base.html' %}{% from '_macros.html' import bars %}
+{% extends 'base.html' %}{% from '_macros.html' import bars with context %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-{% set extra = {'project': project.id} if project else {} %}
+{% set mine = not is_admin() %}
+
+{% if is_super() %}
+<section class="card super-card">
+  <h2>Agency control panel <a class="small" href="{{ url_for('admin_orgs') }}">Manage client organizations →</a></h2>
+  <div class="stats compact-stats">
+    <div class="stat"><b>{{ orgs|selectattr('status', 'equalto', 'Active')|list|length }}</b><span>Active organizations</span></div>
+    <div class="stat"><b>{{ orgs|selectattr('kind', 'equalto', 'client')|list|length }}</b><span>Client accounts</span></div>
+    <div class="stat"><b>{{ orgs|sum(attribute='active_users') }}</b><span>Active users (all orgs)</span></div>
+    <div class="stat"><b>{{ orgs|sum(attribute='leads') }}</b><span>Leads (all orgs)</span></div>
+  </div>
+  <div class="table-wrap">
+  <table class="table compact">
+    <thead><tr><th>Organization</th><th>Type</th><th>Status</th><th class="num">Users</th><th class="num">Projects</th><th class="num">Leads</th></tr></thead>
+    <tbody>
+    {% for o in orgs %}<tr><td><b>{{ o.name }}</b> <small class="muted">{{ o.code }}</small></td><td>{{ 'Agency' if o.kind == 'agency' else 'Client' }}</td>
+      <td><span class="badge {{ o.status|badge }}">{{ o.status }}</span></td><td class="num">{{ o.active_users }}/{{ o.users }}</td>
+      <td class="num">{{ o.projects }}</td><td class="num">{{ o.leads }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Client totals are counts only. Client lead details stay private to each organization.</p>
+</section>
+{% endif %}
+
 <div class="page-head">
-  <h1>Dashboard{% if project %} · {{ project.name }}{% endif %}</h1>
-  <form method="get" class="inline">
-    <select name="project" onchange="this.form.submit()">
-      <option value="">All projects</option>
-      {% for p in nav_projects %}<option value="{{ p.id }}" {{ 'selected' if project and project.id == p.id }}>{{ p.name }}</option>{% endfor %}
-    </select>
-  </form>
+  <h1>{{ 'My dashboard' if mine else 'Dashboard · ' ~ g.org.name }}</h1>
+  <a class="btn btn-primary" href="{{ url_for('lead_new') }}">+ Add Lead</a>
 </div>
 
 <div class="stats">
-  <a class="stat" href="{{ url_for('leads', **extra) }}"><b>{{ total }}</b><span>Total leads</span></a>
-  <a class="stat" href="{{ url_for('leads', **extra) }}"><b>{{ today }}</b><span>Added today</span></a>
-  <a class="stat stat-hot" href="{{ url_for('leads', quality='Hot', **extra) }}"><b>{{ hot }}</b><span>Hot leads</span></a>
-  <a class="stat stat-good" href="{{ url_for('leads', status='Converted', **extra) }}"><b>{{ converted }}</b><span>Converted</span></a>
+  <a class="stat" href="{{ url_for('leads') }}"><b>{{ stats.total }}</b><span>{{ 'My leads' if mine else 'Total leads' }}</span></a>
+  <a class="stat" href="{{ url_for('leads', status='New') }}"><b>{{ stats.new }}</b><span>{{ 'My new' if mine else 'New' }} leads</span></a>
+  <a class="stat stat-hot" href="{{ url_for('leads', quality='Hot') }}"><b>{{ stats.hot }}</b><span>Hot leads</span></a>
+  <a class="stat stat-warn" href="{{ url_for('followups') }}"><b>{{ stats.followups_due }}</b><span>Follow-ups due</span></a>
+  <a class="stat" href="{{ url_for('leads', possibility='High') }}"><b>{{ stats.high }}</b><span>High buying possibility</span></a>
+  <a class="stat stat-good" href="{{ url_for('leads', status='Converted') }}"><b>{{ stats.converted }}</b><span>Converted</span></a>
+  <a class="stat stat-muted" href="{{ url_for('leads', status='Lost') }}"><b>{{ stats.lost }}</b><span>Lost / not interested</span></a>
+  <div class="stat"><b>{{ stats.today_added }}</b><span>Added today</span></div>
 </div>
 
-{% if not project_stats %}
+{% if is_admin() and not by_project %}
 <div class="card empty">
-  <h2>No projects yet</h2>
-  <p>Each project is one client your agency works for. Leads are entered under a project.</p>
-  {% if g.user.role == 'admin' %}<a class="btn btn-primary" href="{{ url_for('project_new') }}">+ Create first project</a>
-  {% else %}<p class="muted">Ask your admin to create a project.</p>{% endif %}
+  <h2>Get started</h2>
+  <p>1. Add your <a href="{{ url_for('products') }}">products &amp; services</a> · 2. Create a <a href="{{ url_for('project_new') }}">project / campaign</a> · 3. Add <a href="{{ url_for('staff') }}">staff accounts</a> · 4. Start entering leads.</p>
 </div>
 {% endif %}
 
 <div class="grid-2">
-  <section class="card"><h2>By status</h2>{{ bars(by_status, 'status', extra) }}</section>
-  <section class="card"><h2>By lead quality</h2>{{ bars(by_quality, 'quality', extra) }}</section>
-  <section class="card"><h2>By buying possibility</h2>{{ bars(by_possibility, 'possibility', extra) }}</section>
-  <section class="card"><h2>Top requirements <a class="small" href="{{ url_for('reports', by='requirement', **extra) }}">all →</a></h2>{{ bars(by_requirement, 'requirement', extra) }}</section>
+  <section class="card"><h2>{{ 'My leads' if mine else 'Leads' }} by product <a class="small" href="{{ url_for('product_leads') }}">all →</a></h2>{{ bars(by_product, 'pid', 'product_lead_list', 'name', 'id') }}</section>
+  <section class="card"><h2>Leads by state <a class="small" href="{{ url_for('states') }}">all →</a></h2>{{ bars(by_state, 'state', 'state_view') }}</section>
+  <section class="card"><h2>By status</h2>{{ bars(by_status, 'status') }}</section>
+  <section class="card"><h2>By project</h2>{{ bars(by_project, 'project', 'leads', 'name', 'id') }}</section>
 </div>
 
 <div class="grid-2">
-  {% if not project %}
+  {% if is_admin() %}
   <section class="card">
-    <h2>Projects</h2>
+    <h2>Leads added by staff</h2>
     <table class="table compact">
-      <thead><tr><th>Project</th><th class="num">Leads</th><th class="num">Hot</th><th class="num">Converted</th></tr></thead>
+      <thead><tr><th>Staff</th><th class="num">Leads</th><th class="num">Hot</th><th class="num">Converted</th></tr></thead>
       <tbody>
-      {% for p in project_stats %}
-        <tr><td><a href="{{ url_for('leads', project=p.id) }}">{{ p.name }}</a>{% if p.client_name %}<div class="muted small">{{ p.client_name }}</div>{% endif %}</td>
-          <td class="num">{{ p.total }}</td><td class="num">{{ p.hot or 0 }}</td><td class="num">{{ p.converted or 0 }}</td></tr>
-      {% endfor %}
+      {% for s in by_staff %}<tr><td><a href="{{ url_for('leads', staff=s.id) }}">{{ s.name }}</a></td><td class="num">{{ s.c }}</td><td class="num">{{ s.hot or 0 }}</td><td class="num">{{ s.converted or 0 }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">No leads yet.</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
   {% endif %}
   <section class="card">
-    <h2>Leads entered by staff</h2>
+    <h2>Follow-ups due <a class="small" href="{{ url_for('followups') }}">all →</a></h2>
     <table class="table compact">
-      <thead><tr><th>Staff</th><th class="num">Leads</th></tr></thead>
       <tbody>
-      {% for s in staff_stats %}<tr><td><a href="{{ url_for('leads', staff=s.id, **extra) }}">{{ s.name }}</a></td><td class="num">{{ s.total }}</td></tr>
-      {% else %}<tr><td colspan="2" class="muted">No leads yet.</td></tr>{% endfor %}
+      {% for f in due_followups %}<tr><td class="{{ 'overdue' if f.due_date < today }}">{{ f.due_date }}</td><td><a href="{{ url_for('lead_view', lid=f.lead_id) }}">{{ f.customer_name }}</a></td><td>{{ f.phone or '' }}</td><td class="muted">{{ f.note or '' }}</td></tr>
+      {% else %}<tr><td class="muted">Nothing due. 🎉</td></tr>{% endfor %}
       </tbody>
     </table>
   </section>
 </div>
 
 <section class="card">
-  <h2>Recently added leads</h2>
+  <h2>{{ 'My recent leads' if mine else 'Recently added leads' }}</h2>
   <div class="table-wrap">
-  <table class="table">
-    <thead><tr><th>Customer</th><th>Phone</th><th>Requirement</th><th>Project</th><th>Status</th><th>Quality</th><th>Entered by</th><th>Date</th></tr></thead>
+  <table class="table leads-table">
+    <thead><tr><th>Customer</th><th>Phone</th><th>Products</th><th>State</th><th>Project</th><th>Status</th><th>Quality</th><th>Created by</th><th>Date</th></tr></thead>
     <tbody>
     {% for l in recent %}
       <tr>
         <td><a href="{{ url_for('lead_view', lid=l.id) }}">{{ l.customer_name }}</a></td>
-        <td>{{ l.phone }}</td><td>{{ l.requirement }}</td><td>{{ l.project_name }}</td>
+        <td>{{ l.phone or '' }}</td><td class="wrap">{{ l.product_names or '' }}</td><td>{{ l.state or '' }}</td><td>{{ l.project_name }}</td>
         <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
         <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
-        <td>{{ l.staff_name }}</td><td class="nowrap">{{ l.created_at[:10] }}</td>
+        <td>{{ l.staff_name }}</td><td>{{ l.created_at[:10] }}</td>
       </tr>
-    {% else %}<tr><td colspan="8" class="muted">No leads yet. <a href="{{ url_for('lead_new') }}">Add the first lead →</a></td></tr>{% endfor %}
+    {% else %}<tr><td colspan="9" class="muted">No leads yet. <a href="{{ url_for('lead_new') }}">Add the first lead →</a></td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

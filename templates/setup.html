@@ -1,16 +1,17 @@
-{% extends 'base.html' %}{% block title %}Setup{% endblock %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Setup{% endblock %}
 {% block content %}
 <div class="auth-card">
   <h1>Welcome to Agency CRM</h1>
-  <p class="muted">Create the administrator account to get started.</p>
+  <p class="muted">Create your agency workspace and the Super Admin (owner) account.</p>
   <form method="post" class="form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {{ csrf() }}
+    <label>Agency name *<input name="agency" required value="{{ request.form.agency }}" placeholder="e.g. Bright Ideas Marketing"></label>
     <label>Your name *<input name="name" required value="{{ request.form.name }}"></label>
-    <label>Username *<input name="username" required value="{{ request.form.username }}"></label>
+    <label>Username *<input name="username" required value="{{ request.form.username }}" autocomplete="username"></label>
     <label>Phone<input name="phone" value="{{ request.form.phone }}"></label>
     <label>Email<input type="email" name="email" value="{{ request.form.email }}"></label>
-    <label>Password * <small>(min 6 characters)</small><input type="password" name="password" required minlength="6"></label>
-    <button class="btn btn-primary">Create admin account</button>
+    <label>Password * <small>(min 8 characters)</small><input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    <button class="btn btn-primary">Create agency &amp; Super Admin</button>
   </form>
 </div>
 {% endblock %}

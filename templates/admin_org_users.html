@@ -1,0 +1,35 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ org.name }} accounts{% endblock %}
+{% block content %}
+<div class="page-head"><h1><a class="muted" href="{{ url_for('admin_orgs') }}">Organizations</a> › {{ org.name }} · accounts</h1>
+  <span class="badge {{ org.status|badge }}">{{ org.status }}</span></div>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Password</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr class="{{ 'inactive' if not u.active }}">
+      <td><b>{{ u.name }}</b></td><td>{{ u.username }}</td><td>{{ u.email or '' }}</td><td>{{ ROLE_LABELS[u.role] }}</td>
+      <td>{{ 'Active' if u.active else 'Deactivated' }}</td><td class="small">{{ u.last_login_at or 'never' }}</td>
+      <td>{% if u.id != g.user.id %}
+        <details class="pw-menu"><summary>Reset…</summary>
+          <form method="post" action="{{ url_for('admin_user_password', oid=org.id, uid=u.id) }}">{{ csrf() }}<button class="btn btn-sm" name="action" value="reset">Create reset link</button></form>
+          <form method="post" action="{{ url_for('admin_user_password', oid=org.id, uid=u.id) }}" class="inline-form">{{ csrf() }}<input type="password" name="temp_password" minlength="8" placeholder="Temporary password" required autocomplete="new-password"><button class="btn btn-sm" name="action" value="temp">Set temporary</button></form>
+        </details>{% endif %}</td>
+      <td>{% if u.id != g.user.id %}<form method="post" action="{{ url_for('admin_user_toggle', oid=org.id, uid=u.id) }}" class="inline">{{ csrf() }}<button class="linkbtn dark">{{ 'Deactivate' if u.active else 'Activate' }}</button></form>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<form method="post" action="{{ url_for('admin_org_add_admin', oid=org.id) }}" class="card form narrow">
+  {{ csrf() }}
+  <h2>Add another Organization Admin (invitation link)</h2>
+  <div class="row-2">
+    <label>Name *<input name="admin_name" required></label>
+    <label>Username *<input name="admin_username" required autocomplete="off"></label>
+  </div>
+  <div class="row-2"><label>Email<input type="email" name="admin_email"></label><label>Phone<input name="admin_phone"></label></div>
+  <button class="btn btn-primary">Create &amp; get invite link</button>
+</form>
+{% endblock %}

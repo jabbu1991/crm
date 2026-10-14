@@ -1,7 +1,7 @@
-{% extends 'base.html' %}{% from '_macros.html' import csrf %}
-{% block title %}{{ 'Edit staff' if member else 'Add staff' }}{% endblock %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ 'Edit user' if member else 'Add user' }}{% endblock %}
 {% block content %}
-<h1>{{ 'Edit staff member' if member else 'Add staff member' }}</h1>
+<h1>{{ 'Edit user' if member else 'Add user to ' ~ g.org.name }}</h1>
 <form method="post" class="card form narrow">
   {{ csrf() }}
   <div class="row-2">
@@ -9,18 +9,26 @@
     <label>Designation<input name="designation" value="{{ data.designation or '' }}" placeholder="e.g. Telecaller, Sales Executive"></label>
   </div>
   <div class="row-2">
-    <label>Phone<input name="phone" value="{{ data.phone or '' }}"></label>
+    <label>Username *<input name="username" required value="{{ data.username or '' }}" autocomplete="off"></label>
     <label>Email<input type="email" name="email" value="{{ data.email or '' }}"></label>
   </div>
+  <label>Phone<input name="phone" value="{{ data.phone or '' }}"></label>
+  {% set locked = member and (member.id == g.user.id or member.role == 'super_admin') %}
   <div class="row-2">
-    <label>Username *<input name="username" required value="{{ data.username or '' }}" autocomplete="off"></label>
-    <label>{{ 'New password (leave blank to keep)' if member else 'Password *' }}<input type="password" name="password" minlength="6" {{ '' if member else 'required' }} autocomplete="new-password"></label>
+    <label>Role
+      {% if locked %}<input value="{{ ROLE_LABELS[member.role] }}" disabled><input type="hidden" name="role" value="{{ member.role }}">
+      {% else %}<select name="role"><option value="staff" {{ 'selected' if data.role == 'staff' }}>Staff: sees and edits only their own leads</option><option value="org_admin" {{ 'selected' if data.role == 'org_admin' }}>Organization Admin: all leads, reports and users</option></select>{% endif %}
+    </label>
+    <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if data.active }} {{ 'disabled' if locked }}> Account active (can log in)</label>
   </div>
-  {% set is_self = member and member.id == g.user.id %}
-  <div class="row-2">
-    <label>Role<select name="role" {{ 'disabled' if is_self }}><option value="staff" {{ 'selected' if data.role == 'staff' }}>Staff – add &amp; edit leads</option><option value="admin" {{ 'selected' if data.role == 'admin' }}>Admin – full access</option></select></label>
-    <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if data.active }} {{ 'disabled' if is_self }}> Account active (can log in)</label>
-  </div>
-  <div class="actions"><button class="btn btn-primary">Save</button><a class="btn" href="{{ url_for('staff') }}">Cancel</a></div>
+  {% if not member %}
+  <fieldset>
+    <legend>How will they get access?</legend>
+    <label class="check"><input type="radio" name="onboarding" value="invite" checked onclick="document.getElementById('pw').style.display='none'"> Create an invitation link (recommended). They choose their own password.</label>
+    <label class="check"><input type="radio" name="onboarding" value="password" onclick="document.getElementById('pw').style.display='block'"> Set an initial password. They must change it at first login.</label>
+    <label id="pw" style="display:none">Initial password <small>(min 8 characters)</small><input type="password" name="password" minlength="8" autocomplete="new-password"></label>
+  </fieldset>
+  {% endif %}
+  <div class="actions"><button class="btn btn-primary">{{ 'Save' if member else 'Create account' }}</button><a class="btn" href="{{ url_for('staff') }}">Cancel</a></div>
 </form>
 {% endblock %}

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Organization Settings{% endblock %}
+{% block content %}
+<h1>Organization settings</h1>
+<div class="grid-2">
+<form method="post" class="card form">
+  {{ csrf() }}
+  <label>Organization name *<input name="name" required value="{{ org.name }}"></label>
+  <label>Contact person<input name="contact_name" value="{{ org.contact_name or '' }}"></label>
+  <div class="row-2">
+    <label>Phone<input name="phone" value="{{ org.phone or '' }}"></label>
+    <label>Email<input type="email" name="email" value="{{ org.email or '' }}"></label>
+  </div>
+  <label>Address<textarea name="address" rows="2">{{ org.address or '' }}</textarea></label>
+  <button class="btn btn-primary">Save</button>
+</form>
+<section class="card">
+  <h2>Workspace</h2>
+  <dl class="details">
+    <dt>Organization code</dt><dd>{{ org.code }}</dd>
+    <dt>Type</dt><dd>{{ 'Agency (owner)' if org.kind == 'agency' else 'Client organization' }}</dd>
+    <dt>Status</dt><dd><span class="badge {{ org.status|badge }}">{{ org.status }}</span></dd>
+    <dt>Users</dt><dd><a href="{{ url_for('staff') }}">{{ counts.users }}</a></dd>
+    <dt>Projects</dt><dd><a href="{{ url_for('projects') }}">{{ counts.projects }}</a></dd>
+    <dt>Products</dt><dd><a href="{{ url_for('products') }}">{{ counts.products }}</a></dd>
+    <dt>Leads</dt><dd><a href="{{ url_for('leads') }}">{{ counts.leads }}</a></dd>
+  </dl>
+  <p class="muted small">Everyone in this organization logs in at the same web address. Data is visible only inside this organization.</p>
+</section>
+</div>
+{% endblock %}

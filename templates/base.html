@@ -3,27 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Agency CRM{% endblock %} · Agency CRM</title>
+  <title>{% block title %}Agency CRM{% endblock %} · {{ g.org.name if g.org else 'Agency CRM' }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% if g.user %}
+{% set ep = request.endpoint or '' %}
 <header class="topbar">
   <a class="brand" href="{{ url_for('dashboard') }}">Agency<span>CRM</span></a>
+  <div class="orgname" title="Current organization">
+    {{ g.org.name }}{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
+  </div>
   <button class="menu-btn" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">☰</button>
-  <nav class="mainnav">
-    <a href="{{ url_for('dashboard') }}" class="{{ 'active' if (request.endpoint or '') == 'dashboard' }}">Dashboard</a>
-    <a href="{{ url_for('projects') }}" class="{{ 'active' if (request.endpoint or '').startswith('project') }}">Projects</a>
-    <a href="{{ url_for('leads') }}" class="{{ 'active' if (request.endpoint or '') in ('leads','lead_view','lead_edit') }}">Leads</a>
-    <a href="{{ url_for('reports') }}" class="{{ 'active' if (request.endpoint or '') == 'reports' }}">Reports</a>
-    {% if g.user.role == 'admin' %}<a href="{{ url_for('staff') }}" class="{{ 'active' if (request.endpoint or '').startswith('staff') }}">Staff</a>{% endif %}
-    <a href="{{ url_for('lead_new') }}" class="btn btn-primary nav-cta">+ New Lead</a>
-  </nav>
   <div class="userbox">
-    <a href="{{ url_for('account') }}" title="My account">{{ g.user.name }} <small>({{ g.user.role }})</small></a>
+    <a href="{{ url_for('account') }}" title="My account">{{ g.user.name }} <small>({{ ROLE_LABELS[g.user.role] }})</small></a>
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linkbtn">Log out</button></form>
   </div>
 </header>
+{% if not g.user.must_change_password %}
+<nav class="mainnav">
+  <a href="{{ url_for('dashboard') }}" class="{{ 'active' if ep == 'dashboard' }}">Dashboard</a>
+  <a href="{{ url_for('projects') }}" class="{{ 'active' if ep.startswith('project_') or ep == 'projects' }}">Projects</a>
+  <a href="{{ url_for('leads') }}" class="{{ 'active' if ep in ('leads', 'lead_view', 'lead_edit', 'leads_import') }}">Leads</a>
+  <a href="{{ url_for('lead_new') }}" class="nav-cta {{ 'active' if ep == 'lead_new' }}">+ Add Lead</a>
+  <a href="{{ url_for('products') }}" class="{{ 'active' if ep in ('products', 'product_new', 'product_edit') }}">Products &amp; Services</a>
+  <a href="{{ url_for('states') }}" class="{{ 'active' if ep in ('states', 'state_view') }}">State-wise Leads</a>
+  <a href="{{ url_for('product_leads') }}" class="{{ 'active' if ep in ('product_leads', 'product_lead_list') }}">Product-wise Leads</a>
+  <a href="{{ url_for('followups') }}" class="{{ 'active' if ep == 'followups' }}">Follow-ups</a>
+  {% if is_admin() %}
+  <a href="{{ url_for('reports') }}" class="{{ 'active' if ep == 'reports' }}">Reports</a>
+  <a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>
+  <a href="{{ url_for('organization_settings') }}" class="{{ 'active' if ep == 'organization_settings' }}">Organization Settings</a>
+  {% endif %}
+  {% if is_super() %}
+  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') }}">Client Organizations</a>
+  {% endif %}
+</nav>
+{% endif %}
 {% endif %}
 <main class="container">
   {% with messages = get_flashed_messages(with_categories=true) %}

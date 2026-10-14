@@ -1,60 +1,84 @@
 # Agency CRM
 
-A lead-management CRM web application built for **marketing agencies** that run campaigns for many clients.
+A multi-tenant lead-management CRM for a **marketing agency and the client businesses it works for**. Everyone uses the same web address. After login, each user lands in their own organization's private workspace.
+
+## Roles
+
+| Role | Who | Can do |
+|---|---|---|
+| **Super Admin** | Agency owner | Everything an Organization Admin can do in the agency workspace. Also creates, edits, activates and deactivates client organizations; manages their admin accounts (invite links, password resets, deactivation); sees totals per organization. Does **not** see client leads. |
+| **Organization Admin** | Agency or client administrator | Sees all leads in their organization. Manages projects, products and staff accounts; runs reports and CSV export; edits organization settings. |
+| **Staff** | Telecallers, sales executives | Adds leads. Sees and updates only the leads they created or that are assigned to them, plus their own dashboard and follow-ups. |
 
 ## Features
 
-- **Projects (clients):** one agency, many clients. Every lead belongs to a project, and the dashboard and lead list can be filtered by project.
-- **Staff accounts:** each person logs in with their own account. The staff member who enters a lead is recorded automatically ("Entered by") along with the date and time. Later edits record who changed what.
-  - **Admin:** manages projects and staff, and can delete records.
-  - **Staff:** adds and edits leads.
-- **Lead data entry:** customer name, phone, WhatsApp number (with a "same as phone" shortcut), email, place, state, requirement (product), status, buying possibility (High / Medium / Low), lead quality (Hot / Warm / Cold), lead source and notes.
-  - A warning appears when the same phone, WhatsApp number or email already exists in the project.
-  - "Save & add another" speeds up bulk entry.
-- **Sorting:** one click sorts by name, number, email, place, state, requirement, lead quality, buying possibility, status or date. You can also click any column header.
-- **Filtering and search:** filter by project, requirement, status, quality, possibility, state, place, source, staff and date range, or search across all fields at once.
-- **Reports:** leads grouped by requirement (each product listed separately), place, state, status, buying possibility, lead quality, source, staff or project. Each group shows Hot/Warm/Cold, high-possibility and converted counts, plus a link to that group's leads.
-- **Lead page:** click-to-call, a WhatsApp link (wa.me), quick status change, follow-up notes and a full history.
-- **CSV export** of any filtered list (opens in Excel) and **CSV import** for leads from Facebook, Google and similar sources.
-- Works on mobile phones.
+- **Organizations:** one agency workspace plus any number of client workspaces, each with fully isolated data.
+- **Accounts:** individual logins (username or email). New users join through a **single-use invitation link**, or an initial password they must change at first login. Admins can create a reset link or set a temporary password. Passwords are hashed and never shown. Deactivating a user or an organization signs them out immediately. Repeated failed logins are throttled.
+- **Projects / campaigns:** code, client, campaign type, start and end dates, status, assigned staff and linked products. If staff are assigned, only those staff (and admins) can add leads to that project.
+- **Leads:** customer name, phone, WhatsApp, email, place, district, state (a standard list of Indian states and UTs, plus an option for outside India), country, project, products (multi-select), requirement description, source, quality, buying possibility, priority, status, assigned staff, next follow-up date.
+  - **Created by**, organization, and created/updated date and time are recorded by the server from the login. They can't be typed in or faked.
+  - Duplicate-customer warning across the organization.
+  - Search, sorting, filters, date ranges, pagination (50 per page), CSV export (admins), CSV import.
+- **Products & Services:** per-organization catalogue (name, code, category, description, active/inactive).
+- **Interest vs. order:** ticking a product on a lead records *interest*. Each lead/product pair has its own stage (Interested → Ordered → Purchased, or Dropped). Converting a lead never marks a product as purchased automatically.
+- **State-wise Leads:** every state with its lead count. Click a state to see its leads, with search, filters, sorting, pagination and export. Spellings like "kerala" or "KL" are stored as "Kerala".
+- **Product-wise Leads:** for each product: interested leads, distinct customers, hot, still interested, ordered, purchased, lost/dropped and conversion rate. Click a product to see its leads.
+- **Follow-ups:** schedule, complete or cancel follow-ups. Separate lists for overdue, today, upcoming and completed.
+- **Dashboards:** separate views for Super Admin, Organization Admin and Staff, all built from live queries within the user's permissions.
 
 ## Run it
 
 **Windows (easiest):** download and unzip the project, then double-click **`start.bat`**. It installs what's needed, starts the CRM and opens your browser. Keep its window open while you use the CRM.
 
-**Any system:**
-
-Requires Python 3.9+.
+**Any system** (Python 3.9+):
 
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-Open http://localhost:5000. On first launch you create the admin account. Then:
+Open http://localhost:5000.
 
-1. **Projects → New project** for each client.
-2. **Staff → Add staff** for each team member.
-3. Staff log in and use **+ New Lead**.
+- **New install:** the first screen creates your agency workspace and the Super Admin account.
+- **Upgrading from the earlier single-workspace version:** just start the new version. The database is upgraded automatically (see below). Your existing admin logins still work. The first admin becomes Super Admin; other admins become Organization Admins of the agency workspace.
 
-Data is stored in `instance/crm.db` (SQLite). Back up that file to back up everything.
+Then, as Super Admin: **Client Organizations → New client organization** creates a client workspace and its first admin. Send them the invitation link it shows.
 
-### Settings (environment variables)
+## Database and upgrades
+
+- SQLite file: `instance/crm.db`. Back up the whole `instance/` folder regularly.
+- The schema version is stored in the database (`PRAGMA user_version`). When the app starts on an older database, it:
+  1. **copies the whole database** to `instance/backups/crm-<date>-pre-v1.db`;
+  2. adds the new tables and columns in one transaction (nothing is deleted);
+  3. moves existing users, projects and leads into the agency organization, standardises state names, and turns each distinct old "requirement" into a product, linked to its leads as *Interested*.
+- Tenant safety is enforced twice: in the application, where every query is filtered by the logged-in user's organization and role, and in the database, where triggers reject any row that links data across organizations or changes a lead's creator.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+The tests create the accounts Super Admin, Org A Admin, Org A Staff 1, Org A Staff 2, Org B Admin and Org B Staff. They check isolation between staff and between organizations, admin visibility, account deactivation, invite and reset links, temporary passwords, CSRF protection, login throttling, the database triggers, state normalisation and permissions, product report counts (interest vs. order), pagination, import, and migration from the original version.
+
+## Settings (environment variables)
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `5000` | Port to listen on |
 | `HOST` | `127.0.0.1` | Use `0.0.0.0` to allow other computers on your network |
 | `CRM_DB_PATH` | `instance/crm.db` | Database file location |
-| `CRM_SECRET_KEY` | auto-generated | Session signing key |
+| `CRM_SECRET_KEY` | auto-generated | Session signing key (set a fixed value in production) |
+| `CRM_SECURE_COOKIES` | off | Set to `1` when served over HTTPS |
 
-### Production
+## Production
 
-Use a WSGI server instead of the built-in one, for example:
+Run behind HTTPS with a WSGI server, for example:
 
 ```bash
 pip install gunicorn
-gunicorn -w 2 -b 0.0.0.0:8000 app:app
+CRM_SECURE_COOKIES=1 gunicorn -w 1 -b 0.0.0.0:8000 app:app
 ```
 
-Put it behind HTTPS (nginx, Caddy, or a platform such as Render or Railway).
+Use one worker: the login throttle is kept in memory, and SQLite works best with a single writer process.

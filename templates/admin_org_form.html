@@ -1,0 +1,39 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ 'Edit organization' if org else 'New client organization' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Edit ' ~ org.name if org else 'New client organization' }}</h1>
+<form method="post" class="card form narrow">
+  {{ csrf() }}
+  <fieldset>
+    <legend>Organization</legend>
+    <div class="row-2">
+      <label>Company name *<input name="name" required value="{{ data.name or '' }}"></label>
+      <label>Short code * <small>(letters/numbers, unique)</small><input name="code" required maxlength="20" value="{{ data.code or '' }}" placeholder="e.g. ABCMOTORS"></label>
+    </div>
+    <div class="row-3">
+      <label>Contact person<input name="contact_name" value="{{ data.contact_name or '' }}"></label>
+      <label>Phone<input name="phone" value="{{ data.phone or '' }}"></label>
+      <label>Email<input type="email" name="email" value="{{ data.email or '' }}"></label>
+    </div>
+    <label>Address<textarea name="address" rows="2">{{ data.address or '' }}</textarea></label>
+    <label>Internal notes<textarea name="notes" rows="2">{{ data.notes or '' }}</textarea></label>
+  </fieldset>
+  {% if not org %}
+  <fieldset>
+    <legend>First Organization Admin account</legend>
+    <div class="row-2">
+      <label>Admin name *<input name="admin_name" required value="{{ admin.name or '' }}"></label>
+      <label>Username *<input name="admin_username" required value="{{ admin.username or '' }}" autocomplete="off"></label>
+    </div>
+    <div class="row-2">
+      <label>Email<input type="email" name="admin_email" value="{{ admin.email or '' }}"></label>
+      <label>Phone<input name="admin_phone" value="{{ admin.phone or '' }}"></label>
+    </div>
+    <label class="check"><input type="radio" name="onboarding" value="invite" checked onclick="document.getElementById('pw').style.display='none'"> Create an invitation link (recommended)</label>
+    <label class="check"><input type="radio" name="onboarding" value="password" onclick="document.getElementById('pw').style.display='block'"> Set an initial password (must be changed at first login)</label>
+    <label id="pw" style="display:none">Initial password <small>(min 8 characters)</small><input type="password" name="password" minlength="8" autocomplete="new-password"></label>
+  </fieldset>
+  {% endif %}
+  <div class="actions"><button class="btn btn-primary">{{ 'Save' if org else 'Create organization' }}</button><a class="btn" href="{{ url_for('admin_orgs') }}">Cancel</a></div>
+</form>
+{% endblock %}

@@ -1,19 +1,21 @@
-{% extends 'base.html' %}{% block title %}My account{% endblock %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}My account{% endblock %}
 {% block content %}
 <h1>My account</h1>
 <div class="card narrow">
+  {% if g.user.must_change_password %}<div class="flash flash-warning">Your administrator gave you a temporary password. Choose your own password to continue.</div>{% endif %}
   <dl class="details">
     <dt>Name</dt><dd>{{ g.user.name }}</dd>
     <dt>Username</dt><dd>{{ g.user.username }}</dd>
-    <dt>Role</dt><dd>{{ g.user.role }}</dd>
-    <dt>Phone</dt><dd>{{ g.user.phone or '—' }}</dd>
+    <dt>Organization</dt><dd>{{ g.org.name }}</dd>
+    <dt>Role</dt><dd>{{ ROLE_LABELS[g.user.role] }}</dd>
     <dt>Email</dt><dd>{{ g.user.email or '—' }}</dd>
   </dl>
   <h2>Change password</h2>
   <form method="post" class="form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Current password<input type="password" name="current_password" required></label>
-    <label>New password<input type="password" name="new_password" required minlength="6"></label>
+    {{ csrf() }}
+    <label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label>
+    <label>New password <small>(min 8 characters)</small><input type="password" name="new_password" required minlength="8" autocomplete="new-password"></label>
+    <label>Confirm new password<input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
     <button class="btn btn-primary">Change password</button>
   </form>
 </div>

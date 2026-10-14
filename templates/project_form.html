@@ -1,19 +1,36 @@
-{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
 {% block title %}{{ 'Edit project' if project else 'New project' }}{% endblock %}
 {% block content %}
-<h1>{{ 'Edit project' if project else 'New project' }}</h1>
+<h1>{{ 'Edit project' if project else 'New project / campaign' }}</h1>
 <form method="post" class="card form narrow">
   {{ csrf() }}
-  <label>Project name *<input name="name" required value="{{ data.name or '' }}" placeholder="e.g. ABC Motors – Diwali Campaign"></label>
-  <label>Client / company name<input name="client_name" value="{{ data.client_name or '' }}"></label>
   <div class="row-2">
-    <label>Client phone<input name="client_phone" value="{{ data.client_phone or '' }}"></label>
-    <label>Client email<input type="email" name="client_email" value="{{ data.client_email or '' }}"></label>
+    <label>Project name *<input name="name" required value="{{ data.name or '' }}" placeholder="e.g. Diwali Lead Campaign"></label>
+    <label>Project code<input name="code" value="{{ data.code or '' }}" placeholder="e.g. DIW25" maxlength="20"></label>
+  </div>
+  <div class="row-2">
+    <label>Client / organization<input name="client_name" value="{{ data.client_name or '' }}"></label>
+    <label>Campaign type<select name="campaign_type"><option value="">—</option>{% for c in CAMPAIGN_TYPES %}<option {{ 'selected' if data.campaign_type == c }}>{{ c }}</option>{% endfor %}</select></label>
+  </div>
+  <div class="row-3">
+    <label>Start date<input type="date" name="start_date" value="{{ data.start_date or '' }}"></label>
+    <label>End date<input type="date" name="end_date" value="{{ data.end_date or '' }}"></label>
+    <label>Status<select name="status">{% for s in PROJECT_STATUSES %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+  </div>
+  <div class="row-2">
+    <label>Client contact phone<input name="client_phone" value="{{ data.client_phone or '' }}"></label>
+    <label>Client contact email<input type="email" name="client_email" value="{{ data.client_email or '' }}"></label>
   </div>
   <label>Description<textarea name="description" rows="3">{{ data.description or '' }}</textarea></label>
-  <label>Status
-    <select name="status">{% for s in ['Active', 'Paused', 'Completed'] %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select>
-  </label>
+  <fieldset>
+    <legend>Assigned staff</legend>
+    <p class="muted small">Leave all unticked to let every staff member use this project. If you tick names, only they (and admins) can add leads to it.</p>
+    <div class="checks">{% for u in users %}<label class="check"><input type="checkbox" name="staff_ids" value="{{ u.id }}" {{ 'checked' if u.id in data.staff_ids }}> {{ u.name }}{{ ' (inactive)' if not u.active }}</label>{% else %}<span class="muted">No users yet.</span>{% endfor %}</div>
+  </fieldset>
+  <fieldset>
+    <legend>Products / services in this campaign</legend>
+    <div class="checks">{% for p in products %}<label class="check"><input type="checkbox" name="product_ids" value="{{ p.id }}" {{ 'checked' if p.id in data.product_ids }}> {{ p.name }}{{ ' (inactive)' if not p.active }}</label>{% else %}<span class="muted">No products yet. <a href="{{ url_for('product_new') }}">Add products</a> first.</span>{% endfor %}</div>
+  </fieldset>
   <div class="actions"><button class="btn btn-primary">Save project</button><a class="btn" href="{{ url_for('projects') }}">Cancel</a></div>
 </form>
 {% endblock %}

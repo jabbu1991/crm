@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% from '_macros.html' import lead_table, lead_filter_form, pager with context %}
+{% block title %}{{ state }} leads{% endblock %}
+{% block content %}
+{% set fixed = {'state': state} %}{% if params.country %}{% set _ = fixed.update(country=params.country) %}{% endif %}
+<div class="page-head">
+  <h1><a href="{{ url_for('states') }}" class="muted">State-wise</a> › {{ state }}{% if params.country %} <small class="muted">{{ params.country }}</small>{% endif %}</h1>
+  {% if is_admin() %}<a class="btn" href="{{ url_for('leads_export', **params) }}">Export CSV</a>{% endif %}
+</div>
+<div class="stats compact-stats"><div class="stat"><b>{{ total }}</b><span>{{ 'leads' if not params.q and params|length <= 2 else 'matching leads' }} in {{ state }}</span></div></div>
+<div class="quicksort">
+  <span class="muted">Sort by:</span>
+  {% for key, label in [('name','Name'), ('created','Created date')] %}
+    {% for d, arrow in [('asc', '▲'), ('desc', '▼')] %}<a class="chip {{ 'on' if sort == key and direction == d }}" href="{{ url_for('state_view', **dict(params, sort=key, dir=d, page=1)) }}">{{ label }} {{ arrow }}</a>{% endfor %}
+  {% endfor %}
+</div>
+{{ lead_filter_form(params, dict(projects_all=projects_all, products_all=products_all, staff=staff, states=states, places=places, districts=districts), url_for('state_view'), fixed=fixed, show=('q','project','product','status','quality','district','staff','dates')) }}
+{{ lead_table(leads, params, sort, direction, 'state_view') }}
+{{ pager(page, pages, total, 'state_view', params) }}
+{% endblock %}

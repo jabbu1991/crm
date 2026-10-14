@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}State-wise Leads{% endblock %}
+{% macro state_cards(rows) -%}
+<div class="state-grid">
+{% for r in rows %}
+  <a class="state-card" href="{{ url_for('state_view', state=r.state, country=(r.country if r.country and r.country != 'India' else None), project=params.get('project')) }}">
+    <b>{{ r.state }}</b>{% if r.country and r.country != 'India' %} <small class="muted">{{ r.country }}</small>{% endif %}
+    <span class="state-count">{{ r.total }} lead{{ 's' if r.total != 1 }}</span>
+    <span class="small muted">{{ r.hot or 0 }} hot · {{ r.converted or 0 }} converted</span>
+  </a>
+{% endfor %}
+</div>
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <h1>State-wise leads <small class="muted">({{ grand_total }} {{ 'of my' if not is_admin() }} leads)</small></h1>
+  <form method="get" class="inline">
+    <select name="project" onchange="this.form.submit()"><option value="">All projects</option>{% for p in projects_all %}<option value="{{ p.id }}" {{ 'selected' if params.project == p.id|string }}>{{ p.name }}</option>{% endfor %}</select>
+  </form>
+</div>
+{% if india %}<h2>India</h2>{{ state_cards(india) }}{% endif %}
+{% if other %}<h2>Outside India</h2>{{ state_cards(other) }}{% endif %}
+{% if unset %}<h2>State not recorded</h2>{{ state_cards(unset) }}{% endif %}
+{% if not (india or other or unset) %}<div class="card empty"><p>No leads yet.</p></div>{% endif %}
+{% endblock %}

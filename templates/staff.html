@@ -1,20 +1,39 @@
-{% extends 'base.html' %}
-{% block title %}Staff{% endblock %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Staff &amp; Users{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Staff</h1><a class="btn btn-primary" href="{{ url_for('staff_new') }}">+ Add staff</a></div>
+<div class="page-head"><h1>Staff &amp; users · {{ g.org.name }}</h1><a class="btn btn-primary" href="{{ url_for('staff_new') }}">+ Add user</a></div>
 <div class="card table-wrap">
 <table class="table">
-  <thead><tr><th>Name</th><th>Username</th><th>Designation</th><th>Phone</th><th>Email</th><th>Role</th><th>Status</th><th class="num">Leads entered</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th class="num">Leads created</th><th>Password</th><th></th></tr></thead>
   <tbody>
   {% for s in staff %}
+    {% set protected = s.role == 'super_admin' and s.id != g.user.id %}
     <tr class="{{ 'inactive' if not s.active }}">
-      <td><b>{{ s.name }}</b></td><td>{{ s.username }}</td><td>{{ s.designation or '' }}</td><td>{{ s.phone or '' }}</td><td>{{ s.email or '' }}</td>
-      <td>{{ s.role }}</td><td>{{ 'Active' if s.active else 'Disabled' }}</td>
+      <td><b>{{ s.name }}</b>{% if s.designation %}<div class="small muted">{{ s.designation }}</div>{% endif %}</td>
+      <td>{{ s.username }}</td><td>{{ s.email or '' }}</td><td>{{ ROLE_LABELS[s.role] }}</td>
+      <td><span class="badge {{ ('Active' if s.active else 'Inactive')|badge }}">{{ 'Active' if s.active else 'Deactivated' }}</span>
+        {% if s.must_change_password %}<div class="small muted">must change password</div>{% endif %}
+        {% if s.pending_link %}<div class="small muted">invite/reset link pending</div>{% endif %}</td>
+      <td class="small">{{ s.last_login_at or 'never' }}</td>
       <td class="num"><a href="{{ url_for('leads', staff=s.id) }}">{{ s.lead_count }}</a></td>
-      <td><a href="{{ url_for('staff_edit', uid=s.id) }}">Edit</a></td>
+      <td>
+        {% if not protected and s.id != g.user.id %}
+        <details class="pw-menu"><summary>Reset…</summary>
+          <form method="post" action="{{ url_for('staff_password', uid=s.id) }}">{{ csrf() }}<button class="btn btn-sm" name="action" value="reset">Create reset link</button></form>
+          <form method="post" action="{{ url_for('staff_password', uid=s.id) }}" class="inline-form">{{ csrf() }}<input type="password" name="temp_password" minlength="8" placeholder="Temporary password" autocomplete="new-password" required><button class="btn btn-sm" name="action" value="temp">Set temporary</button></form>
+        </details>
+        {% elif s.id == g.user.id %}<a href="{{ url_for('account') }}" class="small">change mine</a>{% endif %}
+      </td>
+      <td class="nowrap">
+        {% if not protected %}<a href="{{ url_for('staff_edit', uid=s.id) }}">Edit</a>{% endif %}
+        {% if not protected and s.id != g.user.id %}
+        <form method="post" action="{{ url_for('staff_toggle', uid=s.id) }}" class="inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="{{ 'Deactivate' if s.active else 'Activate' }} {{ s.name }}?">{{ csrf() }}<button class="linkbtn dark">{{ 'Deactivate' if s.active else 'Activate' }}</button></form>
+        {% endif %}
+      </td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
+<p class="muted small">Passwords are stored encrypted (hashed) and can never be viewed. To help someone who forgot their password, create a single-use reset link, or set a temporary password they must change at their next login. Deactivating an account signs the user out immediately.</p>
 {% endblock %}

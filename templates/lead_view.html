@@ -1,12 +1,12 @@
-{% extends 'base.html' %}{% from '_macros.html' import csrf %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
 {% block title %}{{ lead.customer_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>{{ lead.customer_name }} <span class="badge {{ lead.status|badge }}">{{ lead.status }}</span></h1>
   <div class="actions">
     <a class="btn btn-primary" href="{{ url_for('lead_edit', lid=lead.id) }}">Edit</a>
-    {% if g.user.role == 'admin' %}
-    <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm('Delete this lead?')">{{ csrf() }}<button class="btn btn-danger">Delete</button></form>
+    {% if is_admin() %}
+    <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete this lead?">{{ csrf() }}<button class="btn btn-danger">Delete</button></form>
     {% endif %}
   </div>
 </div>
@@ -18,29 +18,73 @@
       <dt>WhatsApp</dt><dd>{% if lead.whatsapp %}<a href="https://wa.me/{{ lead.whatsapp|replace(' ','')|replace('+','')|replace('-','') }}" target="_blank" rel="noopener">{{ lead.whatsapp }}</a>{% else %}—{% endif %}</dd>
       <dt>Email</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}—{% endif %}</dd>
       <dt>Place</dt><dd>{{ lead.place or '—' }}</dd>
-      <dt>State</dt><dd>{{ lead.state or '—' }}</dd>
+      <dt>District</dt><dd>{{ lead.district or '—' }}</dd>
+      <dt>State</dt><dd>{% if lead.state %}<a href="{{ url_for('state_view', state=lead.state) }}">{{ lead.state }}</a>{% else %}—{% endif %}</dd>
+      <dt>Country</dt><dd>{{ lead.country or '—' }}</dd>
     </dl>
-    <h2>Requirement</h2>
+    <h2>Qualification</h2>
     <dl class="details">
-      <dt>Requirement</dt><dd>{{ lead.requirement or '—' }}</dd>
-      <dt>Buying possibility</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>
       <dt>Lead quality</dt><dd>{% if lead.lead_quality %}<span class="badge {{ lead.lead_quality|badge }}">{{ lead.lead_quality }}</span>{% else %}—{% endif %}</dd>
+      <dt>Buying possibility</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>
+      <dt>Priority</dt><dd>{% if lead.priority %}<span class="badge {{ ('p-' ~ lead.priority)|badge }}">{{ lead.priority }}</span>{% else %}—{% endif %}</dd>
       <dt>Source</dt><dd>{{ lead.source or '—' }}</dd>
+      <dt>Requirement</dt><dd class="prewrap">{{ lead.requirement or '—' }}</dd>
       <dt>Notes</dt><dd class="prewrap">{{ lead.notes or '—' }}</dd>
     </dl>
     <h2>Record</h2>
     <dl class="details">
       <dt>Project</dt><dd><a href="{{ url_for('leads', project=lead.project_id) }}">{{ lead.project_name }}</a></dd>
-      <dt>Entered by</dt><dd><b>{{ lead.staff_name }}</b> on {{ lead.created_at }}</dd>
+      <dt>Created by</dt><dd><b>{{ lead.staff_name }}</b> on {{ lead.created_at }}</dd>
+      <dt>Assigned to</dt><dd>{{ lead.assigned_name or '—' }}</dd>
       {% if lead.updated_by_name %}<dt>Last updated</dt><dd>{{ lead.updated_by_name }} on {{ lead.updated_at }}</dd>{% endif %}
     </dl>
   </section>
+  <div>
   <section class="card">
-    <h2>Follow-up</h2>
+    <h2>Products &amp; services</h2>
+    {% if products_linked %}
+    <form method="post" action="{{ url_for('lead_product_stages', lid=lead.id) }}">
+      {{ csrf() }}
+      <table class="table compact">
+        <thead><tr><th>Product</th><th>Stage</th><th>Updated</th></tr></thead>
+        <tbody>
+        {% for p in products_linked %}
+          <tr><td><a href="{{ url_for('product_lead_list', pid=p.product_id) }}">{{ p.name }}</a>{{ ' (inactive)' if not p.active }}</td>
+            <td><select name="stage_{{ p.product_id }}">{% for s in PRODUCT_STAGES %}<option {{ 'selected' if p.stage == s }}>{{ s }}</option>{% endfor %}</select></td>
+            <td class="small muted">{{ p.updated_by_name or '' }} {{ (p.updated_at or p.created_at)[:10] }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <button class="btn btn-sm btn-primary">Save stages</button>
+      <span class="muted small">Interested → Ordered → Purchased. "Dropped" = no longer interested in this product.</span>
+    </form>
+    {% else %}<p class="muted">No products linked. <a href="{{ url_for('lead_edit', lid=lead.id) }}">Edit the lead</a> to add products.</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Follow-ups</h2>
+    <ul class="followups">
+      {% for f in followups %}
+      <li class="{{ 'overdue' if f.status == 'Pending' and f.due_date < today }}">
+        <div><b>{{ f.due_date }}</b> <span class="badge {{ f.status|badge }}">{{ f.status }}</span> {{ f.note or '' }}
+          <small class="muted">· by {{ f.created_by_name }}</small>
+          {% if f.outcome %}<div class="small">Outcome: {{ f.outcome }} <span class="muted">({{ f.completed_by_name }}, {{ f.completed_at }})</span></div>{% endif %}</div>
+        {% if f.status == 'Pending' %}
+        <form method="post" action="{{ url_for('followup_complete', fid=f.id) }}" class="inline-form">{{ csrf() }}
+          <input name="outcome" placeholder="Outcome (optional)"><button class="btn btn-sm" name="action" value="done">Mark done</button><button class="btn btn-sm" name="action" value="cancel">Cancel</button>
+        </form>{% endif %}
+      </li>
+      {% else %}<li class="muted">No follow-ups scheduled.</li>{% endfor %}
+    </ul>
+    <form method="post" action="{{ url_for('lead_followup_add', lid=lead.id) }}" class="inline-form">
+      {{ csrf() }}<input type="date" name="due_date" required><input name="note" placeholder="What to do (e.g. call back with price)"><button class="btn btn-primary btn-sm">Schedule</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Quick update</h2>
     <form method="post" action="{{ url_for('lead_quick_status', lid=lead.id) }}" class="form">
       {{ csrf() }}
-      <label>Change status<select name="status">{% for s in LEAD_STATUSES %}<option {{ 'selected' if lead.status == s }}>{{ s }}</option>{% endfor %}</select></label>
-      <label>Add a note (call summary, next step…)<textarea name="note" rows="3"></textarea></label>
+      <label>Status<select name="status">{% for s in LEAD_STATUSES %}<option {{ 'selected' if lead.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Add a note (call summary, next step…)<textarea name="note" rows="2"></textarea></label>
       <button class="btn btn-primary">Save</button>
     </form>
     <h2>History</h2>
@@ -49,5 +93,6 @@
       {% else %}<li class="muted">No activity yet.</li>{% endfor %}
     </ul>
   </section>
+  </div>
 </div>
 {% endblock %}
