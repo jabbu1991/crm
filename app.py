@@ -1,4 +1,4 @@
-"""Agency CRM - multi-tenant lead management for a marketing agency and its client companies.
+"""Realview CRM (by Realview Creative Studio) - multi-tenant lead management for a marketing agency and its client companies.
 
 Run:  python app.py   (then open http://localhost:5000)
 
@@ -73,6 +73,12 @@ if os.environ.get("CRM_BEHIND_PROXY") == "1":
     # generated links (invites, password resets) use https and the public hostname.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 SETUP_KEY = os.environ.get("CRM_SETUP_KEY", "")
+# Product branding (can be overridden per deployment).
+BRAND = {
+    "product": os.environ.get("CRM_PRODUCT_NAME", "Realview CRM"),
+    "company": os.environ.get("CRM_COMPANY_NAME", "Realview Creative Studio"),
+    "website": os.environ.get("CRM_COMPANY_URL", ""),
+}
 
 
 # ---------------------------------------------------------------- database
@@ -231,7 +237,7 @@ def super_required(view):
 @app.context_processor
 def inject_globals():
     return dict(
-        csrf_token=csrf_token, is_admin=is_admin, is_super=is_super, ROLE_LABELS=ROLE_LABELS,
+        csrf_token=csrf_token, brand=BRAND, is_admin=is_admin, is_super=is_super, ROLE_LABELS=ROLE_LABELS,
         LEAD_STATUSES=LEAD_STATUSES, BUYING_POSSIBILITIES=BUYING_POSSIBILITIES, LEAD_QUALITIES=LEAD_QUALITIES,
         LEAD_SOURCES=LEAD_SOURCES, PRIORITIES=PRIORITIES, PRODUCT_STAGES=PRODUCT_STAGES,
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,

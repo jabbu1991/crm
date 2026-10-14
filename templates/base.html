@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Agency CRM{% endblock %} · {{ g.org.name if g.org else 'Agency CRM' }}</title>
+  <title>{% block title %}{{ brand.product }}{% endblock %} · {{ g.org.name if g.org else brand.product }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% if g.user %}
 {% set ep = request.endpoint or '' %}
 <header class="topbar">
-  <a class="brand" href="{{ url_for('dashboard') }}">Agency<span>CRM</span></a>
+  <a class="brand" href="{{ url_for('dashboard') }}" title="{{ brand.product }} by {{ brand.company }}">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
   <div class="orgname" title="Current organization">
     {{ g.org.name }}{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
   </div>
@@ -47,5 +47,8 @@
   {% endwith %}
   {% block content %}{% endblock %}
 </main>
+<footer class="site-footer">
+  {{ brand.product }} · a product of {% if brand.website %}<a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.company }}</a>{% else %}{{ brand.company }}{% endif %}
+</footer>
 </body>
 </html>

@@ -195,3 +195,8 @@ form.inline { display: inline; }
 .pw-menu summary { cursor: pointer; color: var(--primary); font-size: 13px; }
 .pw-menu[open] { background: #f8f9fc; padding: 8px; border-radius: 6px; min-width: 260px; }
 .pw-menu form { margin: 6px 0; }
+
+/* branding */
+.byline { margin: -8px 0 16px; color: var(--muted); font-size: 13px; letter-spacing: .02em; }
+.site-footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 24px; }
+.site-footer a { color: var(--muted); text-decoration: underline; }

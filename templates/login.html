@@ -1,7 +1,8 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Log in{% endblock %}
 {% block content %}
 <div class="auth-card">
-  <h1>Agency<span class="accent">CRM</span></h1>
+  <h1>{{ brand.product.rsplit(' ', 1)[0] }}<span class="accent">{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></h1>
+  <p class="byline">by {{ brand.company }}</p>
   <p class="muted">Log in with your own account. You'll be taken to your organization's workspace.</p>
   <form method="post" class="form">
     {{ csrf() }}

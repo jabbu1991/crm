@@ -1,5 +1,7 @@
-# Agency CRM
+# Realview CRM
 
+
+*A product of Realview Creative Studio.*
 A multi-tenant lead-management CRM for a **marketing agency and the client businesses it works for**. Everyone uses the same web address. After login, each user lands in their own organization's private workspace.
 
 ## Roles
@@ -81,7 +83,7 @@ The tests create the accounts Super Admin, Org A Admin, Org A Staff 1, Org A Sta
 1. Sign up at render.com with your GitHub account and give Render access to this repository.
 2. Add a payment method. The Starter plan plus the disk is about US$7–8 a month.
 3. Go to **New → Blueprint**, pick this repository, and click **Apply**.
-4. When it's live, open **agency-crm → Environment**, reveal **CRM_SETUP_KEY**, and enter it on the first-run setup page.
+4. When it's live, open **realview-crm → Environment**, reveal **CRM_SETUP_KEY**, and enter it on the first-run setup page.
 
 Every push to the branch named in `render.yaml` redeploys automatically. Data on the disk is kept between deploys. Render takes daily disk snapshots, and the app writes its own backup before any schema upgrade.
 

@@ -3,7 +3,7 @@
 # persistent disk (/var/data), so it survives redeploys.
 services:
   - type: web
-    name: agency-crm
+    name: realview-crm
     runtime: python
     plan: starter                      # a persistent disk needs a paid plan
     branch: claude/marketing-agency-crm-y3shvh
@@ -13,7 +13,7 @@ services:
     startCommand: gunicorn --workers 1 --threads 4 --timeout 60 --bind 0.0.0.0:$PORT app:app
     healthCheckPath: /login
     disk:
-      name: crm-data
+      name: realview-crm-data
       mountPath: /var/data
       sizeGB: 1
     envVars:

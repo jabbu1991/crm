@@ -1,12 +1,13 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Setup{% endblock %}
 {% block content %}
 <div class="auth-card">
-  <h1>Welcome to Agency CRM</h1>
+  <h1>Welcome to {{ brand.product }}</h1>
+  <p class="byline">by {{ brand.company }}</p>
   <p class="muted">Create your agency workspace and the Super Admin (owner) account.</p>
   <form method="post" class="form">
     {{ csrf() }}
     {% if need_key %}<label>Setup key * <small>(from your hosting dashboard: CRM_SETUP_KEY)</small><input name="setup_key" required autocomplete="off"></label>{% endif %}
-    <label>Agency name *<input name="agency" required value="{{ request.form.agency }}" placeholder="e.g. Bright Ideas Marketing"></label>
+    <label>Agency name *<input name="agency" required value="{{ request.form.agency or brand.company }}"></label>
     <label>Your name *<input name="name" required value="{{ request.form.name }}"></label>
     <label>Username *<input name="username" required value="{{ request.form.username }}" autocomplete="username"></label>
     <label>Phone<input name="phone" value="{{ request.form.phone }}"></label>
