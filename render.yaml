@@ -1,5 +1,5 @@
 # Render Blueprint: Dashboard -> New -> Blueprint -> pick this repository.
-# Two services: realview-crm (the CRM, paid plan + disk) and realview-website (free static site).
+# Creates the CRM service (paid plan + disk). The website is a separate static site (see bottom).
 # Every push to the branch below redeploys automatically. Data lives on the
 # persistent disk (/var/data), so it survives redeploys.
 services:
@@ -33,15 +33,5 @@ services:
       - key: CRM_ENQUIRY_ORIGINS        # the website's contact form may post leads here
         value: https://realviewcreativestudio.in,https://www.realviewcreativestudio.in,https://realview-website.onrender.com
 
-  # The agency website (free static site). Domain: realviewcreativestudio.in
-  - type: web
-    name: realview-website
-    runtime: static
-    branch: claude/marketing-agency-crm-y3shvh
-    autoDeploy: true
-    buildCommand: echo "static site, nothing to build"
-    staticPublishPath: ./website
-    headers:
-      - path: /*
-        name: X-Frame-Options
-        value: SAMEORIGIN
+# The website (website/) runs as a separate free Render Static Site named
+# realview-website, created by hand: publish directory `website`, build command `echo done`.
