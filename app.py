@@ -319,7 +319,7 @@ def setup():
         agency, name, username = (clean(request.form.get(k)) for k in ("agency", "name", "username"))
         password = request.form.get("password") or ""
         problem = password_problem(password)
-        if SETUP_KEY and not secrets.compare_digest(SETUP_KEY, request.form.get("setup_key") or ""):
+        if SETUP_KEY and not secrets.compare_digest(SETUP_KEY, (request.form.get("setup_key") or "").strip()):
             flash("Setup key is incorrect. Find it in your hosting dashboard (CRM_SETUP_KEY).", "error")
         elif not agency or not name or not username:
             flash("Agency name, your name and a username are required.", "error")
