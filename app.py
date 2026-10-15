@@ -73,7 +73,7 @@ if os.environ.get("CRM_BEHIND_PROXY") == "1":
     # Hosted behind an HTTPS proxy (e.g. Render): trust its X-Forwarded-* headers so
     # generated links (invites, password resets) use https and the public hostname.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-SETUP_KEY = os.environ.get("CRM_SETUP_KEY", "")
+SETUP_KEY = os.environ.get("CRM_SETUP_KEY", "").strip()
 # Product branding (can be overridden per deployment).
 BRAND = {
     "product": os.environ.get("CRM_PRODUCT_NAME", "Real View CRM"),
