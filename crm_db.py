@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -358,7 +358,13 @@ def _migrate_v2(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_log(org_id, id)")
 
 
-MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2)]
+def _migrate_v3(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(leads)")}
+    if "company_name" not in cols:
+        conn.execute("ALTER TABLE leads ADD COLUMN company_name TEXT")
+
+
+MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3)]
 
 
 def migrate(db_path):

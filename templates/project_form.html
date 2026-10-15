@@ -14,7 +14,7 @@
   </div>
   <div class="row-3">
     <label>Start date<input type="date" name="start_date" value="{{ data.start_date or '' }}"></label>
-    <label>End date<input type="date" name="end_date" value="{{ data.end_date or '' }}"></label>
+    <label>End date <small class="muted">(optional)</small><input type="date" name="end_date" value="{{ data.end_date or '' }}"></label>
     <label>Status<select name="status">{% for s in PROJECT_STATUSES %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select></label>
   </div>
   <div class="row-2">

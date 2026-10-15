@@ -56,7 +56,7 @@
     <tr>
       {% if not viewing %}<td class="row-actions"><a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}" title="Edit all details">✏️ Edit</a>
         <form id="q{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form></td>{% endif %}
-      <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a></td>
+      <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a>{% if l.company_name %}<div class="small muted">{{ l.company_name }}</div>{% endif %}</td>
       {% if viewing %}
       <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
       <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
@@ -70,7 +70,7 @@
       {% endif %}
       <td class="{{ 'overdue' if l.next_follow_up and l.next_follow_up < today }}">{{ l.next_follow_up or '' }}</td>
       <td>{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}</td>
-      <td>{% if l.whatsapp %}<a href="https://wa.me/{{ l.whatsapp|replace(' ','')|replace('+','')|replace('-','') }}" target="_blank" rel="noopener">{{ l.whatsapp }}</a>{% endif %}</td>
+      <td>{% if l.whatsapp %}<a class="wa" href="https://wa.me/{{ l.whatsapp|wa_number }}" data-wa="{{ l.whatsapp|wa_number }}" data-name="{{ l.customer_name }}" target="_blank" rel="noopener">{{ l.whatsapp }}</a>{% endif %}</td>
       <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}</td>
       <td>{{ l.place or '' }}</td><td>{{ l.district or '' }}</td>
       <td>{{ l.state or '' }}{% if l.country and l.country != 'India' %} <small class="muted">({{ l.country }})</small>{% endif %}</td>

@@ -717,3 +717,22 @@ def test_quick_update_from_lead_list(world):
     assert r.headers["Location"].endswith(f"/leads/{lid}")
     with w["db"]() as conn:
         assert conn.execute("SELECT lead_quality FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Hot"
+
+
+def test_company_name_quotation_youtube_and_whatsapp_link(world):
+    w = world
+    lid = add_lead(w["a_s1"], w["proj_a"], "Rahul", "98470 12345",
+                   extra={"company_name": "Rahul Traders", "status": "Quotation", "source": "YouTube",
+                          "whatsapp": "098470 12345"})
+    with w["db"]() as conn:
+        row = conn.execute("SELECT company_name, status, source FROM leads WHERE id = ?", (lid,)).fetchone()
+    assert row == ("Rahul Traders", "Quotation", "YouTube")
+    page = w["a_s1"].get("/leads?q=Traders").get_data(as_text=True)
+    assert "Rahul Traders" in page and 'data-wa="919847012345"' in page and 'data-name="Rahul"' in page
+    assert "Rahul Traders" in w["a_s1"].get(f"/leads/{lid}").get_data(as_text=True)
+    csv_text = w["a_admin"].get("/export/leads.csv").get_data(as_text=True)
+    assert "Company" in csv_text.splitlines()[0] and "Rahul Traders" in csv_text
+    # end date is optional for projects
+    w["a_admin"].post("/projects/new", {"name": "No End", "status": "Active", "start_date": "2026-10-01"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT end_date FROM projects WHERE name = 'No End'").fetchone()[0] in ("", None)

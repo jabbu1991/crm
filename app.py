@@ -16,6 +16,7 @@ import csv
 import hashlib
 import io
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -270,6 +271,15 @@ def inject_globals():
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
         COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(),
     )
+
+
+@app.template_filter("wa_number")
+def wa_number(value):
+    """Digits for a WhatsApp link; 10-digit Indian numbers get the 91 country code."""
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    return "91" + digits if len(digits) == 10 else digits
 
 
 @app.template_filter("badge")
@@ -561,7 +571,7 @@ def lead_filters(params):
     q = clean(params.get("q"))
     if q:
         like = f"%{q}%"
-        cols = ["l.customer_name", "l.phone", "l.whatsapp", "l.email", "l.place", "l.district", "l.state",
+        cols = ["l.customer_name", "l.company_name", "l.phone", "l.whatsapp", "l.email", "l.place", "l.district", "l.state",
                 "l.requirement", "l.notes"]
         clauses.append("(" + " OR ".join(f"{c} LIKE ?" for c in cols) + ")")
         args += [like] * len(cols)
@@ -893,7 +903,7 @@ def product_toggle(pid):
 
 # ---------------------------------------------------------------- leads
 
-LEAD_TEXT_FIELDS = ["customer_name", "phone", "whatsapp", "email", "place", "district", "state", "country",
+LEAD_TEXT_FIELDS = ["customer_name", "company_name", "phone", "whatsapp", "email", "place", "district", "state", "country",
                     "requirement", "status", "buying_possibility", "lead_quality", "priority", "source", "notes"]
 
 
@@ -1046,12 +1056,12 @@ def leads_export():
                      ORDER BY {SORTABLE[sort]} {'ASC' if request.args.get('dir') == 'asc' else 'DESC'}""", args)
     out = io.StringIO()
     writer = SafeCsvWriter(out)
-    writer.writerow(["ID", "Project", "Project Code", "Customer Name", "Phone", "WhatsApp", "Email", "Place",
+    writer.writerow(["ID", "Project", "Project Code", "Customer Name", "Company", "Phone", "WhatsApp", "Email", "Place",
                      "District", "State", "Country", "Products", "Requirement", "Status", "Buying Possibility",
                      "Lead Quality", "Priority", "Source", "Next Follow-up", "Assigned To", "Created By",
                      "Created At", "Updated By", "Updated At", "Notes"])
     for r in rows:
-        writer.writerow([r["id"], r["project_name"], r["project_code"], r["customer_name"], r["phone"], r["whatsapp"],
+        writer.writerow([r["id"], r["project_name"], r["project_code"], r["customer_name"], r["company_name"], r["phone"], r["whatsapp"],
                          r["email"], r["place"], r["district"], r["state"], r["country"], r["product_stages"],
                          r["requirement"], r["status"], r["buying_possibility"], r["lead_quality"], r["priority"],
                          r["source"], r["next_follow_up"], r["assigned_name"], r["staff_name"], r["created_at"],
@@ -1274,6 +1284,7 @@ def lead_delete(lid):
 
 CSV_ALIASES = {
     "customer_name": ["customer_name", "name", "customer", "customer name", "full name", "full_name"],
+    "company_name": ["company_name", "company", "company name", "business", "business name", "organization"],
     "phone": ["phone", "phone number", "mobile", "phone_number", "contact"],
     "whatsapp": ["whatsapp", "whatsapp number", "whatsapp_number"],
     "email": ["email", "email address", "e-mail"],
@@ -1513,12 +1524,12 @@ def _export_leads():
                           JOIN products pr ON pr.id = lp.product_id WHERE lp.lead_id = l.id) product_stages
                      {LEAD_FROM} JOIN organizations o ON o.id = l.org_id
                      WHERE {where} ORDER BY o.name, l.created_at DESC""", args)
-    head = ["Organization", "Lead ID", "Project", "Project Code", "Customer Name", "Phone", "WhatsApp", "Email",
-            "Place", "District", "State", "Country", "Products [stage]", "Requirement", "Status",
+    head = ["Organization", "Lead ID", "Project", "Project Code", "Customer Name", "Company", "Phone", "WhatsApp",
+            "Email", "Place", "District", "State", "Country", "Products [stage]", "Requirement", "Status",
             "Buying Possibility", "Lead Quality", "Priority", "Source", "Next Follow-up", "Assigned To",
             "Created By", "Created At", "Updated By", "Updated At", "Notes"]
-    return head, [[r["org_name"], r["id"], r["project_name"], r["project_code"], r["customer_name"], r["phone"],
-                   r["whatsapp"], r["email"], r["place"], r["district"], r["state"], r["country"],
+    return head, [[r["org_name"], r["id"], r["project_name"], r["project_code"], r["customer_name"], r["company_name"],
+                   r["phone"], r["whatsapp"], r["email"], r["place"], r["district"], r["state"], r["country"],
                    r["product_stages"], r["requirement"], r["status"], r["buying_possibility"], r["lead_quality"],
                    r["priority"], r["source"], r["next_follow_up"], r["assigned_name"], r["staff_name"],
                    r["created_at"], r["updated_by_name"], r["updated_at"], r["notes"]] for r in rows]

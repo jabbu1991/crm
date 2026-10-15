@@ -219,3 +219,9 @@ select.quick.b-none { background: #fff; border-color: var(--border); color: var(
 .row-actions form { display: none; }
 .edit-btn { display: inline-block; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 600; background: #fff; }
 .edit-btn:hover { border-color: var(--primary); text-decoration: none; }
+
+/* Organization name in the top bar */
+.org-badge { display: inline-flex; align-items: center; gap: 10px; vertical-align: middle; max-width: 100%; }
+.org-initial { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 15px; color: #fff; background: linear-gradient(135deg, #2563eb, #06b6d4); box-shadow: 0 2px 8px rgba(6,182,212,.35); }
+.org-text { font-weight: 800; font-size: 17px; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(90deg, #ffffff, #67e8f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@media (max-width: 900px) { .org-text { font-size: 15px; } .org-initial { width: 26px; height: 26px; font-size: 13px; } }

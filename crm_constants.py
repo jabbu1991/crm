@@ -8,13 +8,13 @@ ROLE_LABELS = {SUPER_ADMIN: "Super Admin", ORG_ADMIN: "Organization Admin", STAF
 
 # ---------------------------------------------------------------- lead options
 
-LEAD_STATUSES = ["New", "Contacted", "Interested", "Follow-up", "Negotiation",
+LEAD_STATUSES = ["New", "Contacted", "Interested", "Follow-up", "Quotation", "Negotiation",
                  "Converted", "Not Interested", "Lost"]
 CLOSED_LOST_STATUSES = ("Lost", "Not Interested")
 BUYING_POSSIBILITIES = ["High", "Medium", "Low"]
 LEAD_QUALITIES = ["Hot", "Warm", "Cold"]
 PRIORITIES = ["Urgent", "High", "Normal", "Low"]
-LEAD_SOURCES = ["Facebook", "Instagram", "Google Ads", "Website", "WhatsApp",
+LEAD_SOURCES = ["Facebook", "Instagram", "Google Ads", "YouTube", "Website", "WhatsApp",
                 "Referral", "Walk-in", "Phone Call", "Other"]
 
 # Interest in a product is NOT an order: each lead/product link carries its own stage.

@@ -40,7 +40,10 @@
 
   <fieldset>
     <legend>Customer details</legend>
-    <label>Customer name *<input name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
+    <div class="row-2">
+      <label>Customer name *<input name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
+      <label>Company / business name<input name="company_name" value="{{ data.company_name or '' }}" placeholder="The firm this person represents"></label>
+    </div>
     <div class="row-3">
       <label>Phone number<input type="tel" name="phone" id="phone" value="{{ data.phone or '' }}"></label>
       <label>WhatsApp number
