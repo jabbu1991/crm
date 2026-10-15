@@ -52,3 +52,23 @@ form.addEventListener("submit", function (e) {
   if (data.get("message")) lines.push("", data.get("message"));
   window.location.href = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
 });
+
+// Careers form: send the applicant's details on WhatsApp --------------------
+var careers = document.getElementById("careers-form");
+var careersError = careers.querySelector(".form-error");
+
+careers.addEventListener("submit", function (e) {
+  e.preventDefault();
+  var data = new FormData(careers);
+  var get = function (k) { return (data.get(k) || "").trim(); };
+  if (!get("name") || !get("place") || get("phone").replace(/\D/g, "").length < 6 || !get("skills")) {
+    careersError.textContent = "Please fill in your name, place, WhatsApp number and the services you can offer.";
+    careersError.hidden = false;
+    return;
+  }
+  careersError.hidden = true;
+  var lines = ["Hi Real View Creative Studio,", "", "*Career application*",
+               "Name: " + get("name"), "Place: " + get("place"), "WhatsApp: " + get("phone"),
+               "", "Services I can offer:", get("skills")];
+  window.location.href = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
+});
