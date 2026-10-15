@@ -693,3 +693,27 @@ def test_exports_follow_each_role_scope(world):
     assert "B customer" not in staff_zip.read("leads.csv").decode("utf-8-sig")
     # Clients see the Super Admin's export in their access log.
     assert "exported" in w["a_admin"].get("/organization").get_data(as_text=True)
+
+
+def test_quick_update_from_lead_list(world):
+    w = world
+    lid = add_lead(w["a_s1"], w["proj_a"], "Quick Lead", "6200000001", extra={"lead_quality": "Cold"})
+    page = w["a_s1"].get("/leads").get_data(as_text=True)
+    assert f'href="/leads/{lid}/edit"' in page and f'form="q{lid}"' in page
+    r = w["a_s1"].post(f"/leads/{lid}/status", {"lead_quality": "Hot", "next": "/leads?sort=name"})
+    assert "Quality: &#39;Cold&#39; → &#39;Hot&#39;" in r.text and "Quick Lead" in r.text
+    r = w["a_s1"].post(f"/leads/{lid}/status", {"status": "Negotiation", "buying_possibility": "High",
+                                                "priority": "Urgent", "next": "/leads"})
+    with w["db"]() as conn:
+        row = conn.execute("SELECT status, lead_quality, buying_possibility, priority, updated_by FROM leads"
+                           " WHERE id = ?", (lid,)).fetchone()
+        history = [a for (a,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (lid,))]
+    assert row == ("Negotiation", "Hot", "High", "Urgent", w["uid"]("a_staff1"))
+    assert any("Status: 'New' → 'Negotiation'" in h for h in history)
+    # invalid values and other staff are rejected; an off-site "next" is ignored
+    w["a_s1"].post(f"/leads/{lid}/status", {"lead_quality": "Boiling", "next": "/leads"})
+    assert w["a_s2"].post(f"/leads/{lid}/status", {"lead_quality": "Cold"}).status_code == 404
+    r = w["a_s1"].post(f"/leads/{lid}/status", {"priority": "Low", "next": "https://evil.example/"}, follow=False)
+    assert r.headers["Location"].endswith(f"/leads/{lid}")
+    with w["db"]() as conn:
+        assert conn.execute("SELECT lead_quality FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Hot"

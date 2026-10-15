@@ -1160,21 +1160,42 @@ def touch_lead(db, lid, ts):
     db.execute("UPDATE leads SET updated_by = ?, updated_at = ? WHERE id = ?", (g.user["id"], ts, lid))
 
 
+QUICK_FIELDS = {"status": ("Status", LEAD_STATUSES), "lead_quality": ("Quality", LEAD_QUALITIES),
+                "buying_possibility": ("Buying possibility", BUYING_POSSIBILITIES), "priority": ("Priority", PRIORITIES)}
+
+
 @app.route("/leads/<int:lid>/status", methods=["POST"])
 @login_required
 def lead_quick_status(lid):
+    """Quick update from the lead page or straight from a lead list: status, quality, possibility,
+    priority (only the fields sent) and an optional note. Every change goes to the lead's history."""
     lead = get_lead(lid)
     db = get_db()
     ts = now()
-    status = request.form.get("status")
-    if status in LEAD_STATUSES and status != lead["status"]:
-        db.execute("UPDATE leads SET status = ? WHERE id = ?", (status, lid))
+    changes = []
+    for field, (label, options) in QUICK_FIELDS.items():
+        if field not in request.form:
+            continue
+        value = request.form.get(field) or ""
+        if value and value not in options:
+            continue
+        if field == "status" and not value:
+            continue
+        if value != (lead[field] or ""):
+            db.execute(f"UPDATE leads SET {field} = ? WHERE id = ?", (value, lid))
+            changes.append(f"{label}: '{lead[field] or ''}' → '{value}'")
+    if changes:
         touch_lead(db, lid, ts)
-        log_activity(lid, f"Status: '{lead['status']}' → '{status}'", commit=False)
+        log_activity(lid, "; ".join(changes), commit=False)
     note = clean(request.form.get("note"))
     if note:
         log_activity(lid, f"Note: {note}", commit=False)
     db.commit()
+    nxt = request.form.get("next") or ""
+    if nxt.startswith("/") and not nxt.startswith("//"):
+        if changes:
+            flash(f"{lead['customer_name']}: " + "; ".join(changes), "success")
+        return redirect(nxt)
     return redirect(url_for("lead_view", lid=lid))
 
 

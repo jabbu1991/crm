@@ -4,7 +4,7 @@
 <div class="page-head">
   <h1>{{ lead.customer_name }} <span class="badge {{ lead.status|badge }}">{{ lead.status }}</span></h1>
   <div class="actions">
-    <a class="btn btn-primary" href="{{ url_for('lead_edit', lid=lead.id) }}">Edit</a>
+    {% if viewing %}<span class="muted">Read-only (Super Admin view)</span>{% else %}<a class="btn btn-primary" href="{{ url_for('lead_edit', lid=lead.id) }}">✏️ Edit lead</a>{% endif %}
     {% if is_admin() %}
     <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete this lead?">{{ csrf() }}<button class="btn btn-danger">Delete</button></form>
     {% endif %}

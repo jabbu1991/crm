@@ -30,22 +30,45 @@
   <th class="sortable {{ 'sorted' if c.sort == key }}"><a href="{{ url_for(c.endpoint, **dict(dict(c.params, **c.url_args), sort=key, dir=nd, page=1)) }}">{{ label }}{% if c.sort == key %} {{ '▲' if c.direction == 'asc' else '▼' }}{% endif %}</a></th>
 {%- endmacro %}
 
+{% macro quick_select(l, field, options, allow_blank=True, prefix='') -%}
+<select class="quick badge {{ (prefix ~ (l[field] or 'none'))|badge }}" name="{{ field }}" form="q{{ l.id }}" onchange="this.form.submit()" title="Change and it saves">
+  {% if allow_blank %}<option value="">—</option>{% endif %}
+  {% for o in options %}<option {{ 'selected' if l[field] == o }}>{{ o }}</option>{% endfor %}
+</select>
+{%- endmacro %}
+
 {% macro lead_table(leads, params, sort, direction, endpoint, url_args={}, show_project=True, show_stage=False) -%}
 {% set ctx = dict(sort=sort, direction=direction, endpoint=endpoint, params=params, url_args=url_args) %}
 <div class="card table-wrap">
 <table class="table leads-table">
   <thead><tr>
-    {{ th('name', 'Customer', ctx) }}{{ th('phone', 'Phone', ctx) }}<th>WhatsApp</th>{{ th('email', 'Email', ctx) }}
-    {{ th('place', 'Place', ctx) }}{{ th('district', 'District', ctx) }}{{ th('state', 'State', ctx) }}{{ th('requirement', 'Products', ctx) }}
-    {% if show_stage %}<th>Product stage</th>{% endif %}
+    {% if not viewing %}<th></th>{% endif %}
+    {{ th('name', 'Customer', ctx) }}
     {{ th('status', 'Status', ctx) }}{{ th('quality', 'Quality', ctx) }}{{ th('possibility', 'Buying poss.', ctx) }}{{ th('priority', 'Priority', ctx) }}
     {{ th('followup', 'Next follow-up', ctx) }}
+    {{ th('phone', 'Phone', ctx) }}<th>WhatsApp</th>{{ th('email', 'Email', ctx) }}
+    {{ th('place', 'Place', ctx) }}{{ th('district', 'District', ctx) }}{{ th('state', 'State', ctx) }}{{ th('requirement', 'Products', ctx) }}
+    {% if show_stage %}<th>Product stage</th>{% endif %}
     {% if show_project %}{{ th('project', 'Project', ctx) }}{% endif %}{{ th('staff', 'Created by', ctx) }}{{ th('assigned', 'Assigned', ctx) }}{{ th('created', 'Created', ctx) }}
   </tr></thead>
   <tbody>
   {% for l in leads %}
     <tr>
+      {% if not viewing %}<td class="row-actions"><a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}" title="Edit all details">✏️ Edit</a>
+        <form id="q{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form></td>{% endif %}
       <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a></td>
+      {% if viewing %}
+      <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
+      <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
+      <td>{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}</td>
+      <td>{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}</td>
+      {% else %}
+      <td>{{ quick_select(l, 'status', LEAD_STATUSES, False) }}</td>
+      <td>{{ quick_select(l, 'lead_quality', LEAD_QUALITIES) }}</td>
+      <td>{{ quick_select(l, 'buying_possibility', BUYING_POSSIBILITIES) }}</td>
+      <td>{{ quick_select(l, 'priority', PRIORITIES, True, 'p-') }}</td>
+      {% endif %}
+      <td class="{{ 'overdue' if l.next_follow_up and l.next_follow_up < today }}">{{ l.next_follow_up or '' }}</td>
       <td>{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}</td>
       <td>{% if l.whatsapp %}<a href="https://wa.me/{{ l.whatsapp|replace(' ','')|replace('+','')|replace('-','') }}" target="_blank" rel="noopener">{{ l.whatsapp }}</a>{% endif %}</td>
       <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}</td>
@@ -53,16 +76,11 @@
       <td>{{ l.state or '' }}{% if l.country and l.country != 'India' %} <small class="muted">({{ l.country }})</small>{% endif %}</td>
       <td class="wrap">{{ l.product_names or '' }}</td>
       {% if show_stage %}<td><span class="badge {{ l.product_stage|badge }}">{{ l.product_stage }}</span></td>{% endif %}
-      <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
-      <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
-      <td>{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}</td>
-      <td>{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}</td>
-      <td class="{{ 'overdue' if l.next_follow_up and l.next_follow_up < today }}">{{ l.next_follow_up or '' }}</td>
       {% if show_project %}<td>{{ l.project_name }}</td>{% endif %}
       <td>{{ l.staff_name }}</td><td>{{ l.assigned_name or '' }}</td><td>{{ l.created_at[:10] }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="18" class="muted center">No leads match these filters.</td></tr>
+    <tr><td colspan="19" class="muted center">No leads match these filters.</td></tr>
   {% endfor %}
   </tbody>
 </table>
