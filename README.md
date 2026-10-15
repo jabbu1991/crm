@@ -33,6 +33,8 @@ A multi-tenant lead-management CRM for a **marketing agency and the client busin
 
 **Windows (easiest):** download and unzip the project, then double-click **`start.bat`**. It installs what's needed, starts the CRM and opens your browser. Keep its window open while you use the CRM.
 
+**Try it with sample data:** double-click **`demo.bat`** (Windows). It opens the CRM on a separate demo database (`instance/demo.db`) with a Super Admin, two client companies, their admins, staff, products and leads. Every demo password is `demo1234`, and the usernames are printed in the window. Delete `instance/demo.db` to start the demo again from scratch.
+
 **Any system** (Python 3.9+):
 
 ```bash
