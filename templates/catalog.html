@@ -1,0 +1,17 @@
+{% extends '_catalog_base.html' %}
+{% block content %}
+{% if org.catalog_about %}<p class="cat-about">{{ org.catalog_about }}</p>{% endif %}
+<div class="cat-grid">
+{% for p in products %}
+  <a class="cat-card" href="{{ url_for('catalog_product', code=org.code.lower(), pid=p.id, l=token or None) }}">
+    {% if p.photo %}<img src="{{ url_for('media', name=p.photo) }}" alt="{{ p.name }}" loading="lazy">{% else %}<div class="cat-noimg">{{ p.name[:1]|upper }}</div>{% endif %}
+    <div class="cat-card-body">
+      {% if p.category %}<span class="cat-cat">{{ p.category }}</span>{% endif %}
+      <b>{{ p.name }}</b>
+      {% if p.price %}<span class="cat-price">{{ p.price }}</span>{% endif %}
+      {% if p.description %}<span class="cat-desc">{{ p.description[:110] }}{{ '…' if p.description|length > 110 }}</span>{% endif %}
+    </div>
+  </a>
+{% else %}<p class="cat-about">Products will be listed here soon.</p>{% endfor %}
+</div>
+{% endblock %}

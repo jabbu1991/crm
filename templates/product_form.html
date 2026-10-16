@@ -2,7 +2,7 @@
 {% block title %}{{ 'Edit product' if product else 'Add product' }}{% endblock %}
 {% block content %}
 <h1>{{ 'Edit product / service' if product else 'Add product / service' }}</h1>
-<form method="post" class="card form narrow">
+<form method="post" class="card form narrow" enctype="multipart/form-data" id="pform">
   {{ csrf() }}
   <div class="row-2">
     <label>Name *<input name="name" required value="{{ data.name or '' }}" placeholder="e.g. Hyundai Creta, 2BHK Flat, SEO package"></label>
@@ -11,6 +11,21 @@
   <label>Category<input name="category" value="{{ data.category or '' }}" placeholder="e.g. SUV, Apartment, Service"></label>
   <label>Description<textarea name="description" rows="3">{{ data.description or '' }}</textarea></label>
   <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if data.active }}> Active (staff can select it on new leads)</label>
+  <fieldset>
+    <legend>📒 Digital catalogue</legend>
+    <label class="check"><input type="checkbox" name="show_in_catalog" value="1" {{ 'checked' if data.show_in_catalog }}> Show in the catalogue</label>
+    <div class="row-2">
+      <label>Price <small>(optional)</small><input name="price" value="{{ data.price or '' }}" maxlength="40" placeholder="e.g. ₹24,500 or From ₹9,999"></label>
+      <label>YouTube video link<input name="video_url" value="{{ data.video_url or '' }}" placeholder="https://youtu.be/…"></label>
+    </div>
+    <label>Brochure (Google Drive link)<input name="brochure_url" value="{{ data.brochure_url or '' }}" placeholder="https://drive.google.com/…"></label>
+    <p class="muted small">In Google Drive, set the brochure to "Anyone with the link can view" before pasting the link.</p>
+    <label>Photos <small>(up to {{ 3 - images|length }} more; any size, the CRM makes them light automatically)</small>
+      <input type="file" name="images" accept="image/*" multiple {{ 'disabled' if images|length >= 3 }}></label>
+    {% if images %}<div class="thumbs">{% for i in images %}
+      <figure><img src="{{ url_for('media', name=i.filename) }}" alt=""><button class="btn btn-sm btn-danger" form="delimg{{ i.id }}" onclick="return confirm('Remove this photo?')">Remove</button></figure>
+    {% endfor %}</div>{% endif %}
+  </fieldset>
   {% if product %}<p class="muted small">Created {{ product.created_at }}.</p>{% endif %}
   <div class="actions">
     <button class="btn btn-primary">Save</button>
@@ -18,4 +33,5 @@
     <a class="btn" href="{{ url_for('products') }}">Cancel</a>
   </div>
 </form>
+{% for i in images %}<form id="delimg{{ i.id }}" method="post" action="{{ url_for('product_image_delete', pid=product.id, iid=i.id) }}">{{ csrf() }}</form>{% endfor %}
 {% endblock %}

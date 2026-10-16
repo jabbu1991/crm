@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ org.name }}{% endblock %}</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="{{ url_for('static', filename='catalog.css') }}">
+</head>
+<body>
+<header class="cat-head">
+  <a class="cat-brand" href="{{ url_for('catalog_page', code=org.code.lower(), l=token or None) }}">
+    {% if org.catalog_logo %}<img src="{{ url_for('media', name=org.catalog_logo) }}" alt="">{% else %}<span class="cat-initial">{{ org.name[:1]|upper }}</span>{% endif %}
+    <b>{{ org.name }}</b>
+  </a>
+</header>
+<main class="cat-main">{% block content %}{% endblock %}</main>
+{% if wa or org.phone %}
+<nav class="cat-actions">
+  {% if wa %}<a class="cat-btn cat-wa" href="https://wa.me/{{ wa }}?text={{ ('Hi ' ~ org.name ~ ', ' ~ (wa_text or 'I would like to know more about your products.'))|urlencode }}" target="_blank" rel="noopener">🟢 WhatsApp us</a>{% endif %}
+  {% if org.phone %}<a class="cat-btn" href="tel:{{ org.phone }}">📞 Call</a>{% endif %}
+</nav>
+{% endif %}
+<footer class="cat-foot">Catalogue by <a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.product }}</a></footer>
+</body>
+</html>

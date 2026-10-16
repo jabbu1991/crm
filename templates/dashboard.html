@@ -43,6 +43,20 @@
   <div class="stat"><b>{{ stats.today_added }}</b><span>Added today</span></div>
 </div>
 
+{% if catalog_hot %}
+<section class="card hot-card">
+  <h2>🔥 Opened the catalogue in the last 24 hours <span class="muted small">— a good time to call</span></h2>
+  <table class="table compact">
+    <thead><tr><th>Customer</th><th>Phone</th><th>Looked at</th><th>Last seen</th></tr></thead>
+    <tbody>{% for h in catalog_hot %}<tr>
+      <td><a href="{{ url_for('lead_view', lid=h.id) }}"><b>{{ h.customer_name }}</b></a></td>
+      <td>{% if h.phone %}<a href="tel:{{ h.phone }}">{{ h.phone }}</a>{% endif %}</td>
+      <td>{{ h.products or 'Catalogue page' }}</td><td class="nowrap">{{ h.last_seen[11:16] }} · {{ h.last_seen[:10] }}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if is_admin() and not by_project %}
 <div class="card empty">
   <h2>Get started</h2>

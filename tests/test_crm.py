@@ -845,3 +845,69 @@ def test_whatsapp_templates_and_switches(world):
         oc = conn.execute("SELECT id FROM organizations WHERE code = 'ORGC'").fetchone()[0]
         assert conn.execute("SELECT COUNT(*), SUM(active) FROM wa_templates WHERE org_id = ? AND scope = 'org'",
                             (oc,)).fetchone() == (10, 0)
+
+
+def big_photo():
+    from PIL import Image
+    img = Image.new("RGB", (4000, 3000))
+    px = img.load()
+    for x in range(0, 4000, 7):  # noisy content so it doesn't compress to nothing
+        for y in range(0, 3000, 5):
+            px[x, y] = ((x * 7) % 256, (y * 3) % 256, (x + y) % 256)
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    out.seek(0)
+    return out
+
+
+def test_digital_catalogue(world, tmp_path, monkeypatch):
+    w = world
+    monkeypatch.setenv("CRM_UPLOAD_DIR", str(tmp_path / "uploads"))
+    admin = w["a_admin"]
+    # product with a big photo, links and price
+    with admin.c.session_transaction() as s:
+        s["csrf_token"] = "t"
+    r = admin.c.post("/products/new", data={
+        "csrf_token": "t", "name": "Gate Motor X", "active": "1", "show_in_catalog": "1", "price": "₹24,500",
+        "video_url": "https://youtu.be/abc", "brochure_url": "javascript:alert(1)",
+        "images": [(big_photo(), "big.png"), (io.BytesIO(b"not an image"), "x.png")]},
+        content_type="multipart/form-data", follow_redirects=True)
+    assert r.status_code == 200
+    with w["db"]() as conn:
+        pid, brochure, video = conn.execute("SELECT id, brochure_url, video_url FROM products WHERE name = 'Gate Motor X'").fetchone()
+        files = [f for (f,) in conn.execute("SELECT filename FROM product_images WHERE product_id = ?", (pid,))]
+    assert brochure == "" and video == "https://youtu.be/abc" and len(files) == 1
+    size = os.path.getsize(tmp_path / "uploads" / files[0])
+    assert size < 250 * 1024, size  # a ~4000x3000 photo is stored small
+    assert w["a_s1"].get(f"/media/{files[0]}").status_code == 200
+    # not published yet: no public page, no catalogue link in WhatsApp buttons
+    assert w["a_s1"].get("/c/orga").status_code == 404
+    lid = add_lead(w["a_s1"], w["proj_a"], "Cat Lead", "9847000009", extra={"whatsapp": "9847000009"})
+    assert 'data-catalog=""' in w["a_s1"].get("/leads").get_data(as_text=True)
+    admin.post("/organization", {"name": "Org A", "catalog_on": "1", "catalog_about": "Gate experts", "phone": "9847011111"})
+    page = w["a_s1"].get("/leads").get_data(as_text=True)
+    link = re.search(r'data-catalog="([^"]+)"', page).group(1)
+    assert "/c/orga?l=" in link
+    # a customer (not logged in) opens the personal link and a product page
+    visitor = Browser()
+    path = link.split("localhost", 1)[-1]
+    html = visitor.get(path).get_data(as_text=True)
+    assert "Gate Motor X" in html and "Gate experts" in html and "₹24,500" in html and "javascript:" not in html
+    html = visitor.get(f"/c/orga/p/{pid}?l={path.split('l=')[1]}").get_data(as_text=True)
+    assert "Watch video" in html and "wa.me/919847011111" in html
+    with w["db"]() as conn:
+        hist = [h for (h,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (lid,))]
+        views = conn.execute("SELECT COUNT(*) FROM catalog_views WHERE lead_id = ?", (lid,)).fetchone()[0]
+    assert views == 2 and "📒 Customer opened the catalogue" in hist and "📒 Customer viewed Gate Motor X in the catalogue" in hist
+    visitor.get(path)  # reopening within 30 minutes is not logged twice
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM catalog_views WHERE lead_id = ?", (lid,)).fetchone()[0] == 2
+    assert "Cat Lead" in w["a_s1"].get("/").get_data(as_text=True)  # dashboard hot list
+    # a forged token records nothing; another organization's catalogue never shows these products
+    visitor.get(f"/c/orga?l={lid}.0000000000aa")
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM catalog_views").fetchone()[0] == 2
+    assert w["b_admin"].post(f"/products/{pid}/images/1/delete").status_code == 404
+    # Super Admin switches the catalogue off for this client
+    w["sup"].post(f"/admin/organizations/{w['org_a']}/edit", {"name": "Org A", "code": "ORGA", "wa_templates_allowed": "1"})
+    assert visitor.get("/c/orga").status_code == 404

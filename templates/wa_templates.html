@@ -44,7 +44,7 @@
 {% elif not g.user.wa_templates_on %}<div class="flash flash-warning">You switched templates off for yourself. Turn them on in <a href="{{ url_for('account') }}">My Account</a>.</div>{% endif %}
 <div class="card">
   <p>When you press a lead's <b>WhatsApp</b> button, you choose a message. These words are filled in automatically:</p>
-  <p class="tags"><code>{name}</code> customer · <code>{company}</code> customer's company · <code>{product}</code> product of interest · <code>{my_name}</code> your name · <code>{my_phone}</code> your contact number · <code>{org_name}</code> {{ g.org.name }}</p>
+  <p class="tags"><code>{name}</code> customer · <code>{company}</code> customer's company · <code>{product}</code> product of interest · <code>{my_name}</code> your name · <code>{my_phone}</code> your contact number · <code>{org_name}</code> {{ g.org.name }} · <code>{catalog_link}</code> the customer's personal catalogue link{% if not catalog_link() %} <span class="muted">(publish the catalogue in Organization Settings first)</span>{% endif %}</p>
   <p class="muted small"><b>How sending works:</b> no template ON → the WhatsApp button sends "Hi &lt;name&gt;," in one click · one template ON → that one is sent in one click · several ON → you choose which (with "Hi only" at the bottom).<br>Messages up to {{ max_len }} characters. Templates are text only; attach photos or PDFs in WhatsApp before sending.</p>
 </div>
 {{ tlist(org_t, 'org', is_admin(), 'Company templates', 'Shared with everyone in ' ~ g.org.name ~ '. Only admins can change them. Only templates that are ON are used.') }}

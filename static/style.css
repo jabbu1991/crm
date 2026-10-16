@@ -281,3 +281,9 @@ th.sel, td.sel { width: 28px; text-align: center; }
   .quicksort { overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; }
 }
 @media (min-width: 761px) { .filters-more { display: contents; } }
+
+/* Product photos and the catalogue hot list */
+.thumbs { display: flex; gap: 10px; flex-wrap: wrap; }
+.thumbs figure { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.thumbs img { width: 110px; height: 82px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; background: #f3f4f6; }
+.hot-card { border-left: 4px solid #f97316; }

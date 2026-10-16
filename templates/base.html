@@ -93,8 +93,9 @@
   }
   function fill(body, d) {
     var v = {name: d.name || "", company: d.company || "", product: d.product || "our products",
-             my_name: cfg.my_name || "", my_phone: cfg.my_phone || "", org_name: cfg.org_name || ""};
-    return body.replace(/\{(name|company|product|my_name|my_phone|org_name)\}/g, function (_, k) { return v[k]; });
+             my_name: cfg.my_name || "", my_phone: cfg.my_phone || "", org_name: cfg.org_name || "",
+             catalog_link: d.catalog || ""};
+    return body.replace(/\{(name|company|product|my_name|my_phone|org_name|catalog_link)\}/g, function (_, k) { return v[k]; });
   }
   function closeMenu() { var m = document.querySelector(".wa-menu-back"); if (m) m.remove(); }
   function popup(title) {

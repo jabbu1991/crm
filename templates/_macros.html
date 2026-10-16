@@ -38,7 +38,7 @@
 {%- endmacro %}
 
 {% macro wa_link(l, label=None, cls='') -%}
-<a class="wa {{ cls }}" href="https://wa.me/{{ l.whatsapp|wa_number }}" data-wa="{{ l.whatsapp|wa_number }}" data-lid="{{ l.id }}" data-name="{{ l.customer_name }}" data-company="{{ l.company_name or '' }}" data-product="{{ (l.product_names or '').split(', ')[0] }}" target="_blank" rel="noopener">{{ label or l.whatsapp }}</a>
+<a class="wa {{ cls }}" href="https://wa.me/{{ l.whatsapp|wa_number }}" data-wa="{{ l.whatsapp|wa_number }}" data-lid="{{ l.id }}" data-name="{{ l.customer_name }}" data-company="{{ l.company_name or '' }}" data-product="{{ (l.product_names or '').split(', ')[0] }}" data-catalog="{{ catalog_link(l) }}" target="_blank" rel="noopener">{{ label or l.whatsapp }}</a>
 {%- endmacro %}
 
 {% macro lead_table(leads, params, sort, direction, endpoint, url_args={}, show_project=True, show_stage=False) -%}

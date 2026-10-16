@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Organization settings</h1>
 <div class="grid-2">
-<form method="post" class="card form">
+<form method="post" class="card form" enctype="multipart/form-data">
   {{ csrf() }}
   <label>Organization name *<input name="name" required value="{{ org.name }}"></label>
   <label>Contact person<input name="contact_name" value="{{ org.contact_name or '' }}"></label>
@@ -15,6 +15,19 @@
   {% if org.wa_templates_allowed %}
   <label class="check"><input type="checkbox" name="wa_templates_on" value="1" {{ 'checked' if org.wa_templates_on }}> Use WhatsApp templates in this organization</label>
   <p class="muted small">When off, WhatsApp buttons send only "Hi &lt;name&gt;,". Each user can also switch templates off for themselves in My Account.</p>
+  {% endif %}
+  {% if org.catalog_allowed %}
+  <fieldset>
+    <legend>📒 Digital catalogue</legend>
+    <label class="check"><input type="checkbox" name="catalog_on" value="1" {{ 'checked' if org.catalog_on }}> Publish the catalogue</label>
+    <label>About your business <small>(shown at the top)</small><textarea name="catalog_about" rows="3" maxlength="600">{{ org.catalog_about or '' }}</textarea></label>
+    <label>Logo<input type="file" name="catalog_logo" accept="image/*"></label>
+    {% if org.catalog_logo %}<div class="thumbs"><figure><img src="{{ url_for('media', name=org.catalog_logo) }}" alt="Logo"></figure></div>
+    <label class="check"><input type="checkbox" name="remove_logo" value="1"> Remove logo</label>{% endif %}
+    {% if org.catalog_on %}<p>Catalogue address: <a href="{{ catalog_link() }}" target="_blank" rel="noopener">{{ catalog_link() }}</a><br>
+    <span class="muted small">Products appear when "Show in the catalogue" is ticked. Use {catalog_link} in WhatsApp templates to send each customer a personal link; you'll see when they open it.</span></p>
+    {% else %}<p class="muted small">The WhatsApp/Call buttons on the catalogue use this organization's phone number above.</p>{% endif %}
+  </fieldset>
   {% endif %}
   <button class="btn btn-primary">Save</button>
 </form>

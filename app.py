@@ -14,6 +14,7 @@ Security model
 """
 import csv
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -21,12 +22,13 @@ import re
 import secrets
 import sqlite3
 import time
+import uuid
 import zipfile
 from datetime import date, datetime, timedelta
 from functools import wraps
 
 from flask import (Flask, Response, abort, flash, g, redirect, render_template,
-                   request, session, url_for)
+                   request, send_from_directory, session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -43,6 +45,8 @@ PER_PAGE = 15
 PER_PAGE_CHOICES = (15, 50, 100)
 RECYCLE_DAYS = 30
 WA_TEMPLATE_MAX = 1000
+MAX_PRODUCT_IMAGES = 3
+MEDIA_NAME = re.compile(r"^[0-9a-f]{32}\.jpg$")
 MIN_PASSWORD = 8
 INVITE_DAYS, RESET_HOURS = 7, 24
 
@@ -273,8 +277,35 @@ def inject_globals():
         LEAD_STATUSES=LEAD_STATUSES, BUYING_POSSIBILITIES=BUYING_POSSIBILITIES, LEAD_QUALITIES=LEAD_QUALITIES,
         LEAD_SOURCES=LEAD_SOURCES, PRIORITIES=PRIORITIES, PRODUCT_STAGES=PRODUCT_STAGES,
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
-        COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config,
+        COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link,
     )
+
+
+def lead_token(lid):
+    sig = hmac.new(app.secret_key.encode() if isinstance(app.secret_key, str) else app.secret_key,
+                   f"catalog:{lid}".encode(), hashlib.sha256).hexdigest()[:12]
+    return f"{lid}.{sig}"
+
+
+def lead_from_token(token, oid):
+    lid = (token or "").split(".")[0]
+    if not lid.isdigit() or not hmac.compare_digest(lead_token(int(lid)), token):
+        return None
+    return query("SELECT * FROM leads WHERE id = ? AND org_id = ?", (int(lid), oid), one=True)
+
+
+def catalog_published(org):
+    return bool(org and org["catalog_allowed"] and org["catalog_on"] and org["status"] == "Active")
+
+
+def catalog_link(lead=None):
+    """Public catalogue address; with a lead, a personal link so its opening is recorded on that lead."""
+    org = g.get("org")
+    if not catalog_published(org):
+        return ""
+    if lead is not None:
+        return url_for("catalog_page", code=org["code"].lower(), l=lead_token(lead["id"]), _external=True)
+    return url_for("catalog_page", code=org["code"].lower(), _external=True)
 
 
 def wa_templates_enabled():
@@ -708,7 +739,14 @@ def dashboard():
                           (SELECT COUNT(*) FROM leads l WHERE l.org_id = o.id) leads,
                           (SELECT COUNT(*) FROM projects p WHERE p.org_id = o.id) projects
                         FROM organizations o ORDER BY o.kind, o.name COLLATE NOCASE""")
-    return render_template("dashboard.html", stats=stats, by_product=by_product, by_state=by_state,
+    lw, la = lead_scope()
+    catalog_hot = query(f"""SELECT l.id, l.customer_name, l.phone, MAX(cv.created_at) last_seen, COUNT(*) views,
+                              GROUP_CONCAT(DISTINCT pr.name) products
+                            FROM catalog_views cv JOIN leads l ON l.id = cv.lead_id
+                            LEFT JOIN products pr ON pr.id = cv.product_id
+                            WHERE {lw} AND cv.created_at >= ? GROUP BY l.id ORDER BY last_seen DESC LIMIT 15""",
+                        la + [(datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")])
+    return render_template("dashboard.html", catalog_hot=catalog_hot, stats=stats, by_product=by_product, by_state=by_state,
                            by_status=by_status, by_project=by_project, by_staff=by_staff,
                            due_followups=due_followups, recent=recent, orgs=orgs)
 
@@ -865,11 +903,81 @@ def products():
     return render_template("products.html", products=rows, params=params, categories=categories)
 
 
+def web_link(value):
+    """Only plain http(s) links are kept (no javascript: and the like)."""
+    value = clean(value)
+    return value if re.match(r"^https?://[^\s<>\"']+$", value, re.I) else ""
+
+
 def product_form_data():
     data = {k: clean(request.form.get(k)) for k in ("name", "code", "category", "description")}
     data["code"] = data["code"].upper()
     data["active"] = 1 if request.form.get("active") else 0
+    data["price"] = clean(request.form.get("price"))[:40]
+    data["video_url"] = web_link(request.form.get("video_url"))
+    data["brochure_url"] = web_link(request.form.get("brochure_url"))
+    data["show_in_catalog"] = 1 if request.form.get("show_in_catalog") else 0
     return data
+
+
+def media_dir():
+    path = os.environ.get("CRM_UPLOAD_DIR") or os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "uploads")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def save_image(upload, box=(1200, 1200)):
+    """Shrink a photo (any size) to a light JPEG of about 100-200 KB. Returns the stored file name, or None."""
+    from PIL import Image, ImageOps
+    try:
+        img = ImageOps.exif_transpose(Image.open(upload.stream))
+        img.thumbnail(box)
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGBA")
+            bg = Image.new("RGB", img.size, "white")
+            bg.paste(img, mask=img.split()[-1])
+            img = bg
+        else:
+            img = img.convert("RGB")
+        for quality in (80, 68, 55):
+            out = io.BytesIO()
+            img.save(out, "JPEG", quality=quality, optimize=True, progressive=True)
+            if out.tell() <= 220 * 1024:
+                break
+    except Exception:  # not an image, damaged, or too large to decode
+        return None
+    name = uuid.uuid4().hex + ".jpg"
+    with open(os.path.join(media_dir(), name), "wb") as f:
+        f.write(out.getvalue())
+    return name
+
+
+def remove_media(name):
+    if name and MEDIA_NAME.match(name):
+        try:
+            os.remove(os.path.join(media_dir(), name))
+        except OSError:
+            pass
+
+
+def save_product_images(pid):
+    have = scalar("SELECT COUNT(*) FROM product_images WHERE product_id = ?", (pid,))
+    added = bad = 0
+    for f in request.files.getlist("images"):
+        if not f or not f.filename:
+            continue
+        if have + added >= MAX_PRODUCT_IMAGES:
+            flash(f"Only {MAX_PRODUCT_IMAGES} photos per product; extra photos were skipped.", "warning")
+            break
+        name = save_image(f)
+        if name:
+            execute("INSERT INTO product_images (org_id, product_id, filename, created_at) VALUES (?,?,?,?)",
+                    (org_id(), pid, name, now()))
+            added += 1
+        else:
+            bad += 1
+    if bad:
+        flash(f"{bad} file(s) were not photos and were skipped.", "warning")
 
 
 def validate_product(data, pid=None):
@@ -896,15 +1004,19 @@ def product_new():
             flash(e, "error")
         if not errors:
             ts = now()
-            execute("INSERT INTO products (org_id, name, code, category, description, active, created_by, created_at,"
-                    " updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (org_id(), data["name"], data["code"], data["category"], data["description"], data["active"],
-                     g.user["id"], ts, ts))
+            pid = execute("INSERT INTO products (org_id, name, code, category, description, active, price, video_url,"
+                          " brochure_url, show_in_catalog, created_by, created_at, updated_at)"
+                          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                          (org_id(), data["name"], data["code"], data["category"], data["description"], data["active"],
+                           data["price"], data["video_url"], data["brochure_url"], data["show_in_catalog"],
+                           g.user["id"], ts, ts))
+            save_product_images(pid)
             flash(f"'{data['name']}' added.", "success")
             if request.form.get("save_and_new"):
                 return redirect(url_for("product_new"))
             return redirect(url_for("products"))
-    return render_template("product_form.html", data=data, product=None)
+    data.setdefault("show_in_catalog", 1)
+    return render_template("product_form.html", data=data, product=None, images=[])
 
 
 @app.route("/products/<int:pid>/edit", methods=["GET", "POST"])
@@ -918,12 +1030,27 @@ def product_edit(pid):
         for e in errors:
             flash(e, "error")
         if not errors:
-            execute("UPDATE products SET name=?, code=?, category=?, description=?, active=?, updated_at=?"
-                    " WHERE id = ? AND org_id = ?", (data["name"], data["code"], data["category"],
-                                                    data["description"], data["active"], now(), pid, org_id()))
+            execute("UPDATE products SET name=?, code=?, category=?, description=?, active=?, price=?, video_url=?,"
+                    " brochure_url=?, show_in_catalog=?, updated_at=? WHERE id = ? AND org_id = ?",
+                    (data["name"], data["code"], data["category"], data["description"], data["active"], data["price"],
+                     data["video_url"], data["brochure_url"], data["show_in_catalog"], now(), pid, org_id()))
+            save_product_images(pid)
             flash("Product updated.", "success")
             return redirect(url_for("products"))
-    return render_template("product_form.html", data=data, product=product)
+    images = query("SELECT * FROM product_images WHERE product_id = ? ORDER BY id", (pid,))
+    return render_template("product_form.html", data=data, product=product, images=images)
+
+
+@app.route("/products/<int:pid>/images/<int:iid>/delete", methods=["POST"])
+@admin_required
+def product_image_delete(pid, iid):
+    get_product(pid)
+    img = query("SELECT * FROM product_images WHERE id = ? AND product_id = ? AND org_id = ?",
+                (iid, pid, org_id()), one=True) or abort(404)
+    execute("DELETE FROM product_images WHERE id = ?", (iid,))
+    remove_media(img["filename"])
+    flash("Photo removed.", "success")
+    return redirect(url_for("product_edit", pid=pid))
 
 
 @app.route("/products/<int:pid>/toggle", methods=["POST"])
@@ -2103,6 +2230,21 @@ def organization_settings():
             if org["wa_templates_allowed"]:
                 execute("UPDATE organizations SET wa_templates_on = ? WHERE id = ?",
                         (1 if request.form.get("wa_templates_on") else 0, org_id()))
+            if org["catalog_allowed"]:
+                execute("UPDATE organizations SET catalog_on = ?, catalog_about = ? WHERE id = ?",
+                        (1 if request.form.get("catalog_on") else 0, clean(request.form.get("catalog_about"))[:600],
+                         org_id()))
+                logo = request.files.get("catalog_logo")
+                if logo and logo.filename:
+                    name = save_image(logo, box=(400, 400))
+                    if name:
+                        execute("UPDATE organizations SET catalog_logo = ? WHERE id = ?", (name, org_id()))
+                        remove_media(org["catalog_logo"])
+                    else:
+                        flash("The logo file is not a photo.", "error")
+                elif request.form.get("remove_logo"):
+                    execute("UPDATE organizations SET catalog_logo = NULL WHERE id = ?", (org_id(),))
+                    remove_media(org["catalog_logo"])
             flash("Organization settings saved.", "success")
             return redirect(url_for("organization_settings"))
     counts = dict(users=scalar("SELECT COUNT(*) FROM users WHERE org_id = ?", (org_id(),)),
@@ -2192,6 +2334,70 @@ def lead_wa_log(lid):
     return ("", 204)
 
 
+# ---------------------------------------------------------------- public digital catalogue
+
+def catalog_org(code):
+    org = query("SELECT * FROM organizations WHERE code = ? COLLATE NOCASE", (code,), one=True)
+    if not catalog_published(org):
+        abort(404)
+    return org
+
+
+def record_catalog_view(org, token, product=None):
+    lead = lead_from_token(token, org["id"])
+    if not lead:
+        return
+    db = get_db()
+    ts = now()
+    recent = db.execute("SELECT 1 FROM catalog_views WHERE lead_id = ? AND product_id IS ? AND created_at >= ?",
+                        (lead["id"], product["id"] if product else None,
+                         (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S"))).fetchone()
+    if recent:
+        return
+    db.execute("INSERT INTO catalog_views (org_id, lead_id, product_id, created_at) VALUES (?,?,?,?)",
+               (org["id"], lead["id"], product["id"] if product else None, ts))
+    what = f"viewed {product['name']} in the catalogue" if product else "opened the catalogue"
+    db.execute("INSERT INTO lead_activity (lead_id, user_id, action, created_at) VALUES (?,?,?,?)",
+               (lead["id"], lead["assigned_to"] or lead["entered_by"], f"📒 Customer {what}", ts))
+    db.commit()
+
+
+def catalog_products(oid, pid=None):
+    rows = query("""SELECT p.*, (SELECT filename FROM product_images i WHERE i.product_id = p.id ORDER BY i.id LIMIT 1) photo
+                    FROM products p WHERE p.org_id = ? AND p.active = 1 AND p.show_in_catalog = 1"""
+                 + (" AND p.id = ?" if pid else "") + " ORDER BY p.category COLLATE NOCASE, p.name COLLATE NOCASE",
+                 (oid, pid) if pid else (oid,))
+    return rows
+
+
+@app.route("/c/<code>")
+def catalog_page(code):
+    org = catalog_org(code)
+    token = request.args.get("l", "")
+    record_catalog_view(org, token)
+    return render_template("catalog.html", org=org, products=catalog_products(org["id"]), token=token,
+                           wa=wa_number(org["phone"]))
+
+
+@app.route("/c/<code>/p/<int:pid>")
+def catalog_product(code, pid):
+    org = catalog_org(code)
+    product = (catalog_products(org["id"], pid) or [None])[0] or abort(404)
+    token = request.args.get("l", "")
+    record_catalog_view(org, token, product)
+    images = query("SELECT filename FROM product_images WHERE product_id = ? ORDER BY id", (pid,))
+    return render_template("catalog_product.html", org=org, p=product, images=images, token=token,
+                           wa=wa_number(org["phone"]))
+
+
+@app.route("/media/<name>")
+def media(name):
+    if not MEDIA_NAME.match(name):
+        abort(404)
+    resp = send_from_directory(media_dir(), name, mimetype="image/jpeg", max_age=30 * 24 * 3600)
+    return resp
+
+
 # ---------------------------------------------------------------- super admin: organizations
 
 def org_or_404(oid):
@@ -2269,8 +2475,9 @@ def admin_org_edit(oid):
         else:
             execute("""UPDATE organizations SET name=?, code=?, contact_name=?, phone=?, email=?, address=?, notes=?,
                        updated_at=? WHERE id = ?""", (*data.values(), now(), oid))
-            execute("UPDATE organizations SET wa_templates_allowed = ? WHERE id = ?",
-                    (1 if request.form.get("wa_templates_allowed") else 0, oid))
+            execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ? WHERE id = ?",
+                    (1 if request.form.get("wa_templates_allowed") else 0,
+                     1 if request.form.get("catalog_allowed") else 0, oid))
             flash("Organization updated.", "success")
             return redirect(url_for("admin_orgs"))
     return render_template("admin_org_form.html", data=data, admin=None, org=org)

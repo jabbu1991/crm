@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -447,7 +447,37 @@ def _migrate_v5(conn):
     conn.execute("UPDATE wa_templates SET active = 0 WHERE scope = 'org'")
 
 
-MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5)]
+def _migrate_v6(conn):
+    """Digital catalogue: product photos and links, a public page per organization, and who viewed it."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("products", "price", "TEXT")
+    add("products", "video_url", "TEXT")
+    add("products", "brochure_url", "TEXT")
+    add("products", "show_in_catalog", "INTEGER NOT NULL DEFAULT 1")
+    add("organizations", "catalog_allowed", "INTEGER NOT NULL DEFAULT 1")  # Super Admin, per client plan
+    add("organizations", "catalog_on", "INTEGER NOT NULL DEFAULT 0")       # the organization publishes it
+    add("organizations", "catalog_about", "TEXT")
+    add("organizations", "catalog_logo", "TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS product_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_product_images ON product_images(product_id)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS catalog_views (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_views ON catalog_views(org_id, created_at)")
+
+
+MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
+              (6, _migrate_v6)]
 
 
 def migrate(db_path):
