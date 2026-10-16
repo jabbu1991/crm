@@ -1,12 +1,12 @@
-{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf, wa_link with context %}
 {% block title %}{{ lead.customer_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>{{ lead.customer_name }} <span class="badge {{ lead.status|badge }}">{{ lead.status }}</span></h1>
   <div class="actions">
     {% if viewing %}<span class="muted">Read-only (Super Admin view)</span>{% else %}<a class="btn btn-primary" href="{{ url_for('lead_edit', lid=lead.id) }}">✏️ Edit lead</a>{% endif %}
-    {% if is_admin() %}
-    <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete this lead?">{{ csrf() }}<button class="btn btn-danger">Delete</button></form>
+    {% if not viewing %}
+    <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Move this lead to the Recycle Bin?">{{ csrf() }}<button class="btn btn-danger">🗑 Delete</button></form>
     {% endif %}
   </div>
 </div>
@@ -16,7 +16,7 @@
     <dl class="details">
       <dt>Company</dt><dd>{{ lead.company_name or '—' }}</dd>
       <dt>Phone</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% else %}—{% endif %}</dd>
-      <dt>WhatsApp</dt><dd>{% if lead.whatsapp %}<a class="wa" href="https://wa.me/{{ lead.whatsapp|wa_number }}" data-wa="{{ lead.whatsapp|wa_number }}" data-name="{{ lead.customer_name }}" target="_blank" rel="noopener">{{ lead.whatsapp }}</a>{% else %}—{% endif %}</dd>
+      <dt>WhatsApp</dt><dd>{% if lead.whatsapp %}{{ wa_link(lead) }}{% else %}—{% endif %}</dd>
       <dt>Email</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}—{% endif %}</dd>
       <dt>Place</dt><dd>{{ lead.place or '—' }}</dd>
       <dt>District</dt><dd>{{ lead.district or '—' }}</dd>

@@ -225,3 +225,57 @@ select.quick.b-none { background: #fff; border-color: var(--border); color: var(
 .org-initial { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 15px; color: #fff; background: linear-gradient(135deg, #2563eb, #06b6d4); box-shadow: 0 2px 8px rgba(6,182,212,.35); }
 .org-text { font-weight: 800; font-size: 17px; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(90deg, #ffffff, #67e8f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
 @media (max-width: 900px) { .org-text { font-size: 15px; } .org-initial { width: 26px; height: 26px; font-size: 13px; } }
+
+/* WhatsApp button in the top bar and the template menu */
+.wa-top { color: #fff; background: #16a34a; padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; text-decoration: none; }
+.wa-top:hover { background: #15803d; color: #fff; }
+.wa-menu-back { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.wa-menu { width: 100%; max-width: 380px; max-height: 80vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; padding: 16px; }
+.wa-menu-head { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+.wa-menu-group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; margin-top: 8px; }
+.wa-menu-item { text-align: left; padding: 11px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font: inherit; cursor: pointer; }
+.wa-menu-item:hover { background: #f0fdf4; border-color: #86efac; }
+.wa-menu-cancel { margin-top: 6px; align-self: flex-end; }
+
+/* Selecting leads and acting on them together */
+.bulk-bar { position: sticky; top: 64px; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border: 2px solid #6366f1; margin-bottom: 12px; }
+.bulk-bar[hidden] { display: none; }
+.bulk-bar select, .bulk-bar input { padding: 6px 8px; width: auto; max-width: 190px; flex: 0 1 auto; }
+.bulk-bar .inline-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+th.sel, td.sel { width: 28px; text-align: center; }
+.sel-one, .sel-all { width: 18px; height: 18px; }
+.del-btn { border: 1px solid #fecaca; background: #fff; border-radius: 8px; padding: 3px 7px; cursor: pointer; margin-left: 4px; }
+.del-btn:hover { background: #fef2f2; }
+.per-page { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; }
+
+/* Templates page */
+.tpl { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.tpl.off { opacity: .6; }
+.tpl summary { cursor: pointer; }
+.tpl-preview { display: block; margin-top: 2px; }
+.tpl-body { white-space: pre-wrap; font: inherit; background: #f9fafb; padding: 10px; border-radius: 8px; }
+.tpl-new summary { color: #4f46e5; font-weight: 600; }
+.tags code { background: #eef2ff; padding: 1px 6px; border-radius: 6px; }
+
+/* Phone layout: cards instead of the wide table, folded filters */
+.mobile-only { display: none; }
+.lead-cards { display: none; flex-direction: column; gap: 10px; }
+.lead-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.lc-top { display: flex; align-items: center; gap: 8px; }
+.lc-name { flex: 1; min-width: 0; font-size: 16px; text-decoration: none; }
+.lc-quals { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lc-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.lc-actions .btn { flex: 1 1 auto; text-align: center; }
+.sel-all-row { padding: 0 4px; }
+@media (max-width: 760px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: initial; }
+  .lead-cards.mobile-only { display: flex; }
+  .filters .filters-more { display: none; width: 100%; }
+  .filters.show-more .filters-more { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filters-more > * { flex: 1 1 140px; }
+  .bulk-bar { top: 0; }
+  .wa-top { display: none; }
+  .quicksort { overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; }
+}
+@media (min-width: 761px) { .filters-more { display: contents; } }

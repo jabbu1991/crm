@@ -10,6 +10,24 @@
     <dt>Role</dt><dd>{{ ROLE_LABELS[g.user.role] }}</dd>
     <dt>Email</dt><dd>{{ g.user.email or '—' }}</dd>
   </dl>
+  <h2>WhatsApp</h2>
+  <form method="post" class="form">
+    {{ csrf() }}<input type="hidden" name="form" value="profile">
+    <label>Contact number <small>(shown in messages as {my_phone})</small><input type="tel" name="contact_phone" value="{{ g.user.contact_phone or '' }}" placeholder="e.g. 98470 11111"></label>
+    {% if g.org.wa_templates_allowed and g.org.wa_templates_on %}
+    <label class="check"><input type="checkbox" name="wa_templates_on" value="1" {{ 'checked' if g.user.wa_templates_on }}> Show my message templates when I press WhatsApp</label>
+    {% else %}<input type="hidden" name="wa_templates_on" value="{{ '1' if g.user.wa_templates_on else '' }}">{% endif %}
+    <button class="btn">Save</button>
+  </form>
+  <div class="form">
+    <label>On this computer/browser, WhatsApp opens in
+      <select id="wa-mode">
+        <option value="web">WhatsApp Web (one tab, reused)</option>
+        <option value="app">WhatsApp Desktop app</option>
+      </select>
+    </label>
+    <p class="muted small">Saved in this browser only, so each browser can use its own setting. Messages go from the WhatsApp account logged in here. Phones always open the WhatsApp app.</p>
+  </div>
   <h2>Change password</h2>
   <form method="post" class="form">
     {{ csrf() }}

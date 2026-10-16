@@ -12,6 +12,10 @@
     <label>Email<input type="email" name="email" value="{{ org.email or '' }}"></label>
   </div>
   <label>Address<textarea name="address" rows="2">{{ org.address or '' }}</textarea></label>
+  {% if org.wa_templates_allowed %}
+  <label class="check"><input type="checkbox" name="wa_templates_on" value="1" {{ 'checked' if org.wa_templates_on }}> Use WhatsApp templates in this organization</label>
+  <p class="muted small">When off, WhatsApp buttons send only "Hi &lt;name&gt;,". Each user can also switch templates off for themselves in My Account.</p>
+  {% endif %}
   <button class="btn btn-primary">Save</button>
 </form>
 <section class="card">

@@ -13,16 +13,16 @@
 </ul>
 {%- endmacro %}
 
-{% macro pager(page, pages, total, endpoint, params, url_args={}) -%}
-{% if pages > 1 %}
+{% macro pager(page, pages, total, endpoint, params, url_args={}, per=15) -%}
 <div class="pager">
   <span class="muted">Page {{ page }} of {{ pages }} · {{ total }} leads</span>
   {% if page > 1 %}<a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=1)) }}">« First</a>
   <a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=page - 1)) }}">‹ Prev</a>{% endif %}
   {% if page < pages %}<a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=page + 1)) }}">Next ›</a>
   <a class="btn btn-sm" href="{{ url_for(endpoint, **dict(dict(params, **url_args), page=pages)) }}">Last »</a>{% endif %}
+  <span class="per-page muted">Show:
+  {% for n in (15, 50, 100) %}<a class="chip {{ 'on' if per == n }}" href="{{ url_for(endpoint, **dict(dict(params, **url_args), per=n, page=1)) }}">{{ n }}</a>{% endfor %}</span>
 </div>
-{% endif %}
 {%- endmacro %}
 
 {% macro th(key, label, c) -%}
@@ -37,12 +37,32 @@
 </select>
 {%- endmacro %}
 
+{% macro wa_link(l, label=None, cls='') -%}
+<a class="wa {{ cls }}" href="https://wa.me/{{ l.whatsapp|wa_number }}" data-wa="{{ l.whatsapp|wa_number }}" data-lid="{{ l.id }}" data-name="{{ l.customer_name }}" data-company="{{ l.company_name or '' }}" data-product="{{ (l.product_names or '').split(', ')[0] }}" target="_blank" rel="noopener">{{ label or l.whatsapp }}</a>
+{%- endmacro %}
+
 {% macro lead_table(leads, params, sort, direction, endpoint, url_args={}, show_project=True, show_stage=False) -%}
 {% set ctx = dict(sort=sort, direction=direction, endpoint=endpoint, params=params, url_args=url_args) %}
-<div class="card table-wrap">
+{% if not viewing %}
+<form id="bulk" method="post" action="{{ url_for('leads_bulk') }}" class="bulk-bar card" hidden>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+  <b class="bulk-count">0 selected</b>
+  <select name="status"><option value="">Status…</option>{% for o in LEAD_STATUSES %}<option>{{ o }}</option>{% endfor %}</select>
+  <select name="lead_quality"><option value="">Quality…</option>{% for o in LEAD_QUALITIES %}<option>{{ o }}</option>{% endfor %}</select>
+  <select name="buying_possibility"><option value="">Buying possibility…</option>{% for o in BUYING_POSSIBILITIES %}<option>{{ o }}</option>{% endfor %}</select>
+  <select name="priority"><option value="">Priority…</option>{% for o in PRIORITIES %}<option>{{ o }}</option>{% endfor %}</select>
+  <select name="source"><option value="">Source…</option>{% for o in LEAD_SOURCES %}<option>{{ o }}</option>{% endfor %}</select>
+  <label class="inline-label">Follow-up <input type="date" name="next_follow_up"></label>
+  {% set bulk_staff = (staff or [])|selectattr('active')|list %}{% if is_admin() and bulk_staff %}<select name="assigned_to"><option value="">Assign to…</option>{% for u in bulk_staff %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>{% endif %}
+  <button class="btn btn-primary btn-sm" name="action" value="update">Apply changes</button>
+  <button class="btn btn-sm" name="action" value="export">Export selected</button>
+  <button class="btn btn-sm btn-danger" name="action" value="delete" onclick="return confirm('Move the selected leads to the Recycle Bin?')">🗑 Delete selected</button>
+</form>
+{% endif %}
+<div class="card table-wrap desktop-only">
 <table class="table leads-table">
   <thead><tr>
-    {% if not viewing %}<th></th>{% endif %}
+    {% if not viewing %}<th class="sel"><input type="checkbox" class="sel-all" title="Select all on this page"></th><th></th>{% endif %}
     {{ th('name', 'Customer', ctx) }}
     {{ th('status', 'Status', ctx) }}{{ th('quality', 'Quality', ctx) }}{{ th('possibility', 'Buying poss.', ctx) }}{{ th('priority', 'Priority', ctx) }}
     {{ th('followup', 'Next follow-up', ctx) }}
@@ -54,8 +74,11 @@
   <tbody>
   {% for l in leads %}
     <tr>
-      {% if not viewing %}<td class="row-actions"><a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}" title="Edit all details">✏️ Edit</a>
-        <form id="q{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form></td>{% endif %}
+      {% if not viewing %}<td class="sel"><input type="checkbox" class="sel-one" name="ids" value="{{ l.id }}" form="bulk"></td>
+      <td class="row-actions"><a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}" title="Edit all details">✏️ Edit</a>
+        <button class="del-btn" type="submit" form="d{{ l.id }}" title="Move to Recycle Bin">🗑</button>
+        <form id="q{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form>
+        <form id="d{{ l.id }}" method="post" action="{{ url_for('lead_delete', lid=l.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Move {{ l.customer_name }} to the Recycle Bin?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form></td>{% endif %}
       <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a>{% if l.company_name %}<div class="small muted">{{ l.company_name }}</div>{% endif %}</td>
       {% if viewing %}
       <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
@@ -70,7 +93,7 @@
       {% endif %}
       <td class="{{ 'overdue' if l.next_follow_up and l.next_follow_up < today }}">{{ l.next_follow_up or '' }}</td>
       <td>{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}</td>
-      <td>{% if l.whatsapp %}<a class="wa" href="https://wa.me/{{ l.whatsapp|wa_number }}" data-wa="{{ l.whatsapp|wa_number }}" data-name="{{ l.customer_name }}" target="_blank" rel="noopener">{{ l.whatsapp }}</a>{% endif %}</td>
+      <td>{% if l.whatsapp %}{{ wa_link(l) }}{% endif %}</td>
       <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}</td>
       <td>{{ l.place or '' }}</td><td>{{ l.district or '' }}</td>
       <td>{{ l.state or '' }}{% if l.country and l.country != 'India' %} <small class="muted">({{ l.country }})</small>{% endif %}</td>
@@ -80,10 +103,35 @@
       <td>{{ l.staff_name }}</td><td>{{ l.assigned_name or '' }}</td><td>{{ l.created_at[:10] }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="19" class="muted center">No leads match these filters.</td></tr>
+    <tr><td colspan="20" class="muted center">No leads match these filters.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
+<div class="lead-cards mobile-only">
+  {% if leads and not viewing %}<label class="check sel-all-row"><input type="checkbox" class="sel-all"> Select all on this page</label>{% endif %}
+  {% for l in leads %}
+  <article class="lead-card">
+    <div class="lc-top">
+      {% if not viewing %}<input type="checkbox" class="sel-one" name="ids" value="{{ l.id }}" form="bulk" aria-label="Select {{ l.customer_name }}">{% endif %}
+      <a class="lc-name" href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b>{% if l.company_name %}<span class="muted small"> · {{ l.company_name }}</span>{% endif %}</a>
+      {% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_select(l, 'status', LEAD_STATUSES, False) }}{% endif %}
+    </div>
+    {% if l.place or l.district or l.state %}<div class="muted small">📍 {{ [l.place, l.district, l.state]|select|join(', ') }}</div>{% endif %}
+    {% if l.product_names %}<div class="small">🛒 {{ l.product_names }}</div>{% endif %}
+    <div class="lc-quals">
+      {% if viewing %}{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}
+      {% else %}{{ quick_select(l, 'lead_quality', LEAD_QUALITIES) }}{{ quick_select(l, 'priority', PRIORITIES, True, 'p-') }}{% endif %}
+      {% if l.next_follow_up %}<span class="small {{ 'overdue' if l.next_follow_up < today }}">📅 {{ l.next_follow_up }}</span>{% endif %}
+    </div>
+    <div class="lc-actions">
+      {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}">📞 Call</a>{% endif %}
+      {% if l.whatsapp %}{{ wa_link(l, '🟢 WhatsApp', 'btn btn-sm') }}{% endif %}
+      {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('lead_edit', lid=l.id) }}">✏️ Edit</a>
+      <button class="btn btn-sm" type="submit" form="d{{ l.id }}" title="Move to Recycle Bin">🗑</button>{% endif %}
+    </div>
+  </article>
+  {% else %}<p class="muted center card">No leads match these filters.</p>{% endfor %}
 </div>
 {%- endmacro %}
 
@@ -92,7 +140,9 @@
 <form method="get" action="{{ action }}" class="card filters">
   {% for k, v in fixed.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
   {% if params.sort %}<input type="hidden" name="sort" value="{{ params.sort }}"><input type="hidden" name="dir" value="{{ params.dir }}">{% endif %}
-  {% if 'q' in show %}<input type="search" name="q" value="{{ params.q or '' }}" placeholder="Search name, phone, WhatsApp, email…" class="grow">{% endif %}
+  {% if 'q' in show %}<input type="search" name="q" value="{{ params.q or '' }}" placeholder="Search name, company, phone, email…" class="grow">{% endif %}
+  <button type="button" class="btn filters-toggle mobile-only" onclick="this.form.classList.toggle('show-more')">🔍 Filters</button>
+  <div class="filters-more">
   {% if 'project' in show %}<select name="project"><option value="">All projects</option>{% for p in o.projects_all %}<option value="{{ p.id }}" {{ 'selected' if params.project == p.id|string }}>{{ p.name }}</option>{% endfor %}</select>{% endif %}
   {% if 'product' in show %}<select name="product"><option value="">All products</option>{% for p in o.products_all %}<option value="{{ p.id }}" {{ 'selected' if params.product == p.id|string }}>{{ p.name }}{{ '' if p.active else ' (inactive)' }}</option>{% endfor %}</select>{% endif %}
   {% if 'stage' in show %}<select name="stage"><option value="">Any product stage</option>{% for s in PRODUCT_STAGES %}<option {{ 'selected' if params.stage == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
@@ -111,6 +161,7 @@
   <label class="inline-label">From <input type="date" name="date_from" value="{{ params.date_from or '' }}"></label>
   <label class="inline-label">To <input type="date" name="date_to" value="{{ params.date_to or '' }}"></label>
   {% endif %}
+  </div>
   <button class="btn btn-primary">Apply</button>
   <a class="btn" href="{{ action }}{% if fixed %}?{% for k, v in fixed.items() %}{{ k }}={{ v|urlencode }}{{ '&' if not loop.last }}{% endfor %}{% endif %}">Clear</a>
 </form>

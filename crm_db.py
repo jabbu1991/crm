@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -364,7 +364,85 @@ def _migrate_v3(conn):
         conn.execute("ALTER TABLE leads ADD COLUMN company_name TEXT")
 
 
-MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3)]
+DEFAULT_WA_TEMPLATES = [
+    ("Welcome", "Hi {name} 🙏\nThis is {my_name} from {org_name}. Thank you for contacting us!\n"
+                "We'd love to know more about your requirement for {product}. When would be a good time to talk?\n"
+                "📞 {my_phone}"),
+    ("Missed call", "Hi {name},\nThis is {my_name} from {org_name}. I tried calling you but couldn't reach you.\n"
+                    "Please let me know a convenient time, or call me at 📞 {my_phone}"),
+    ("Product details", "Hi {name},\nPlease find the details of {product} below 👇\n"
+                        "Feel free to ask if you have any questions.\n– {my_name}, {org_name}"),
+    ("Quotation", "Hi {name},\nPlease find attached the quotation for {product}.\n"
+                  "For any questions about pricing or details, call me at 📞 {my_phone}\n– {my_name}, {org_name}"),
+    ("Follow-up", "Hi {name},\nJust following up on {product} that we discussed. Have you made a decision?\n"
+                  "Let me know if you need any help 😊\n– {my_name}, {org_name}"),
+    ("Meeting / Demo confirmation", "Hi {name},\nYour meeting / demo is confirmed.\n📅 Date: ____  ⏰ Time: ____\n"
+                                    "If anything changes, please let me know: 📞 {my_phone}"),
+    ("Order confirmation", "Hi {name},\nWe have received your order for {product}. Thank you! 🎉\n"
+                           "We will update you on the delivery details shortly.\n– {org_name}"),
+    ("Thank you", "Hi {name},\nThank you for choosing {org_name} 🙏\nIf you need any help, feel free to reach out "
+                  "anytime. We'd be grateful if you recommend us to your friends 😊"),
+    ("Re-connect", "Hi {name},\nYou had enquired about {product} some time ago.\n"
+                   "We have some new offers now. Would you like to know more?\n– {my_name}, {org_name}"),
+    ("Offer / Festival", "Hi {name},\nSpecial offer from {org_name}! 🎉\n____ (offer details)\nTo know more: 📞 {my_phone}"),
+]
+
+
+def copy_default_templates(conn, org_id, user_id, ts):
+    """Give an organization its own editable copy of the agency's default WhatsApp templates."""
+    rows = conn.execute("SELECT title, body, sort FROM wa_templates WHERE scope = 'default' ORDER BY sort, id").fetchall()
+    conn.executemany("INSERT INTO wa_templates (org_id, scope, title, body, active, sort, created_by, created_at)"
+                     " VALUES (?, 'org', ?, ?, 1, ?, ?, ?)", [(org_id, r[0], r[1], r[2], user_id, ts) for r in rows])
+
+
+def _migrate_v4(conn):
+    """WhatsApp templates and settings, and the recycle bin for deleted leads. Adds only; changes no data."""
+    org_cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)")}
+    if "wa_templates_allowed" not in org_cols:  # set by the Super Admin per client
+        conn.execute("ALTER TABLE organizations ADD COLUMN wa_templates_allowed INTEGER NOT NULL DEFAULT 1")
+    if "wa_templates_on" not in org_cols:  # set by the organization's admin
+        conn.execute("ALTER TABLE organizations ADD COLUMN wa_templates_on INTEGER NOT NULL DEFAULT 1")
+    user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+    if "contact_phone" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN contact_phone TEXT")
+    if "wa_templates_on" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN wa_templates_on INTEGER NOT NULL DEFAULT 1")
+    conn.execute("""CREATE TABLE IF NOT EXISTS wa_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        scope TEXT NOT NULL CHECK (scope IN ('default', 'org', 'user')),
+        user_id INTEGER REFERENCES users(id),
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        sort INTEGER NOT NULL DEFAULT 0,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        updated_at TEXT)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_wa_templates_org ON wa_templates(org_id, scope)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS deleted_leads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        lead_id INTEGER NOT NULL,
+        customer_name TEXT,
+        phone TEXT,
+        project_name TEXT,
+        deleted_by INTEGER NOT NULL REFERENCES users(id),
+        deleted_at TEXT NOT NULL,
+        data TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_deleted_leads_org ON deleted_leads(org_id, deleted_at)")
+    agency = conn.execute("SELECT id FROM organizations WHERE kind = 'agency' ORDER BY id LIMIT 1").fetchone()
+    if agency and not conn.execute("SELECT 1 FROM wa_templates WHERE scope = 'default'").fetchone():
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.executemany("INSERT INTO wa_templates (org_id, scope, title, body, active, sort, created_at)"
+                         " VALUES (?, 'default', ?, ?, 1, ?, ?)",
+                         [(agency[0], t, b, i, ts) for i, (t, b) in enumerate(DEFAULT_WA_TEMPLATES)])
+        for (oid,) in conn.execute("SELECT id FROM organizations").fetchall():
+            if not conn.execute("SELECT 1 FROM wa_templates WHERE org_id = ? AND scope = 'org'", (oid,)).fetchone():
+                copy_default_templates(conn, oid, None, ts)
+
+
+MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4)]
 
 
 def migrate(db_path):

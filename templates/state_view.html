@@ -15,5 +15,5 @@
 </div>
 {{ lead_filter_form(params, dict(projects_all=projects_all, products_all=products_all, staff=staff, states=states, places=places, districts=districts), url_for('state_view'), fixed=fixed, show=('q','project','product','status','quality','district','staff','dates')) }}
 {{ lead_table(leads, params, sort, direction, 'state_view') }}
-{{ pager(page, pages, total, 'state_view', params) }}
+{{ pager(page, pages, total, 'state_view', params, per=per) }}
 {% endblock %}

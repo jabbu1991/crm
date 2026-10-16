@@ -15,6 +15,7 @@ Security model
 import csv
 import hashlib
 import io
+import json
 import os
 import re
 import secrets
@@ -38,7 +39,10 @@ from crm_constants import (BUYING_POSSIBILITIES, CAMPAIGN_TYPES, CLOSED_LOST_STA
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 DB_PATH = os.environ.get("CRM_DB_PATH", os.path.join(INSTANCE_DIR, "crm.db"))
-PER_PAGE = 50
+PER_PAGE = 15
+PER_PAGE_CHOICES = (15, 50, 100)
+RECYCLE_DAYS = 30
+WA_TEMPLATE_MAX = 1000
 MIN_PASSWORD = 8
 INVITE_DAYS, RESET_HOURS = 7, 24
 
@@ -269,8 +273,27 @@ def inject_globals():
         LEAD_STATUSES=LEAD_STATUSES, BUYING_POSSIBILITIES=BUYING_POSSIBILITIES, LEAD_QUALITIES=LEAD_QUALITIES,
         LEAD_SOURCES=LEAD_SOURCES, PRIORITIES=PRIORITIES, PRODUCT_STAGES=PRODUCT_STAGES,
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
-        COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(),
+        COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config,
     )
+
+
+def wa_templates_enabled():
+    org = g.get("org")
+    return bool(g.get("user") and org and org["wa_templates_allowed"] and org["wa_templates_on"]
+                and g.user["wa_templates_on"])
+
+
+def wa_config():
+    """What the WhatsApp buttons need in the browser: who is sending, and the active templates (if switched on)."""
+    templates = []
+    if wa_templates_enabled():
+        rows = query("""SELECT title, body, scope FROM wa_templates WHERE org_id = ? AND active = 1
+                        AND (scope = 'org' OR (scope = 'user' AND user_id = ?)) ORDER BY scope, sort, id""",
+                     (org_id(), g.user["id"]))
+        templates = [{"title": r["title"], "body": r["body"], "group": "Company" if r["scope"] == "org" else "My templates"}
+                     for r in rows]
+    return {"templates": templates, "my_name": g.user["name"], "org_name": g.org["name"],
+            "my_phone": g.user["contact_phone"] or g.user["phone"] or ""}
 
 
 @app.template_filter("wa_number")
@@ -346,6 +369,11 @@ def setup():
                 (oid, name, username, clean(request.form.get("phone")), clean(request.form.get("email")),
                  generate_password_hash(password), SUPER_ADMIN, ts)).lastrowid
             db.execute("UPDATE organizations SET created_by = ? WHERE id = ?", (uid, oid))
+            if not db.execute("SELECT 1 FROM wa_templates WHERE scope = 'default'").fetchone():
+                db.executemany("INSERT INTO wa_templates (org_id, scope, title, body, active, sort, created_by, created_at)"
+                               " VALUES (?, 'default', ?, ?, 1, ?, ?, ?)",
+                               [(oid, t, b, i, uid, ts) for i, (t, b) in enumerate(crm_db.DEFAULT_WA_TEMPLATES)])
+            crm_db.copy_default_templates(db, oid, uid, ts)
             db.commit()
             start_session(query("SELECT * FROM users WHERE id = ?", (uid,), one=True))
             flash("Super Admin account created. Add your agency's projects, or create client organizations.", "success")
@@ -435,6 +463,12 @@ def reset_password(token):
 @app.route("/account", methods=["GET", "POST"])
 @login_required
 def account():
+    if request.method == "POST" and request.form.get("form") == "profile":
+        execute("UPDATE users SET contact_phone = ?, wa_templates_on = ? WHERE id = ?",
+                (clean(request.form.get("contact_phone")), 1 if request.form.get("wa_templates_on") else 0,
+                 g.user["id"]))
+        flash("Saved.", "success")
+        return redirect(url_for("account"))
     if request.method == "POST":
         current, new = request.form.get("current_password") or "", request.form.get("new_password") or ""
         problem = password_problem(new)
@@ -596,15 +630,16 @@ def lead_list(params, extra_columns="", extra_args=()):
     sort = params.get("sort") if params.get("sort") in SORTABLE else "created"
     direction = "ASC" if params.get("dir") == "asc" else "DESC"
     total = scalar(f"SELECT COUNT(*) {LEAD_FROM} WHERE {where}", args)
-    pages = max(1, -(-total // PER_PAGE))
+    per = int(params["per"]) if str(params.get("per")) in {str(n) for n in PER_PAGE_CHOICES} else PER_PAGE
+    pages = max(1, -(-total // per))
     try:
         page = min(max(1, int(params.get("page") or 1)), pages)
     except ValueError:
         page = 1
     rows = query(f"SELECT {LEAD_COLUMNS}{extra_columns} {LEAD_FROM} WHERE {where} "
                  f"ORDER BY {SORTABLE[sort]} {direction}, l.id DESC LIMIT ? OFFSET ?",
-                 list(extra_args) + args + [PER_PAGE, (page - 1) * PER_PAGE])
-    return dict(leads=rows, total=total, page=page, pages=pages, sort=sort, direction=direction.lower())
+                 list(extra_args) + args + [per, (page - 1) * per])
+    return dict(leads=rows, total=total, page=page, pages=pages, sort=sort, direction=direction.lower(), per=per)
 
 
 def distinct_values(column):
@@ -1054,6 +1089,10 @@ def leads_export():
                           JOIN products pr ON pr.id = lp.product_id WHERE lp.lead_id = l.id) product_stages
                      {LEAD_FROM} WHERE {' AND '.join(clauses)}
                      ORDER BY {SORTABLE[sort]} {'ASC' if request.args.get('dir') == 'asc' else 'DESC'}""", args)
+    return leads_csv_response(rows)
+
+
+def leads_csv_response(rows):
     out = io.StringIO()
     writer = SafeCsvWriter(out)
     writer.writerow(["ID", "Project", "Project Code", "Customer Name", "Company", "Phone", "WhatsApp", "Email", "Place",
@@ -1273,13 +1312,169 @@ def followup_complete(fid):
     return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("lead_view", lid=f["lead_id"]))
 
 
+def _rows(db, sql, args):
+    cur = db.execute(sql, args)
+    names = [d[0] for d in cur.description]
+    return [dict(zip(names, r)) for r in cur.fetchall()]
+
+
+def purge_recycle_bin(db):
+    cutoff = (datetime.now() - timedelta(days=RECYCLE_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("DELETE FROM deleted_leads WHERE deleted_at < ?", (cutoff,))
+
+
+def move_to_recycle_bin(db, lead, ts):
+    """Keep a full copy of the lead (with products, follow-ups and history) for RECYCLE_DAYS, then delete it."""
+    lid = lead["id"]
+    data = {"lead": _rows(db, "SELECT * FROM leads WHERE id = ?", (lid,))[0],
+            "lead_products": _rows(db, "SELECT * FROM lead_products WHERE lead_id = ?", (lid,)),
+            "follow_ups": _rows(db, "SELECT * FROM follow_ups WHERE lead_id = ?", (lid,)),
+            "lead_activity": _rows(db, "SELECT * FROM lead_activity WHERE lead_id = ?", (lid,))}
+    db.execute("INSERT INTO deleted_leads (org_id, lead_id, customer_name, phone, project_name, deleted_by, deleted_at,"
+               " data) VALUES (?,?,?,?,?,?,?,?)",
+               (lead["org_id"], lid, lead["customer_name"], lead["phone"] or lead["whatsapp"], lead["project_name"],
+                g.user["id"], ts, json.dumps(data)))
+    db.execute("DELETE FROM leads WHERE id = ? AND org_id = ?", (lid, org_id()))
+
+
+def _insert_row(db, table, row):
+    cols = [r[1] for r in db.execute(f"PRAGMA table_info({table})")]
+    keys = [k for k in row if k in cols]
+    db.execute(f"INSERT INTO {table} ({', '.join(keys)}) VALUES ({', '.join('?' * len(keys))})",
+               [row[k] for k in keys])
+
+
+def safe_next(default):
+    nxt = request.form.get("next") or ""
+    return nxt if nxt.startswith("/") and not nxt.startswith("//") else default
+
+
 @app.route("/leads/<int:lid>/delete", methods=["POST"])
-@admin_required
+@login_required
 def lead_delete(lid):
-    lead = get_lead(lid)
-    execute("DELETE FROM leads WHERE id = ? AND org_id = ?", (lid, org_id()))
-    flash(f"Lead '{lead['customer_name']}' deleted.", "success")
-    return redirect(url_for("leads", project=lead["project_id"]))
+    lead = get_lead(lid)  # staff: only leads they created or are assigned to
+    db = get_db()
+    move_to_recycle_bin(db, lead, now())
+    purge_recycle_bin(db)
+    db.commit()
+    flash(f"Lead '{lead['customer_name']}' moved to the Recycle Bin.", "success")
+    nxt = safe_next(url_for("leads", project=lead["project_id"]))
+    return redirect(url_for("leads") if nxt.startswith(f"/leads/{lid}") else nxt)
+
+
+BULK_FIELDS = dict(QUICK_FIELDS, source=("Source", LEAD_SOURCES))
+
+
+@app.route("/leads/bulk", methods=["POST"])
+@login_required
+def leads_bulk():
+    """Apply one action to the leads ticked in a list. Only leads the user may see are touched."""
+    ids = int_list(request.form.getlist("ids"))
+    back = safe_next(url_for("leads"))
+    where, args = lead_scope()
+    leads = query(f"SELECT {LEAD_COLUMNS} {LEAD_FROM} WHERE {where} AND l.id IN ({','.join('?' * len(ids))})",
+                  args + ids) if ids else []
+    if not leads:
+        flash("Tick at least one lead first.", "error")
+        return redirect(back)
+    action = request.form.get("action")
+    db = get_db()
+    ts = now()
+    if action == "export":
+        return leads_csv_response(query(f"""SELECT {LEAD_COLUMNS},
+                       (SELECT GROUP_CONCAT(pr.name || ' [' || lp.stage || ']', '; ') FROM lead_products lp
+                          JOIN products pr ON pr.id = lp.product_id WHERE lp.lead_id = l.id) product_stages
+                     {LEAD_FROM} WHERE {where} AND l.id IN ({','.join('?' * len(ids))})
+                     ORDER BY l.created_at DESC""", args + ids))
+    if action == "delete":
+        for lead in leads:
+            move_to_recycle_bin(db, lead, ts)
+        purge_recycle_bin(db)
+        db.commit()
+        flash(f"{len(leads)} lead(s) moved to the Recycle Bin.", "success")
+        return redirect(back)
+    values = {}
+    for field, (label, options) in BULK_FIELDS.items():
+        v = request.form.get(field) or ""
+        if v in options:
+            values[field] = (label, v)
+    due = valid_date(request.form.get("next_follow_up"))
+    assignee = None
+    if is_admin() and request.form.get("assigned_to"):
+        assignee = query("SELECT id, name FROM users WHERE id = ? AND org_id = ? AND active = 1",
+                         (request.form.get("assigned_to", type=int), org_id()), one=True)
+    if not values and not due and not assignee:
+        flash("Choose at least one change to apply.", "error")
+        return redirect(back)
+    for lead in leads:
+        changes = []
+        for field, (label, v) in values.items():
+            if v != (lead[field] or ""):
+                db.execute(f"UPDATE leads SET {field} = ? WHERE id = ?", (v, lead["id"]))
+                changes.append(f"{label}: '{lead[field] or ''}' → '{v}'")
+        if assignee and lead["assigned_to"] != assignee["id"]:
+            db.execute("UPDATE leads SET assigned_to = ? WHERE id = ?", (assignee["id"], lead["id"]))
+            changes.append(f"Assigned to {assignee['name']}")
+        if due:
+            msg = schedule_follow_up(db, lead["id"], due, lead["next_follow_up"], ts)
+            if msg:
+                changes.append(msg)
+        if changes:
+            touch_lead(db, lead["id"], ts)
+            log_activity(lead["id"], "Bulk update: " + "; ".join(changes), commit=False)
+    db.commit()
+    flash(f"{len(leads)} lead(s) updated.", "success")
+    return redirect(back)
+
+
+@app.route("/leads/deleted")
+@admin_required
+def recycle_bin():
+    db = get_db()
+    purge_recycle_bin(db)
+    db.commit()
+    rows = query("""SELECT d.id, d.lead_id, d.customer_name, d.phone, d.project_name, d.deleted_at, u.name deleted_by_name
+                    FROM deleted_leads d JOIN users u ON u.id = d.deleted_by
+                    WHERE d.org_id = ? ORDER BY d.deleted_at DESC, d.id DESC""", (org_id(),))
+    return render_template("recycle_bin.html", rows=rows, days=RECYCLE_DAYS)
+
+
+@app.route("/leads/deleted/<int:did>/<action>", methods=["POST"])
+@admin_required
+def recycle_bin_action(did, action):
+    item = query("SELECT * FROM deleted_leads WHERE id = ? AND org_id = ?", (did, org_id()), one=True) or abort(404)
+    db = get_db()
+    if action == "purge":
+        db.execute("DELETE FROM deleted_leads WHERE id = ?", (did,))
+        db.commit()
+        flash(f"'{item['customer_name']}' permanently deleted.", "success")
+        return redirect(url_for("recycle_bin"))
+    if action != "restore":
+        abort(404)
+    data = json.loads(item["data"])
+    lead = data["lead"]
+    if lead.get("org_id") != org_id() or not db.execute(
+            "SELECT 1 FROM projects WHERE id = ? AND org_id = ?", (lead["project_id"], org_id())).fetchone():
+        flash("This lead's project no longer exists, so it can't be restored.", "error")
+        return redirect(url_for("recycle_bin"))
+    if db.execute("SELECT 1 FROM leads WHERE id = ?", (lead["id"],)).fetchone():
+        abort(409)
+    if lead.get("assigned_to") and not db.execute("SELECT 1 FROM users WHERE id = ? AND org_id = ?",
+                                                  (lead["assigned_to"], org_id())).fetchone():
+        lead["assigned_to"] = None
+    _insert_row(db, "leads", lead)
+    for lp in data["lead_products"]:
+        if db.execute("SELECT 1 FROM products WHERE id = ? AND org_id = ?", (lp["product_id"], org_id())).fetchone():
+            _insert_row(db, "lead_products", lp)
+    for f in data["follow_ups"]:
+        _insert_row(db, "follow_ups", f)
+    for a in data["lead_activity"]:
+        _insert_row(db, "lead_activity", a)
+    db.execute("DELETE FROM deleted_leads WHERE id = ?", (did,))
+    log_activity(lead["id"], "Restored from the Recycle Bin", commit=False)
+    db.commit()
+    flash(f"'{item['customer_name']}' restored.", "success")
+    return redirect(url_for("lead_view", lid=lead["id"]))
 
 
 CSV_ALIASES = {
@@ -1905,6 +2100,9 @@ def organization_settings():
         else:
             execute("UPDATE organizations SET name=?, contact_name=?, phone=?, email=?, address=?, updated_at=?"
                     " WHERE id = ?", (*data.values(), now(), org_id()))
+            if org["wa_templates_allowed"]:
+                execute("UPDATE organizations SET wa_templates_on = ? WHERE id = ?",
+                        (1 if request.form.get("wa_templates_on") else 0, org_id()))
             flash("Organization settings saved.", "success")
             return redirect(url_for("organization_settings"))
     counts = dict(users=scalar("SELECT COUNT(*) FROM users WHERE org_id = ?", (org_id(),)),
@@ -1914,6 +2112,84 @@ def organization_settings():
     access_log = query("""SELECT a.*, u.name user_name FROM audit_log a JOIN users u ON u.id = a.user_id
                           WHERE a.org_id = ? ORDER BY a.id DESC LIMIT 30""", (org_id(),))
     return render_template("organization.html", org=org, counts=counts, access_log=access_log)
+
+
+# ---------------------------------------------------------------- WhatsApp templates
+
+def editable_template(tid):
+    t = query("SELECT * FROM wa_templates WHERE id = ?", (tid,), one=True) or abort(404)
+    if t["scope"] == "user" and t["user_id"] == g.user["id"] and t["org_id"] == org_id():
+        return t
+    if t["scope"] == "org" and t["org_id"] == org_id() and is_admin():
+        return t
+    if t["scope"] == "default" and is_super() and not g.get("viewing"):
+        return t
+    abort(404)
+
+
+@app.route("/templates")
+@login_required
+def wa_templates():
+    def rows(sql, args):
+        return query(sql + " ORDER BY sort, id", args)
+    org_t = rows("SELECT * FROM wa_templates WHERE org_id = ? AND scope = 'org'", (org_id(),))
+    my_t = rows("SELECT * FROM wa_templates WHERE org_id = ? AND scope = 'user' AND user_id = ?", (org_id(), g.user["id"]))
+    default_t = rows("SELECT * FROM wa_templates WHERE scope = 'default'", ()) if is_super() and not g.get("viewing") else []
+    return render_template("wa_templates.html", org_t=org_t, my_t=my_t, default_t=default_t,
+                           enabled=wa_templates_enabled(), max_len=WA_TEMPLATE_MAX)
+
+
+@app.route("/templates/save", methods=["POST"])
+@login_required
+def wa_template_save():
+    title, body = clean(request.form.get("title"))[:60], (request.form.get("body") or "").strip()
+    if not title or not body:
+        flash("Template name and message are required.", "error")
+        return redirect(url_for("wa_templates"))
+    if len(body) > WA_TEMPLATE_MAX:
+        flash(f"Message is too long ({len(body)} characters). Keep it under {WA_TEMPLATE_MAX}.", "error")
+        return redirect(url_for("wa_templates"))
+    ts = now()
+    tid = request.form.get("id", type=int)
+    if tid:
+        editable_template(tid)
+        execute("UPDATE wa_templates SET title = ?, body = ?, updated_at = ? WHERE id = ?", (title, body, ts, tid))
+    else:
+        scope = request.form.get("scope")
+        if scope == "org" and not is_admin() or scope == "default" and not (is_super() and not g.get("viewing")):
+            abort(403)
+        if scope not in ("org", "user", "default"):
+            abort(400)
+        execute("INSERT INTO wa_templates (org_id, scope, user_id, title, body, active, sort, created_by, created_at)"
+                " VALUES (?,?,?,?,?, 1, ?, ?, ?)",
+                (org_id(), scope, g.user["id"] if scope == "user" else None, title, body,
+                 (scalar("SELECT MAX(sort) FROM wa_templates WHERE org_id = ?", (org_id(),)) or 0) + 1,
+                 g.user["id"], ts))
+    flash(f"Template '{title}' saved.", "success")
+    return redirect(url_for("wa_templates"))
+
+
+@app.route("/templates/<int:tid>/<action>", methods=["POST"])
+@login_required
+def wa_template_action(tid, action):
+    t = editable_template(tid)
+    if action == "toggle":
+        execute("UPDATE wa_templates SET active = ? WHERE id = ?", (0 if t["active"] else 1, tid))
+    elif action == "delete":
+        execute("DELETE FROM wa_templates WHERE id = ?", (tid,))
+        flash(f"Template '{t['title']}' deleted.", "success")
+    else:
+        abort(404)
+    return redirect(url_for("wa_templates"))
+
+
+@app.route("/leads/<int:lid>/wa-log", methods=["POST"])
+@login_required
+def lead_wa_log(lid):
+    get_lead(lid)
+    title = clean(request.form.get("template"))[:60] or "Hi"
+    log_activity(lid, f"WhatsApp opened with '{title}' message")
+    return ("", 204)
 
 
 # ---------------------------------------------------------------- super admin: organizations
@@ -1967,6 +2243,8 @@ def admin_org_new():
                              notes, created_by, created_at, updated_at) VALUES (?,?, 'client', 'Active', ?,?,?,?,?,?,?,?)""",
                           (data["name"], data["code"], data["contact_name"], data["phone"], data["email"],
                            data["address"], data["notes"], g.user["id"], ts, ts))
+            crm_db.copy_default_templates(get_db(), oid, g.user["id"], ts)
+            get_db().commit()
             uid, link, expires = create_user(oid, admin, request.form.get("onboarding"), request.form.get("password") or "")
             if link:
                 return render_template("password_link.html", user=admin, link=link, expires=expires,
@@ -1991,6 +2269,8 @@ def admin_org_edit(oid):
         else:
             execute("""UPDATE organizations SET name=?, code=?, contact_name=?, phone=?, email=?, address=?, notes=?,
                        updated_at=? WHERE id = ?""", (*data.values(), now(), oid))
+            execute("UPDATE organizations SET wa_templates_allowed = ? WHERE id = ?",
+                    (1 if request.form.get("wa_templates_allowed") else 0, oid))
             flash("Organization updated.", "success")
             return redirect(url_for("admin_orgs"))
     return render_template("admin_org_form.html", data=data, admin=None, org=org)

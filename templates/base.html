@@ -15,6 +15,7 @@
   <div class="orgname" title="Current organization">
     <span class="org-badge"><span class="org-initial">{{ (g.org.name or '?')[:1]|upper }}</span><span class="org-text">{{ g.org.name }}</span></span>{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
   </div>
+  <a class="wa-top" href="https://web.whatsapp.com/" data-wa-open title="Open WhatsApp (one tab, reused for every lead)">🟢 WhatsApp</a>
   <button class="menu-btn" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">☰</button>
   <div class="userbox">
     <a href="{{ url_for('account') }}" title="My account">{{ g.user.name }} <small>({{ ROLE_LABELS[g.user.role] }})</small></a>
@@ -32,10 +33,12 @@
   <a href="{{ url_for('product_leads') }}" class="{{ 'active' if ep in ('product_leads', 'product_lead_list') }}">Product-wise Leads</a>
   <a href="{{ url_for('followups') }}" class="{{ 'active' if ep == 'followups' }}">Follow-ups</a>
   <a href="{{ url_for('export_page') }}" class="{{ 'active' if ep.startswith('export') }}">Export</a>
+  <a href="{{ url_for('wa_templates') }}" class="{{ 'active' if ep.startswith('wa_template') }}">WhatsApp Templates</a>
   {% if is_admin() %}
   <a href="{{ url_for('reports') }}" class="{{ 'active' if ep == 'reports' }}">Reports</a>
   <a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>
   <a href="{{ url_for('organization_settings') }}" class="{{ 'active' if ep == 'organization_settings' }}">Organization Settings</a>
+  <a href="{{ url_for('recycle_bin') }}" class="{{ 'active' if ep == 'recycle_bin' }}">🗑 Recycle Bin</a>
   {% endif %}
   {% if is_super() %}
   <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') }}">Client Organizations</a>
@@ -58,20 +61,99 @@
 <footer class="site-footer">
   {{ brand.product }} · a product of {% if brand.website %}<a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.company }}</a>{% else %}{{ brand.company }}{% endif %}
 </footer>
+{% if g.user %}<script id="wa-config" type="application/json">{{ dict(wa_config(), csrf=csrf_token())|tojson }}</script>{% endif %}
 <script>
-// WhatsApp links: greet the lead by name. On a computer, reuse one WhatsApp Web tab instead of opening a new one each time.
-document.addEventListener("click", function (e) {
-  var a = e.target.closest && e.target.closest("a.wa");
-  if (!a) return;
-  var text = encodeURIComponent("Hi " + (a.dataset.name || "").trim() + ",\n");
+(function () {
+  var cfgEl = document.getElementById("wa-config");
+  var cfg = cfgEl ? JSON.parse(cfgEl.textContent) : {templates: []};
   var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  e.preventDefault();
-  if (mobile) {
-    window.location.href = "https://wa.me/" + a.dataset.wa + "?text=" + text;
-  } else {
-    window.open("https://web.whatsapp.com/send?phone=" + a.dataset.wa + "&text=" + text, "realview_whatsapp");
+  function mode() { try { return localStorage.getItem("wa_mode") || "web"; } catch (e) { return "web"; } }
+
+  // WhatsApp: phones open the app; computers reuse ONE WhatsApp Web tab per browser, or the desktop app.
+  function openWhatsApp(phone, text) {
+    var t = encodeURIComponent(text);
+    if (mobile) window.location.href = "https://wa.me/" + phone + "?text=" + t;
+    else if (mode() === "app") window.location.href = "whatsapp://send?phone=" + phone + "&text=" + t;
+    else window.open("https://web.whatsapp.com/send?phone=" + phone + "&text=" + t, "realview_whatsapp");
   }
-});
+  function logUse(lid, title) {
+    if (!lid || !cfg.csrf) return;
+    var fd = new FormData(); fd.append("csrf_token", cfg.csrf); fd.append("template", title);
+    try { fetch("/leads/" + lid + "/wa-log", {method: "POST", body: fd, keepalive: true, credentials: "same-origin"}); } catch (e) {}
+  }
+  function fill(body, d) {
+    var v = {name: d.name || "", company: d.company || "", product: d.product || "our products",
+             my_name: cfg.my_name || "", my_phone: cfg.my_phone || "", org_name: cfg.org_name || ""};
+    return body.replace(/\{(name|company|product|my_name|my_phone|org_name)\}/g, function (_, k) { return v[k]; });
+  }
+  function closeMenu() { var m = document.querySelector(".wa-menu-back"); if (m) m.remove(); }
+  function showMenu(a) {
+    closeMenu();
+    var back = document.createElement("div"); back.className = "wa-menu-back";
+    var box = document.createElement("div"); box.className = "wa-menu card";
+    var h = document.createElement("div"); h.className = "wa-menu-head"; h.textContent = "WhatsApp " + (a.dataset.name || "");
+    box.appendChild(h);
+    var items = [{title: "👋 Hi only", body: "Hi {name},\n", group: ""}].concat(cfg.templates);
+    var group = null;
+    items.forEach(function (t) {
+      if (t.group && t.group !== group) { group = t.group; var g = document.createElement("div"); g.className = "wa-menu-group"; g.textContent = group; box.appendChild(g); }
+      var b = document.createElement("button"); b.type = "button"; b.className = "wa-menu-item";
+      b.textContent = t.title;
+      b.addEventListener("click", function () {
+        closeMenu(); logUse(a.dataset.lid, t.title.replace("👋 ", "")); openWhatsApp(a.dataset.wa, fill(t.body, a.dataset));
+      });
+      box.appendChild(b);
+    });
+    var c = document.createElement("button"); c.type = "button"; c.className = "btn btn-sm wa-menu-cancel"; c.textContent = "Cancel";
+    c.addEventListener("click", closeMenu); box.appendChild(c);
+    back.appendChild(box);
+    back.addEventListener("click", function (e) { if (e.target === back) closeMenu(); });
+    document.body.appendChild(back);
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a.wa");
+    if (a) {
+      e.preventDefault();
+      if (cfg.templates && cfg.templates.length) showMenu(a);
+      else { logUse(a.dataset.lid, "Hi"); openWhatsApp(a.dataset.wa, "Hi " + (a.dataset.name || "").trim() + ",\n"); }
+      return;
+    }
+    var top = e.target.closest && e.target.closest("[data-wa-open]");
+    if (top) {
+      e.preventDefault();
+      if (mode() === "app" && !mobile) window.location.href = "whatsapp://";
+      else window.open("https://web.whatsapp.com/", "realview_whatsapp");
+    }
+  });
+  var modeSel = document.getElementById("wa-mode");
+  if (modeSel) {
+    modeSel.value = mode();
+    modeSel.addEventListener("change", function () { try { localStorage.setItem("wa_mode", modeSel.value); } catch (e) {} });
+  }
+
+  // Ticking leads in a list shows the bulk-action bar.
+  var bar = document.getElementById("bulk");
+  function refresh() {
+    if (!bar) return;
+    var ids = {};
+    document.querySelectorAll(".sel-one:checked").forEach(function (c) { ids[c.value] = 1; });
+    var n = Object.keys(ids).length;
+    bar.hidden = n === 0;
+    bar.querySelector(".bulk-count").textContent = n + " selected";
+  }
+  document.addEventListener("change", function (e) {
+    if (e.target.classList.contains("sel-all")) {
+      var scope = e.target.closest(".table-wrap, .lead-cards") || document;
+      scope.querySelectorAll(".sel-one").forEach(function (c) { c.checked = e.target.checked; });
+    }
+    if (e.target.classList.contains("sel-one") || e.target.classList.contains("sel-all")) refresh();
+  });
+  if (bar) bar.addEventListener("submit", function () {
+    // a lead ticked in both the table and its phone card is sent once
+    var seen = {};
+    document.querySelectorAll(".sel-one:checked").forEach(function (c) { if (seen[c.value]) c.checked = false; seen[c.value] = 1; });
+  });
+})();
 </script>
 </body>
 </html>

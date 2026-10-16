@@ -1,0 +1,50 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}WhatsApp Templates{% endblock %}
+{% macro tlist(items, scope, can_edit, heading, note) %}
+<section class="card">
+  <h2>{{ heading }}</h2>
+  <p class="muted small">{{ note }}</p>
+  {% for t in items %}
+  <details class="tpl {{ '' if t.active else 'off' }}">
+    <summary><b>{{ t.title }}</b> {% if not t.active %}<span class="badge b-none">Off</span>{% endif %}
+      <span class="muted small tpl-preview">{{ t.body[:90] }}{{ '…' if t.body|length > 90 }}</span></summary>
+    {% if can_edit and not viewing %}
+    <form method="post" action="{{ url_for('wa_template_save') }}" class="form">{{ csrf() }}<input type="hidden" name="id" value="{{ t.id }}">
+      <label>Name<input name="title" value="{{ t.title }}" maxlength="60" required></label>
+      <label>Message<textarea name="body" rows="6" maxlength="{{ max_len }}" required>{{ t.body }}</textarea></label>
+      <div class="actions">
+        <button class="btn btn-primary btn-sm">Save</button>
+        <button class="btn btn-sm" formaction="{{ url_for('wa_template_action', tid=t.id, action='toggle') }}">{{ 'Turn off' if t.active else 'Turn on' }}</button>
+        <button class="btn btn-sm btn-danger" formaction="{{ url_for('wa_template_action', tid=t.id, action='delete') }}" onclick="return confirm('Delete this template?')">Delete</button>
+      </div>
+    </form>
+    {% else %}<pre class="tpl-body">{{ t.body }}</pre>{% endif %}
+  </details>
+  {% else %}<p class="muted">No templates yet.</p>{% endfor %}
+  {% if can_edit and not viewing %}
+  <details class="tpl tpl-new"><summary>+ New template</summary>
+    <form method="post" action="{{ url_for('wa_template_save') }}" class="form">{{ csrf() }}<input type="hidden" name="scope" value="{{ scope }}">
+      <label>Name<input name="title" maxlength="60" required placeholder="e.g. Price list"></label>
+      <label>Message<textarea name="body" rows="6" maxlength="{{ max_len }}" required placeholder="Hi {name}, …"></textarea></label>
+      <button class="btn btn-primary btn-sm">Add template</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+{% endmacro %}
+{% block content %}
+<h1>WhatsApp Templates</h1>
+{% if not g.org.wa_templates_allowed %}<div class="flash flash-warning">WhatsApp templates are not included in your plan. WhatsApp buttons send "Hi &lt;name&gt;,". Contact {{ brand.company }} to add them.</div>
+{% elif not g.org.wa_templates_on %}<div class="flash flash-warning">Templates are switched off for this organization{% if is_admin() %} (Organization Settings){% endif %}. WhatsApp buttons send "Hi &lt;name&gt;,".</div>
+{% elif not g.user.wa_templates_on %}<div class="flash flash-warning">You switched templates off for yourself. Turn them on in <a href="{{ url_for('account') }}">My Account</a>.</div>{% endif %}
+<div class="card">
+  <p>When you press a lead's <b>WhatsApp</b> button, you choose a message. These words are filled in automatically:</p>
+  <p class="tags"><code>{name}</code> customer · <code>{company}</code> customer's company · <code>{product}</code> product of interest · <code>{my_name}</code> your name · <code>{my_phone}</code> your contact number · <code>{org_name}</code> {{ g.org.name }}</p>
+  <p class="muted small">Messages up to {{ max_len }} characters. Templates are text only; attach photos or PDFs in WhatsApp before sending.</p>
+</div>
+{{ tlist(org_t, 'org', is_admin(), 'Company templates', 'Shared with everyone in ' ~ g.org.name ~ '. Only admins can change them. Templates that are turned off are hidden from the WhatsApp menu.') }}
+{{ tlist(my_t, 'user', True, 'My templates', 'Only you see these.') }}
+{% if default_t %}
+{{ tlist(default_t, 'default', True, 'Default templates for new clients (Super Admin)', 'Every new client organization gets its own copy of these. Changing them does not affect existing clients.') }}
+{% endif %}
+{% endblock %}

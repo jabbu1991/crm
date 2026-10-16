@@ -19,7 +19,7 @@
 {% if not projects_all %}
 <div class="card empty"><h2>No project available</h2><p>Leads are saved under a project / campaign. {% if is_admin() %}<a href="{{ url_for('project_new') }}">Create a project first →</a>{% else %}Ask your administrator to create one or assign you to a project.{% endif %}</p></div>
 {% else %}
-<form method="post" class="card form lead-form">
+<form method="post" class="card form lead-form" autocomplete="off">
   {{ csrf() }}
   <fieldset>
     <legend>Project</legend>
@@ -41,20 +41,20 @@
   <fieldset>
     <legend>Customer details</legend>
     <div class="row-2">
-      <label>Customer name *<input name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
-      <label>Company / business name<input name="company_name" value="{{ data.company_name or '' }}" placeholder="The firm this person represents"></label>
+      <label>Customer name *<input autocomplete="off" name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
+      <label>Company / business name<input autocomplete="off" name="company_name" value="{{ data.company_name or '' }}" placeholder="The firm this person represents"></label>
     </div>
     <div class="row-3">
-      <label>Phone number<input type="tel" name="phone" id="phone" value="{{ data.phone or '' }}"></label>
+      <label>Phone number<input autocomplete="off" type="tel" name="phone" id="phone" value="{{ data.phone or '' }}"></label>
       <label>WhatsApp number
-        <input type="tel" name="whatsapp" id="whatsapp" value="{{ data.whatsapp or '' }}">
+        <input autocomplete="off" type="tel" name="whatsapp" id="whatsapp" value="{{ data.whatsapp or '' }}">
         <span class="check"><input type="checkbox" onclick="if(this.checked)document.getElementById('whatsapp').value=document.getElementById('phone').value"> Same as phone</span>
       </label>
-      <label>Email address<input type="email" name="email" value="{{ data.email or '' }}"></label>
+      <label>Email address<input autocomplete="off" type="email" name="email" value="{{ data.email or '' }}"></label>
     </div>
     <div class="row-4">
-      <label>Place / city<input name="place" list="places" value="{{ data.place or '' }}"></label>
-      <label>District<input name="district" list="districts" value="{{ data.district or '' }}"></label>
+      <label>Place / city<input autocomplete="off" name="place" list="places" value="{{ data.place or '' }}"></label>
+      <label>District<input autocomplete="off" name="district" list="districts" value="{{ data.district or '' }}"></label>
       {% set is_indian = (data.state in INDIAN_STATES) or not data.state %}
       <label>State
         <select name="state" id="state" onchange="document.getElementById('state_other_wrap').style.display=this.value=='__other__'?'block':'none'">
@@ -62,9 +62,9 @@
           {% for s in INDIAN_STATES %}<option {{ 'selected' if data.state == s }}>{{ s }}</option>{% endfor %}
           <option value="__other__" {{ 'selected' if not is_indian }}>Other / outside India…</option>
         </select>
-        <span id="state_other_wrap" style="display: {{ 'none' if is_indian else 'block' }}"><input name="state_other" placeholder="State / province / emirate" value="{{ '' if is_indian else data.state }}"></span>
+        <span id="state_other_wrap" style="display: {{ 'none' if is_indian else 'block' }}"><input autocomplete="off" name="state_other" placeholder="State / province / emirate" value="{{ '' if is_indian else data.state }}"></span>
       </label>
-      <label>Country<input name="country" list="countries" value="{{ data.country or 'India' }}"></label>
+      <label>Country<input autocomplete="off" name="country" list="countries" value="{{ data.country or 'India' }}"></label>
     </div>
     <datalist id="places">{% for p in places %}<option value="{{ p }}">{% endfor %}</datalist>
     <datalist id="districts">{% for p in districts %}<option value="{{ p }}">{% endfor %}</datalist>
@@ -77,7 +77,7 @@
     <div class="checks">{% for p in products_all %}<label class="check"><input type="checkbox" name="product_ids" value="{{ p.id }}" {{ 'checked' if p.id in data.product_ids }}> {{ p.name }}{% if p.code %} <small class="muted">{{ p.code }}</small>{% endif %}</label>{% endfor %}</div>
     <p class="muted small">Ticking a product records <b>interest only</b>. Mark it as Ordered or Purchased later on the lead page.</p>
     {% else %}<p class="muted">No products yet.{% if is_admin() %} <a href="{{ url_for('product_new') }}">Add products</a>.{% endif %}</p>{% endif %}
-    <label>Requirement description<textarea name="requirement" rows="2" placeholder="Model, size, budget, timeline…">{{ data.requirement or '' }}</textarea></label>
+    <label>Requirement description<textarea autocomplete="off" name="requirement" rows="2" placeholder="Model, size, budget, timeline…">{{ data.requirement or '' }}</textarea></label>
   </fieldset>
 
   <fieldset>
@@ -92,7 +92,7 @@
       <label>Lead source<select name="source"><option value="">—</option>{% for s in LEAD_SOURCES %}<option {{ 'selected' if data.source == s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Next follow-up date<input type="date" name="next_follow_up" value="{{ data.next_follow_up or '' }}"></label>
     </div>
-    <label>Notes / remarks<textarea name="notes" rows="3">{{ data.notes or '' }}</textarea></label>
+    <label>Notes / remarks<textarea autocomplete="off" name="notes" rows="3">{{ data.notes or '' }}</textarea></label>
   </fieldset>
 
   {% if duplicates or hidden_duplicates %}<label class="check warn"><input type="checkbox" name="confirm_duplicate" value="1"> Save anyway (this is a separate enquiry)</label>{% endif %}

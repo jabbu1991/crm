@@ -19,5 +19,5 @@
 
 {{ lead_filter_form(params, dict(projects_all=projects_all, products_all=products_all, staff=staff, states=states, places=places, districts=districts), url_for('leads')) }}
 {{ lead_table(leads, params, sort, direction, 'leads', show_project=not project) }}
-{{ pager(page, pages, total, 'leads', params) }}
+{{ pager(page, pages, total, 'leads', params, per=per) }}
 {% endblock %}

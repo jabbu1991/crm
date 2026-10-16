@@ -1,0 +1,23 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Recycle Bin{% endblock %}
+{% block content %}
+<h1>🗑 Recycle Bin <small class="muted">({{ rows|length }})</small></h1>
+<p class="muted">Deleted leads stay here for {{ days }} days with their products, follow-ups and history, then they are removed for good.</p>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Customer</th><th>Phone</th><th>Project</th><th>Deleted by</th><th>Deleted on</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><b>{{ r.customer_name }}</b></td><td>{{ r.phone or '' }}</td><td>{{ r.project_name or '' }}</td>
+      <td>{{ r.deleted_by_name }}</td><td class="nowrap">{{ r.deleted_at }}</td>
+      <td class="nowrap">{% if not viewing %}
+        <form method="post" action="{{ url_for('recycle_bin_action', did=r.id, action='restore') }}" class="inline-form">{{ csrf() }}<button class="btn btn-sm btn-primary">Restore</button></form>
+        <form method="post" action="{{ url_for('recycle_bin_action', did=r.id, action='purge') }}" class="inline-form" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete {{ r.customer_name }} permanently? This cannot be undone.">{{ csrf() }}<button class="btn btn-sm btn-danger">Delete forever</button></form>
+      {% endif %}</td>
+    </tr>
+  {% else %}<tr><td colspan="6" class="muted center">The Recycle Bin is empty.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

@@ -4,6 +4,7 @@ Run:  python -m pytest -q
 """
 import io
 import os
+import json
 import re
 import sqlite3
 import sys
@@ -148,8 +149,11 @@ def test_staff_cannot_see_other_staff_leads(world):
     # staff can export, but only their own leads
     exported = w["a_s1"].get("/leads/export").get_data(as_text=True)
     assert "Lead of S1" in exported and "Lead of S2" not in exported
-    # staff can delete nothing
-    assert w["a_s1"].post(f"/leads/{l1}/delete").status_code == 403
+    # staff can delete their own leads (to the Recycle Bin) but not another staff member's
+    assert w["a_s1"].post(f"/leads/{l2}/delete").status_code == 404
+    w["a_s1"].post(f"/leads/{l1}/delete")
+    assert w["a_s1"].get(f"/leads/{l1}").status_code == 404
+    assert w["a_s1"].get("/leads/deleted").status_code == 403  # only admins open the Recycle Bin
 
 
 def test_org_admin_sees_all_staff_leads_and_filters(world):
@@ -419,9 +423,12 @@ def test_pagination(world):
             " created_at, updated_at) VALUES (?,?,?,?, 'Kerala', 'New', ?, ?, '2026-01-01 10:00:00', '2026-01-01 10:00:00')",
             [(w["org_a"], w["proj_a"], f"Bulk {i:03d}", f"9{i:09d}", uid, uid) for i in range(120)])
     p1 = w["a_s1"].get("/leads?sort=name&dir=asc").get_data(as_text=True)
-    p3 = w["a_s1"].get("/leads?sort=name&dir=asc&page=3").get_data(as_text=True)
-    assert len(lead_ids(p1)) == 50 and len(lead_ids(p3)) == 20
-    assert "Bulk 000" in p1 and "Bulk 119" in p3 and "Page 1 of 3" in p1
+    p8 = w["a_s1"].get("/leads?sort=name&dir=asc&page=8").get_data(as_text=True)
+    assert len(lead_ids(p1)) == 15 and len(lead_ids(p8)) == 15 and "Page 1 of 8" in p1
+    assert "Bulk 000" in p1 and "Bulk 119" in p8
+    p3 = w["a_s1"].get("/leads?sort=name&dir=asc&per=50&page=3").get_data(as_text=True)
+    assert len(lead_ids(p3)) == 20 and "Page 3 of 3" in p3 and "Bulk 119" in p3
+    assert len(lead_ids(w["a_s1"].get("/leads?per=999").get_data(as_text=True))) == 15  # unknown size: default
     assert "Bulk 000" in w["a_s1"].get("/states/view?state=Kerala&sort=name&dir=asc").get_data(as_text=True)
 
 
@@ -736,3 +743,98 @@ def test_company_name_quotation_youtube_and_whatsapp_link(world):
     w["a_admin"].post("/projects/new", {"name": "No End", "status": "Active", "start_date": "2026-10-01"})
     with w["db"]() as conn:
         assert conn.execute("SELECT end_date FROM projects WHERE name = 'No End'").fetchone()[0] in ("", None)
+
+
+
+def test_bulk_actions_recycle_bin_and_restore(world):
+    w = world
+    a = add_lead(w["a_s1"], w["proj_a"], "Bulk A", "7100000001")
+    b = add_lead(w["a_s1"], w["proj_a"], "Bulk B", "7100000002")
+    other = add_lead(w["a_s2"], w["proj_a"], "Other Staff", "7100000003")
+    w["a_s1"].post(f"/leads/{a}/followups", {"due_date": "2026-11-01", "note": "call back"})
+    # staff bulk update touches only their own leads, even if another id is sent
+    w["a_s1"].post("/leads/bulk", {"ids": [str(a), str(b), str(other)], "action": "update", "status": "Quotation",
+                                   "lead_quality": "Hot", "source": "YouTube", "next_follow_up": "2026-12-01",
+                                   "next": "/leads"})
+    with w["db"]() as conn:
+        rows = dict((r[0], r[1:]) for r in conn.execute(
+            "SELECT id, status, lead_quality, source, next_follow_up FROM leads WHERE id IN (?,?,?)", (a, b, other)))
+        hist = [h for (h,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (b,))]
+    assert rows[a] == ("Quotation", "Hot", "YouTube", "2026-12-01") and rows[b][0] == "Quotation"
+    assert rows[other][0] == "New" and any(h.startswith("Bulk update:") for h in hist)
+    # admin bulk-assigns; staff cannot assign
+    w["a_s1"].post("/leads/bulk", {"ids": [str(b)], "action": "update", "assigned_to": str(w["uid"]("a_staff2"))})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT assigned_to FROM leads WHERE id = ?", (b,)).fetchone()[0] == w["uid"]("a_staff1")
+    w["a_admin"].post("/leads/bulk", {"ids": [str(b)], "action": "update", "assigned_to": str(w["uid"]("a_staff2"))})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT assigned_to FROM leads WHERE id = ?", (b,)).fetchone()[0] == w["uid"]("a_staff2")
+    # export selected
+    csv_text = w["a_s1"].post("/leads/bulk", {"ids": [str(a)], "action": "export"}).get_data(as_text=True)
+    assert "Bulk A" in csv_text and "Bulk B" not in csv_text
+    # bulk delete goes to the Recycle Bin with products, follow-ups and history
+    w["a_s1"].post("/leads/bulk", {"ids": [str(a)], "action": "delete", "next": "/leads"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM leads WHERE id = ?", (a,)).fetchone()[0] == 0
+        did = conn.execute("SELECT id FROM deleted_leads WHERE lead_id = ?", (a,)).fetchone()[0]
+    bin_page = w["a_admin"].get("/leads/deleted").get_data(as_text=True)
+    assert "Bulk A" in bin_page and "A Staff 1" in bin_page or "Bulk A" in bin_page
+    assert w["b_admin"].post(f"/leads/deleted/{did}/restore").status_code == 404  # other organization
+    w["a_admin"].post(f"/leads/deleted/{did}/restore")
+    with w["db"]() as conn:
+        row = conn.execute("SELECT customer_name, entered_by, status FROM leads WHERE id = ?", (a,)).fetchone()
+        fu = conn.execute("SELECT COUNT(*) FROM follow_ups WHERE lead_id = ?", (a,)).fetchone()[0]
+        hist = [h for (h,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (a,))]
+        assert conn.execute("SELECT COUNT(*) FROM deleted_leads").fetchone()[0] == 0
+    assert row == ("Bulk A", w["uid"]("a_staff1"), "Quotation") and fu >= 1
+    assert "Restored from the Recycle Bin" in hist and any(h.startswith("Bulk update:") for h in hist)
+    # permanent delete, and items older than 30 days are purged
+    w["a_admin"].post(f"/leads/{a}/delete")
+    with w["db"]() as conn:
+        conn.execute("UPDATE deleted_leads SET deleted_at = '2000-01-01 00:00:00'")
+    assert "Bulk A" not in w["a_admin"].get("/leads/deleted").get_data(as_text=True)
+
+
+def test_whatsapp_templates_and_switches(world):
+    w = world
+    lid = add_lead(w["a_s1"], w["proj_a"], "Tara", "9847000001", extra={"whatsapp": "9847000001", "company_name": "Tara Co"})
+    page = w["a_s1"].get("/leads").get_data(as_text=True)
+    cfg = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>', page, re.S).group(1))
+    titles = [t["title"] for t in cfg["templates"]]
+    assert "Welcome" in titles and "Quotation" in titles and 'data-company="Tara Co"' in page
+    # admin edits a company template; staff cannot
+    with w["db"]() as conn:
+        tid = conn.execute("SELECT id FROM wa_templates WHERE org_id = ? AND scope = 'org' AND title = 'Quotation'",
+                           (w["org_a"],)).fetchone()[0]
+    assert w["a_s1"].post("/templates/save", {"id": tid, "title": "X", "body": "Y"}).status_code == 404
+    assert w["b_admin"].post("/templates/save", {"id": tid, "title": "X", "body": "Y"}).status_code == 404
+    w["a_admin"].post(f"/templates/{tid}/toggle")
+    # staff adds a personal template, visible only to them
+    w["a_s1"].post("/templates/save", {"scope": "user", "title": "Demo request", "body": "Hi {name}, demo?"})
+    cfg1 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
+                                w["a_s1"].get("/leads").get_data(as_text=True), re.S).group(1))
+    cfg2 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
+                                w["a_s2"].get("/leads").get_data(as_text=True), re.S).group(1))
+    assert "Demo request" in [t["title"] for t in cfg1["templates"]] and "Quotation" not in [t["title"] for t in cfg1["templates"]]
+    assert "Demo request" not in [t["title"] for t in cfg2["templates"]]
+    # user switch, org switch and super admin switch each turn templates off
+    w["a_s1"].post("/account", {"form": "profile", "contact_phone": "98470 11111"})
+    cfg1 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
+                                w["a_s1"].get("/leads").get_data(as_text=True), re.S).group(1))
+    assert cfg1["templates"] == [] and cfg1["my_phone"] == "98470 11111"
+    w["a_admin"].post("/organization", {"name": "Org A"})
+    cfg2 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
+                                w["a_s2"].get("/leads").get_data(as_text=True), re.S).group(1))
+    assert cfg2["templates"] == []
+    # logging which message was opened
+    w["a_s1"].post(f"/leads/{lid}/wa-log", {"template": "Welcome"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM lead_activity WHERE lead_id = ? AND action LIKE 'WhatsApp opened%'",
+                            (lid,)).fetchone()[0] == 1
+    # a new client gets its own copy of the default templates
+    w["sup"].post("/admin/organizations/new", {"name": "Org C", "code": "ORGC", "admin_name": "C Admin",
+                                               "admin_username": "c_admin", "onboarding": "password",
+                                               "password": "Passw0rd!x"})
+    with w["db"]() as conn:
+        oc = conn.execute("SELECT id FROM organizations WHERE code = 'ORGC'").fetchone()[0]
+        assert conn.execute("SELECT COUNT(*) FROM wa_templates WHERE org_id = ? AND scope = 'org'", (oc,)).fetchone()[0] == 10

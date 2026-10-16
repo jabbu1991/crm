@@ -17,6 +17,7 @@
     </div>
     <label>Address<textarea name="address" rows="2">{{ data.address or '' }}</textarea></label>
     <label>Internal notes<textarea name="notes" rows="2">{{ data.notes or '' }}</textarea></label>
+    {% if org %}<label class="check"><input type="checkbox" name="wa_templates_allowed" value="1" {{ 'checked' if org.wa_templates_allowed }}> WhatsApp templates included in this client's plan</label>{% endif %}
   </fieldset>
   {% if not org %}
   <fieldset>
