@@ -5,21 +5,26 @@
   <h2>{{ heading }}</h2>
   <p class="muted small">{{ note }}</p>
   {% for t in items %}
-  <details class="tpl {{ '' if t.active else 'off' }}">
-    <summary><b>{{ t.title }}</b> {% if not t.active %}<span class="badge b-none">Off</span>{% endif %}
-      <span class="muted small tpl-preview">{{ t.body[:90] }}{{ '…' if t.body|length > 90 }}</span></summary>
+  <div class="tpl {{ '' if t.active else 'off' }}">
+    <div class="tpl-row">
+      <b class="tpl-title">{{ t.title }}</b>
+      {% if can_edit and not viewing %}
+      <form method="post" action="{{ url_for('wa_template_action', tid=t.id, action='toggle') }}" class="inline-form">{{ csrf() }}
+        <button class="switch {{ 'on' if t.active }}" title="{{ 'Turn off' if t.active else 'Turn on' }}">{{ '🟢 ON' if t.active else '⚪ OFF' }}</button></form>
+      <button type="button" class="btn btn-sm" onclick="this.closest('.tpl').classList.toggle('editing')">✏️ Edit</button>
+      <form method="post" action="{{ url_for('wa_template_action', tid=t.id, action='delete') }}" class="inline-form" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete the template '{{ t.title }}'?">{{ csrf() }}<button class="btn btn-sm btn-danger" title="Delete">🗑</button></form>
+      {% else %}<span class="badge {{ 'b-active' if t.active else 'b-none' }}">{{ 'ON' if t.active else 'OFF' }}</span>{% endif %}
+    </div>
+    <div class="tpl-body">{{ t.body }}</div>
     {% if can_edit and not viewing %}
-    <form method="post" action="{{ url_for('wa_template_save') }}" class="form">{{ csrf() }}<input type="hidden" name="id" value="{{ t.id }}">
+    <form method="post" action="{{ url_for('wa_template_save') }}" class="form tpl-edit">{{ csrf() }}<input type="hidden" name="id" value="{{ t.id }}">
       <label>Name<input name="title" value="{{ t.title }}" maxlength="60" required></label>
       <label>Message<textarea name="body" rows="6" maxlength="{{ max_len }}" required>{{ t.body }}</textarea></label>
-      <div class="actions">
-        <button class="btn btn-primary btn-sm">Save</button>
-        <button class="btn btn-sm" formaction="{{ url_for('wa_template_action', tid=t.id, action='toggle') }}">{{ 'Turn off' if t.active else 'Turn on' }}</button>
-        <button class="btn btn-sm btn-danger" formaction="{{ url_for('wa_template_action', tid=t.id, action='delete') }}" onclick="return confirm('Delete this template?')">Delete</button>
-      </div>
+      <div class="actions"><button class="btn btn-primary btn-sm">Save</button>
+        <button type="button" class="btn btn-sm" onclick="this.closest('.tpl').classList.remove('editing')">Cancel</button></div>
     </form>
-    {% else %}<pre class="tpl-body">{{ t.body }}</pre>{% endif %}
-  </details>
+    {% endif %}
+  </div>
   {% else %}<p class="muted">No templates yet.</p>{% endfor %}
   {% if can_edit and not viewing %}
   <details class="tpl tpl-new"><summary>+ New template</summary>
@@ -40,9 +45,9 @@
 <div class="card">
   <p>When you press a lead's <b>WhatsApp</b> button, you choose a message. These words are filled in automatically:</p>
   <p class="tags"><code>{name}</code> customer · <code>{company}</code> customer's company · <code>{product}</code> product of interest · <code>{my_name}</code> your name · <code>{my_phone}</code> your contact number · <code>{org_name}</code> {{ g.org.name }}</p>
-  <p class="muted small">Messages up to {{ max_len }} characters. Templates are text only; attach photos or PDFs in WhatsApp before sending.</p>
+  <p class="muted small"><b>How sending works:</b> no template ON → the WhatsApp button sends "Hi &lt;name&gt;," in one click · one template ON → that one is sent in one click · several ON → you choose which (with "Hi only" at the bottom).<br>Messages up to {{ max_len }} characters. Templates are text only; attach photos or PDFs in WhatsApp before sending.</p>
 </div>
-{{ tlist(org_t, 'org', is_admin(), 'Company templates', 'Shared with everyone in ' ~ g.org.name ~ '. Only admins can change them. Templates that are turned off are hidden from the WhatsApp menu.') }}
+{{ tlist(org_t, 'org', is_admin(), 'Company templates', 'Shared with everyone in ' ~ g.org.name ~ '. Only admins can change them. Only templates that are ON are used.') }}
 {{ tlist(my_t, 'user', True, 'My templates', 'Only you see these.') }}
 {% if default_t %}
 {{ tlist(default_t, 'default', True, 'Default templates for new clients (Super Admin)', 'Every new client organization gets its own copy of these. Changing them does not affect existing clients.') }}

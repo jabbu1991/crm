@@ -226,9 +226,7 @@ select.quick.b-none { background: #fff; border-color: var(--border); color: var(
 .org-text { font-weight: 800; font-size: 17px; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(90deg, #ffffff, #67e8f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
 @media (max-width: 900px) { .org-text { font-size: 15px; } .org-initial { width: 26px; height: 26px; font-size: 13px; } }
 
-/* WhatsApp button in the top bar and the template menu */
-.wa-top { color: #fff; background: #16a34a; padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; text-decoration: none; }
-.wa-top:hover { background: #15803d; color: #fff; }
+/* WhatsApp template menu */
 .wa-menu-back { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .wa-menu { width: 100%; max-width: 380px; max-height: 80vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; padding: 16px; }
 .wa-menu-head { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
@@ -251,9 +249,14 @@ th.sel, td.sel { width: 28px; text-align: center; }
 /* Templates page */
 .tpl { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
 .tpl.off { opacity: .6; }
-.tpl summary { cursor: pointer; }
-.tpl-preview { display: block; margin-top: 2px; }
-.tpl-body { white-space: pre-wrap; font: inherit; background: #f9fafb; padding: 10px; border-radius: 8px; }
+.tpl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tpl-title { flex: 1 1 160px; }
+.tpl-body { white-space: pre-wrap; color: #4b5563; font-size: 14px; background: #f9fafb; padding: 8px 10px; border-radius: 8px; margin-top: 8px; }
+.tpl-edit { display: none; margin-top: 8px; }
+.tpl.editing .tpl-edit { display: flex; }
+.tpl.editing .tpl-body { display: none; }
+.switch { border: 1px solid #d1d5db; background: #f3f4f6; border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #6b7280; }
+.switch.on { background: #dcfce7; border-color: #86efac; color: #166534; }
 .tpl-new summary { color: #4f46e5; font-weight: 600; }
 .tags code { background: #eef2ff; padding: 1px 6px; border-radius: 6px; }
 
@@ -275,7 +278,6 @@ th.sel, td.sel { width: 28px; text-align: center; }
   .filters.show-more .filters-more { display: flex; flex-wrap: wrap; gap: 8px; }
   .filters-more > * { flex: 1 1 140px; }
   .bulk-bar { top: 0; }
-  .wa-top { display: none; }
   .quicksort { overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; }
 }
 @media (min-width: 761px) { .filters-more { display: contents; } }

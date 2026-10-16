@@ -15,7 +15,6 @@
   <div class="orgname" title="Current organization">
     <span class="org-badge"><span class="org-initial">{{ (g.org.name or '?')[:1]|upper }}</span><span class="org-text">{{ g.org.name }}</span></span>{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
   </div>
-  <a class="wa-top" href="https://web.whatsapp.com/" data-wa-open title="Open WhatsApp (one tab, reused for every lead)">🟢 WhatsApp</a>
   <button class="menu-btn" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">☰</button>
   <div class="userbox">
     <a href="{{ url_for('account') }}" title="My account">{{ g.user.name }} <small>({{ ROLE_LABELS[g.user.role] }})</small></a>
@@ -67,14 +66,25 @@
   var cfgEl = document.getElementById("wa-config");
   var cfg = cfgEl ? JSON.parse(cfgEl.textContent) : {templates: []};
   var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  function mode() { try { return localStorage.getItem("wa_mode") || "web"; } catch (e) { return "web"; } }
+  function mode() { try { return localStorage.getItem("wa_mode") || ""; } catch (e) { return ""; } }
+  function setMode(m) { try { localStorage.setItem("wa_mode", m); } catch (e) {} }
 
-  // WhatsApp: phones open the app; computers reuse ONE WhatsApp Web tab per browser, or the desktop app.
+  // WhatsApp: phones open the app. Computers ask once (desktop app or browser) and remember it in this browser.
   function openWhatsApp(phone, text) {
     var t = encodeURIComponent(text);
-    if (mobile) window.location.href = "https://wa.me/" + phone + "?text=" + t;
-    else if (mode() === "app") window.location.href = "whatsapp://send?phone=" + phone + "&text=" + t;
-    else window.open("https://web.whatsapp.com/send?phone=" + phone + "&text=" + t, "realview_whatsapp");
+    if (mobile) { window.location.href = "https://wa.me/" + phone + "?text=" + t; return; }
+    if (!mode()) { askMode(function () { openWhatsApp(phone, text); }); return; }
+    if (mode() === "app") window.location.href = "whatsapp://send?phone=" + phone + "&text=" + t;
+    else window.open("https://web.whatsapp.com/send?phone=" + phone + "&text=" + t, "_blank");
+  }
+  function askMode(then) {
+    var box = popup("Open WhatsApp in");
+    [["app", "💻 WhatsApp app"], ["web", "🌐 Browser (WhatsApp Web)"]].forEach(function (o) {
+      addItem(box, o[1], function () { setMode(o[0]); closeMenu(); then(); });
+    });
+    var n = document.createElement("p"); n.className = "muted small";
+    n.textContent = "Remembered on this computer. Change it any time in My Account.";
+    box.appendChild(n);
   }
   function logUse(lid, title) {
     if (!lid || !cfg.csrf) return;
@@ -87,48 +97,46 @@
     return body.replace(/\{(name|company|product|my_name|my_phone|org_name)\}/g, function (_, k) { return v[k]; });
   }
   function closeMenu() { var m = document.querySelector(".wa-menu-back"); if (m) m.remove(); }
-  function showMenu(a) {
+  function popup(title) {
     closeMenu();
     var back = document.createElement("div"); back.className = "wa-menu-back";
     var box = document.createElement("div"); box.className = "wa-menu card";
-    var h = document.createElement("div"); h.className = "wa-menu-head"; h.textContent = "WhatsApp " + (a.dataset.name || "");
-    box.appendChild(h);
-    var items = [{title: "👋 Hi only", body: "Hi {name},\n", group: ""}].concat(cfg.templates);
-    var group = null;
-    items.forEach(function (t) {
-      if (t.group && t.group !== group) { group = t.group; var g = document.createElement("div"); g.className = "wa-menu-group"; g.textContent = group; box.appendChild(g); }
-      var b = document.createElement("button"); b.type = "button"; b.className = "wa-menu-item";
-      b.textContent = t.title;
-      b.addEventListener("click", function () {
-        closeMenu(); logUse(a.dataset.lid, t.title.replace("👋 ", "")); openWhatsApp(a.dataset.wa, fill(t.body, a.dataset));
-      });
-      box.appendChild(b);
-    });
-    var c = document.createElement("button"); c.type = "button"; c.className = "btn btn-sm wa-menu-cancel"; c.textContent = "Cancel";
-    c.addEventListener("click", closeMenu); box.appendChild(c);
-    back.appendChild(box);
+    var h = document.createElement("div"); h.className = "wa-menu-head"; h.textContent = title;
+    box.appendChild(h); back.appendChild(box);
     back.addEventListener("click", function (e) { if (e.target === back) closeMenu(); });
     document.body.appendChild(back);
+    return box;
+  }
+  function addItem(box, label, fn) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "wa-menu-item";
+    b.textContent = label; b.addEventListener("click", fn); box.appendChild(b);
+  }
+  var HI = {title: "👋 Hi only", body: "Hi {name},\n"};
+  function send(a, t) { closeMenu(); logUse(a.dataset.lid, t.title.replace("👋 ", "")); openWhatsApp(a.dataset.wa, fill(t.body, a.dataset)); }
+  function showMenu(a) {
+    var box = popup("WhatsApp " + (a.dataset.name || ""));
+    var group = null;
+    cfg.templates.forEach(function (t) {
+      if (t.group !== group) { group = t.group; var g = document.createElement("div"); g.className = "wa-menu-group"; g.textContent = group; box.appendChild(g); }
+      addItem(box, t.title, function () { send(a, t); });
+    });
+    var g = document.createElement("div"); g.className = "wa-menu-group"; box.appendChild(g);
+    addItem(box, HI.title, function () { send(a, HI); });
   }
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a.wa");
     if (a) {
       e.preventDefault();
-      if (cfg.templates && cfg.templates.length) showMenu(a);
-      else { logUse(a.dataset.lid, "Hi"); openWhatsApp(a.dataset.wa, "Hi " + (a.dataset.name || "").trim() + ",\n"); }
+      var list = cfg.templates || [];
+      if (list.length > 1) showMenu(a);              // several switched on: ask which
+      else send(a, list.length ? list[0] : HI);       // none or one: one click
       return;
-    }
-    var top = e.target.closest && e.target.closest("[data-wa-open]");
-    if (top) {
-      e.preventDefault();
-      if (mode() === "app" && !mobile) window.location.href = "whatsapp://";
-      else window.open("https://web.whatsapp.com/", "realview_whatsapp");
     }
   });
   var modeSel = document.getElementById("wa-mode");
   if (modeSel) {
     modeSel.value = mode();
-    modeSel.addEventListener("change", function () { try { localStorage.setItem("wa_mode", modeSel.value); } catch (e) {} });
+    modeSel.addEventListener("change", function () { try { modeSel.value ? localStorage.setItem("wa_mode", modeSel.value) : localStorage.removeItem("wa_mode"); } catch (e) {} });
   }
 
   // Ticking leads in a list shows the bulk-action bar.

@@ -795,46 +795,53 @@ def test_bulk_actions_recycle_bin_and_restore(world):
     assert "Bulk A" not in w["a_admin"].get("/leads/deleted").get_data(as_text=True)
 
 
+def wa_cfg(browser):
+    page = browser.get("/leads").get_data(as_text=True)
+    return json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>', page, re.S).group(1))
+
+
 def test_whatsapp_templates_and_switches(world):
     w = world
     lid = add_lead(w["a_s1"], w["proj_a"], "Tara", "9847000001", extra={"whatsapp": "9847000001", "company_name": "Tara Co"})
-    page = w["a_s1"].get("/leads").get_data(as_text=True)
-    cfg = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>', page, re.S).group(1))
-    titles = [t["title"] for t in cfg["templates"]]
-    assert "Welcome" in titles and "Quotation" in titles and 'data-company="Tara Co"' in page
-    # admin edits a company template; staff cannot
+    assert 'data-company="Tara Co"' in w["a_s1"].get("/leads").get_data(as_text=True)
+    # company templates exist but start OFF, so WhatsApp sends "Hi <name>," in one click
+    assert wa_cfg(w["a_s1"])["templates"] == []
     with w["db"]() as conn:
-        tid = conn.execute("SELECT id FROM wa_templates WHERE org_id = ? AND scope = 'org' AND title = 'Quotation'",
-                           (w["org_a"],)).fetchone()[0]
-    assert w["a_s1"].post("/templates/save", {"id": tid, "title": "X", "body": "Y"}).status_code == 404
-    assert w["b_admin"].post("/templates/save", {"id": tid, "title": "X", "body": "Y"}).status_code == 404
-    w["a_admin"].post(f"/templates/{tid}/toggle")
-    # staff adds a personal template, visible only to them
+        tids = dict(conn.execute("SELECT title, id FROM wa_templates WHERE org_id = ? AND scope = 'org'", (w["org_a"],)))
+    assert len(tids) == 10
+    # staff cannot change company templates, other organizations cannot either
+    assert w["a_s1"].post(f"/templates/{tids['Quotation']}/toggle").status_code == 404
+    assert w["b_admin"].post("/templates/save", {"id": tids["Quotation"], "title": "X", "body": "Y"}).status_code == 404
+    w["a_admin"].post(f"/templates/{tids['Quotation']}/toggle")
+    assert [t["title"] for t in wa_cfg(w["a_s1"])["templates"]] == ["Quotation"]  # one ON: sent in one click
+    w["a_admin"].post("/templates/save", {"id": tids["Quotation"], "title": "Quote", "body": "Hi {name}, quote"})
+    w["a_admin"].post(f"/templates/{tids['Welcome']}/delete")
+    # staff adds a personal template (ON), visible only to them
     w["a_s1"].post("/templates/save", {"scope": "user", "title": "Demo request", "body": "Hi {name}, demo?"})
-    cfg1 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
-                                w["a_s1"].get("/leads").get_data(as_text=True), re.S).group(1))
-    cfg2 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
-                                w["a_s2"].get("/leads").get_data(as_text=True), re.S).group(1))
-    assert "Demo request" in [t["title"] for t in cfg1["templates"]] and "Quotation" not in [t["title"] for t in cfg1["templates"]]
-    assert "Demo request" not in [t["title"] for t in cfg2["templates"]]
+    assert [t["title"] for t in wa_cfg(w["a_s1"])["templates"]] == ["Quote", "Demo request"]
+    assert [t["title"] for t in wa_cfg(w["a_s2"])["templates"]] == ["Quote"]
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM wa_templates WHERE id = ?", (tids["Welcome"],)).fetchone()[0] == 0
     # user switch, org switch and super admin switch each turn templates off
     w["a_s1"].post("/account", {"form": "profile", "contact_phone": "98470 11111"})
-    cfg1 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
-                                w["a_s1"].get("/leads").get_data(as_text=True), re.S).group(1))
+    cfg1 = wa_cfg(w["a_s1"])
     assert cfg1["templates"] == [] and cfg1["my_phone"] == "98470 11111"
     w["a_admin"].post("/organization", {"name": "Org A"})
-    cfg2 = json.loads(re.search(r'id="wa-config" type="application/json">(.*?)</script>',
-                                w["a_s2"].get("/leads").get_data(as_text=True), re.S).group(1))
-    assert cfg2["templates"] == []
-    # logging which message was opened
+    assert wa_cfg(w["a_s2"])["templates"] == []
+    w["a_admin"].post("/organization", {"name": "Org A", "wa_templates_on": "1"})
+    assert wa_cfg(w["a_s2"])["templates"] != []
+    w["sup"].post(f"/admin/organizations/{w['org_a']}/edit", {"name": "Org A", "code": "ORGA"})
+    assert wa_cfg(w["a_s2"])["templates"] == []
+    # which message was opened is logged on the lead
     w["a_s1"].post(f"/leads/{lid}/wa-log", {"template": "Welcome"})
     with w["db"]() as conn:
         assert conn.execute("SELECT COUNT(*) FROM lead_activity WHERE lead_id = ? AND action LIKE 'WhatsApp opened%'",
                             (lid,)).fetchone()[0] == 1
-    # a new client gets its own copy of the default templates
+    # a new client gets its own copy of the default templates, switched off
     w["sup"].post("/admin/organizations/new", {"name": "Org C", "code": "ORGC", "admin_name": "C Admin",
                                                "admin_username": "c_admin", "onboarding": "password",
                                                "password": "Passw0rd!x"})
     with w["db"]() as conn:
         oc = conn.execute("SELECT id FROM organizations WHERE code = 'ORGC'").fetchone()[0]
-        assert conn.execute("SELECT COUNT(*) FROM wa_templates WHERE org_id = ? AND scope = 'org'", (oc,)).fetchone()[0] == 10
+        assert conn.execute("SELECT COUNT(*), SUM(active) FROM wa_templates WHERE org_id = ? AND scope = 'org'",
+                            (oc,)).fetchone() == (10, 0)

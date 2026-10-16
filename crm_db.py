@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -392,7 +392,7 @@ def copy_default_templates(conn, org_id, user_id, ts):
     """Give an organization its own editable copy of the agency's default WhatsApp templates."""
     rows = conn.execute("SELECT title, body, sort FROM wa_templates WHERE scope = 'default' ORDER BY sort, id").fetchall()
     conn.executemany("INSERT INTO wa_templates (org_id, scope, title, body, active, sort, created_by, created_at)"
-                     " VALUES (?, 'org', ?, ?, 1, ?, ?, ?)", [(org_id, r[0], r[1], r[2], user_id, ts) for r in rows])
+                     " VALUES (?, 'org', ?, ?, 0, ?, ?, ?)", [(org_id, r[0], r[1], r[2], user_id, ts) for r in rows])
 
 
 def _migrate_v4(conn):
@@ -442,7 +442,12 @@ def _migrate_v4(conn):
                 copy_default_templates(conn, oid, None, ts)
 
 
-MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4)]
+def _migrate_v5(conn):
+    """Company templates start switched off, so WhatsApp sends "Hi <name>," in one click until an admin turns some on."""
+    conn.execute("UPDATE wa_templates SET active = 0 WHERE scope = 'org'")
+
+
+MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5)]
 
 
 def migrate(db_path):
