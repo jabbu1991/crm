@@ -73,7 +73,7 @@
 
   <div class="card">
     <span class="step">Step 2 · Name</span>
-    <label class="field">Your name <small style="font-weight:400;color:var(--muted)">Malayalam or English, up to 30 characters</small>
+    <label class="field">Your name <small style="font-weight:400;color:var(--muted)">Optional · Malayalam or English, up to 30 characters</small>
       <input type="text" id="name" maxlength="30" placeholder="e.g. മുഹമ്മദ് / Muhammed" autocomplete="off">
     </label>
   </div>
@@ -95,7 +95,7 @@
   // Measured from poster.jpg (1792 x 2400): the magenta photo circle, and the beige name space below it
   var CX = 1276, CY = 1038, R = 254;
   var RING_X = 1012, RING_Y = 774;               // poster-ring.png: the circle area with the photo hole cut out
-  var NAME_X = 1304, NAME_Y = 1467, PILL_MAX_W = 640, PILL_H = 120, NAME_MAX_SIZE = 70, NAME_MIN_SIZE = 30;
+  var NAME_X = 1304, NAME_Y = 1467, NAME_MAX_W = 720, NAME_MAX_SIZE = 104, NAME_MIN_SIZE = 40;
   var OLIVE = "#6B6B2E";
   var FONT = '"Baloo Chettan 2", sans-serif';
 
@@ -142,23 +142,14 @@
     }
     var name = nameIn.value.trim();
     if (name) {
-      // olive pill with a thin white border; its width follows the name, up to PILL_MAX_W
-      var pad = 56, px = NAME_MAX_SIZE;
+      // name written straight on the poster in the olive green of the brush strokes
+      var px = NAME_MAX_SIZE;
       ctx.font = "800 " + px + "px " + FONT;
-      while (ctx.measureText(name).width + 2 * pad > PILL_MAX_W && px > NAME_MIN_SIZE) { px -= 2; ctx.font = "800 " + px + "px " + FONT; }
-      var tw = Math.min(ctx.measureText(name).width, PILL_MAX_W - 2 * pad);
-      var w = Math.max(tw + 2 * pad, 260), h = PILL_H, x = NAME_X - w / 2, y = NAME_Y - h / 2, r = h / 2;
-      ctx.beginPath();
-      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
-      ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
-      ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
-      ctx.fillStyle = OLIVE; ctx.fill();
-      ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-      ctx.lineWidth = 5; ctx.strokeStyle = "#ffffff"; ctx.stroke();
-      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffffff";
-      ctx.fillText(name, NAME_X, NAME_Y + px * 0.06, PILL_MAX_W - 2 * pad);
+      while (ctx.measureText(name).width > NAME_MAX_W && px > NAME_MIN_SIZE) { px -= 2; ctx.font = "800 " + px + "px " + FONT; }
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = OLIVE;
+      ctx.fillText(name, NAME_X, NAME_Y + px * 0.06, NAME_MAX_W);
     }
-    dlBtn.disabled = shareBtn.disabled = !(photo && name);
+    dlBtn.disabled = shareBtn.disabled = !photo;   // the name is optional
     result.hidden = true;
   }
 
