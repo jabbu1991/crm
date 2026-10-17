@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ജനകീയ ഐക്യദാർഢ്യ സംഗമം · പോസ്റ്റർ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Chettan+2:wght@500;700;800&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d1b3e; color: #fff; font-family: "Baloo Chettan 2", system-ui, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px 14px 40px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font-size: 22px; line-height: 1.3; text-align: center; }
+  .sub { margin: 0; text-align: center; color: #c9d4ef; font-size: 15px; }
+  .stage { position: relative; border-radius: 12px; overflow: hidden; background: #fff; }
+  canvas { display: block; width: 100%; height: auto; touch-action: none; }
+  .hint { font-size: 14px; color: #c9d4ef; text-align: center; margin: 0; }
+  .pick { position: relative; display: block; }
+  .pick span, .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 54px;
+    border-radius: 14px; font: 700 18px "Baloo Chettan 2", system-ui, sans-serif; border: 0; }
+  .pick span { background: #fff; color: #0d1b3e; }
+  .pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
+  input[type=text] { font: 600 20px "Baloo Chettan 2", system-ui, sans-serif; padding: 12px 14px; border-radius: 12px; border: 2px solid #3b5bbf; }
+  .zoom { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+  .zoom input { flex: 1; }
+  .btn-dl { background: #e53935; color: #fff; }
+  .btn-share { background: #16a34a; color: #fff; }
+  .btn:disabled { background: #4a5679; color: #aab3cc; }
+  .result { display: flex; flex-direction: column; gap: 8px; }
+  .result img { width: 100%; border-radius: 12px; }
+  .note { margin: 0; font-size: 15px; color: #ffd54f; text-align: center; }
+  .privacy { margin: 0; font-size: 13px; color: #8ea0cc; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ലഹരി മാഫിയക്കെതിരെ — നിങ്ങളുടെ പോസ്റ്റർ</h1>
+  <p class="sub">ഫോട്ടോയും പേരും ചേർത്ത് പോസ്റ്റർ ഡൗൺലോഡ് ചെയ്യൂ</p>
+
+  <div class="stage"><canvas id="cv" width="1145" height="1374" aria-label="പോസ്റ്റർ"></canvas></div>
+  <p class="hint" id="hint" hidden>ഫോട്ടോ വിരൽ കൊണ്ട് നീക്കാം · രണ്ടു വിരൽ കൊണ്ട് വലുതാക്കാം</p>
+
+  <label class="pick">
+    <span>📷 ഫോട്ടോ തിരഞ്ഞെടുക്കുക</span>
+    <input type="file" id="photo" accept="image/*" aria-label="ഫോട്ടോ തിരഞ്ഞെടുക്കുക">
+  </label>
+
+  <div class="zoom" id="zoomRow" hidden>
+    <span>🔍</span><input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="സൂം">
+  </div>
+
+  <label class="field">നിങ്ങളുടെ പേര്
+    <input type="text" id="name" maxlength="30" placeholder="ഉദാ: മുഹമ്മദ് / Muhammed" autocomplete="off">
+  </label>
+
+  <button class="btn btn-dl" id="dl" disabled>⬇️ പോസ്റ്റർ ഡൗൺലോഡ് ചെയ്യുക</button>
+  <button class="btn btn-share" id="share" hidden>📤 WhatsApp-ലേക്ക് ഷെയർ ചെയ്യുക</button>
+
+  <div class="result" id="result" hidden>
+    <p class="note">ഡൗൺലോഡ് ആയില്ലെങ്കിൽ ചിത്രത്തിൽ അമർത്തിപ്പിടിച്ച് Save ചെയ്യുക</p>
+    <img id="out" alt="നിങ്ങളുടെ പോസ്റ്റർ">
+  </div>
+  <p class="privacy">ഫോട്ടോ ഈ ഫോണിൽ മാത്രം ഉപയോഗിക്കുന്നു. എവിടേക്കും അപ്‌ലോഡ് ചെയ്യുന്നില്ല.</p>
+</main>
+
+<script>
+(function () {
+  // Poster geometry (pixels of the 1145 x 1374 poster)
+  var CX = 564.5, CY = 578.5, R = 236;           // photo circle, up to the blue ring
+  var NAME_X = 582, NAME_Y = 790, NAME_MAX_W = 640, NAME_MAX_SIZE = 72, NAME_MIN_SIZE = 26;
+  var FONT = '"Baloo Chettan 2", sans-serif';
+
+  var cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  var nameIn = document.getElementById("name"), zoomIn = document.getElementById("zoom");
+  var dlBtn = document.getElementById("dl"), shareBtn = document.getElementById("share");
+  var result = document.getElementById("result"), outImg = document.getElementById("out");
+
+  var poster = new Image(), frame = new Image(), photo = null;
+  var zoom = 1, ox = 0, oy = 0;                    // photo offset from the circle centre
+  var fontReady = false, framesLoaded = 0;
+
+  poster.src = "poster.png"; frame.src = "poster-frame.png";
+  poster.onload = frame.onload = function () { if (++framesLoaded === 2) draw(); };
+
+  function loadFont() {
+    if (!document.fonts || !document.fonts.load) { fontReady = true; return Promise.resolve(); }
+    var sample = (nameIn.value || "") + " അആ Aa";
+    return Promise.all([document.fonts.load("700 60px " + FONT, sample), document.fonts.load("800 60px " + FONT, sample)])
+      .catch(function () {}).then(function () { fontReady = true; });
+  }
+  loadFont().then(draw);
+
+  function size() {                                // photo size at the current zoom, always covering the circle
+    var base = (2 * R) / Math.min(photo.width, photo.height);
+    return { w: photo.width * base * zoom, h: photo.height * base * zoom };
+  }
+  function clamp() {
+    var s = size(), mx = s.w / 2 - R, my = s.h / 2 - R;
+    ox = Math.max(-mx, Math.min(mx, ox)); oy = Math.max(-my, Math.min(my, oy));
+  }
+
+  function draw() {
+    if (framesLoaded < 2) return;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (photo) {
+      var s = size();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(CX, CY, R + 3, 0, Math.PI * 2); ctx.clip();
+      ctx.drawImage(photo, CX + ox - s.w / 2, CY + oy - s.h / 2, s.w, s.h);
+      ctx.restore();
+      ctx.drawImage(frame, 0, 0);
+    } else {
+      ctx.drawImage(poster, 0, 0);
+    }
+    var name = nameIn.value.trim();
+    if (name) {
+      var px = NAME_MAX_SIZE;
+      ctx.font = "800 " + px + "px " + FONT;
+      while (ctx.measureText(name).width > NAME_MAX_W && px > NAME_MIN_SIZE) { px -= 2; ctx.font = "800 " + px + "px " + FONT; }
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(name, NAME_X, NAME_Y, NAME_MAX_W);
+      ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    }
+    dlBtn.disabled = shareBtn.disabled = !(photo && name);
+    result.hidden = true;
+  }
+
+  document.getElementById("photo").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var img = new Image();
+    img.onload = function () {
+      photo = img; zoom = 1; zoomIn.value = 1; ox = 0; oy = 0;
+      document.getElementById("zoomRow").hidden = false;
+      document.getElementById("hint").hidden = false;
+      draw();
+    };
+    img.src = URL.createObjectURL(f);
+  });
+
+  nameIn.addEventListener("input", function () { loadFont().then(draw); });
+  zoomIn.addEventListener("input", function () { zoom = +zoomIn.value; if (photo) { clamp(); draw(); } });
+
+  // Drag with one finger, pinch with two (pointer events, in poster pixels)
+  var pts = {}, last = null, pinch = null;
+  function toPoster(e) {
+    var r = cv.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
+  }
+  function dist() { var k = Object.keys(pts); var a = pts[k[0]], b = pts[k[1]]; return Math.hypot(a.x - b.x, a.y - b.y); }
+  cv.addEventListener("pointerdown", function (e) {
+    if (!photo) return;
+    cv.setPointerCapture(e.pointerId); pts[e.pointerId] = toPoster(e);
+    var n = Object.keys(pts).length;
+    if (n === 1) last = pts[e.pointerId];
+    if (n === 2) pinch = { d: dist(), z: zoom };
+  });
+  cv.addEventListener("pointermove", function (e) {
+    if (!photo || !pts[e.pointerId]) return;
+    pts[e.pointerId] = toPoster(e);
+    var n = Object.keys(pts).length;
+    if (n === 1 && last) {
+      var p = pts[e.pointerId]; ox += p.x - last.x; oy += p.y - last.y; last = p;
+    } else if (n === 2 && pinch) {
+      zoom = Math.max(1, Math.min(4, pinch.z * dist() / pinch.d)); zoomIn.value = zoom;
+    }
+    clamp(); draw();
+  });
+  function up(e) {
+    delete pts[e.pointerId];
+    var k = Object.keys(pts);
+    pinch = null; last = k.length === 1 ? pts[k[0]] : null;
+  }
+  cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+
+  function makeBlob() {
+    return new Promise(function (res) { cv.toBlob(res, "image/jpeg", 0.92); });
+  }
+  var FILE_NAME = "lahari-virudha-poster.jpg";
+  try {   // show Share only on phones that can share image files
+    if (navigator.canShare && navigator.canShare({ files: [new File(["x"], "t.jpg", { type: "image/jpeg" })] })) shareBtn.hidden = false;
+  } catch (e) {}
+  dlBtn.addEventListener("click", function () {
+    makeBlob().then(function (blob) {
+      var url = URL.createObjectURL(blob);
+      outImg.src = url; result.hidden = false;
+      var a = document.createElement("a"); a.href = url; a.download = FILE_NAME;
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+  });
+  shareBtn.addEventListener("click", function () {
+    if (dlBtn.disabled) return;
+    makeBlob().then(function (blob) {
+      outImg.src = URL.createObjectURL(blob); result.hidden = false;
+      navigator.share({ files: [new File([blob], FILE_NAME, { type: "image/jpeg" })] }).catch(function () {});
+    });
+  });
+})();
+</script>
+</body>
+</html>
