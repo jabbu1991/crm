@@ -25,7 +25,7 @@
   h1 { margin: 0; font: 800 24px/1.2 Montserrat, sans-serif; color: var(--ink); text-align: center; }
   .sub { margin: 0; text-align: center; color: var(--muted); }
   .stage { border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 10px 30px -12px rgba(15, 23, 42, .25); }
-  canvas { display: block; width: 100%; height: auto; touch-action: none; }
+  canvas { display: block; width: 100%; height: auto; }
   .hint { font-size: 14px; color: var(--muted); text-align: center; margin: 0; }
   .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
   .step { font: 700 13px Montserrat, sans-serif; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
@@ -58,7 +58,7 @@
   <p class="sub">Add your photo and name, then download or share.</p>
 
   <div class="stage"><canvas id="cv" width="1792" height="2400" aria-label="Poster preview"></canvas></div>
-  <p class="hint" id="hint" hidden>Drag the photo to move it · pinch or use the slider to zoom</p>
+  <p class="hint" id="hint" hidden>Drag the photo inside the circle to move it · pinch or use the slider to zoom</p>
 
   <div class="card">
     <span class="step">Step 1 · Photo</span>
@@ -176,7 +176,20 @@
     return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
   }
   function dist() { var k = Object.keys(pts); var a = pts[k[0]], b = pts[k[1]]; return Math.hypot(a.x - b.x, a.y - b.y); }
+  // The page scrolls normally over the poster; only a touch on the photo circle (or a two-finger pinch)
+  // is kept for moving and zooming the photo.
+  function onCircle(t) {
+    var p = toPoster(t);
+    return Math.hypot(p.x - CX, p.y - CY) <= R + 20;
+  }
+  function holdTouch(e) {
+    if (photo && (e.touches.length > 1 || onCircle(e.touches[0]))) e.preventDefault();
+  }
+  cv.addEventListener("touchstart", holdTouch, { passive: false });
+  cv.addEventListener("touchmove", holdTouch, { passive: false });
+
   cv.addEventListener("pointerdown", function (e) {
+    if (e.pointerType !== "mouse" && Object.keys(pts).length === 0 && !onCircle(e)) return;
     if (!photo) return;
     cv.setPointerCapture(e.pointerId); pts[e.pointerId] = toPoster(e);
     var n = Object.keys(pts).length;
@@ -220,7 +233,11 @@
     if (dlBtn.disabled) return;
     makeBlob().then(function (blob) {
       outImg.src = URL.createObjectURL(blob); result.hidden = false;
-      navigator.share({ files: [new File([blob], FILE_NAME, { type: "image/jpeg" })] }).catch(function () {});
+      var link = location.origin + location.pathname;
+      navigator.share({
+        files: [new File([blob], FILE_NAME, { type: "image/jpeg" })],
+        text: "ലഹരി മാഫിയക്കെതിരെ ജനകീയ ഐക്യദാർഢ്യ സംഗമം\nMake your poster: " + link
+      }).catch(function () {});
     });
   });
 })();
