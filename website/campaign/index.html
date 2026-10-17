@@ -8,7 +8,7 @@
 <link rel="icon" href="../assets/favicon-64.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@700;800&family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Chettan+2:wght@700;800&family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
 <style>
   :root {
     --ink: #0b1736; --text: #334155; --muted: #5b6b85; --line: #dbe7f5;
@@ -35,7 +35,7 @@
   .pick span { background: #fff; color: var(--accent); border-color: #bfdbfe; }
   .pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   label.field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; color: var(--ink); }
-  input[type=text] { font: 700 19px "Anek Malayalam", Inter, sans-serif; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); color: var(--ink); }
+  input[type=text] { font: 700 19px "Baloo Chettan 2", Inter, sans-serif; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); color: var(--ink); }
   input[type=text]:focus { outline: none; border-color: var(--accent); }
   .zoom { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
   .zoom input { flex: 1; accent-color: var(--accent); }
@@ -57,7 +57,7 @@
   <h1>Make your campaign poster</h1>
   <p class="sub">Add your photo and name, then download or share.</p>
 
-  <div class="stage"><canvas id="cv" width="1145" height="1374" aria-label="Poster preview"></canvas></div>
+  <div class="stage"><canvas id="cv" width="1792" height="2400" aria-label="Poster preview"></canvas></div>
   <p class="hint" id="hint" hidden>Drag the photo to move it · pinch or use the slider to zoom</p>
 
   <div class="card">
@@ -92,9 +92,12 @@
 <script>
 (function () {
   // Poster geometry (pixels of the 1145 x 1374 poster)
-  var CX = 564.5, CY = 578.5, R = 236;           // photo circle, up to the blue ring
-  var NAME_X = 582, NAME_Y = 790, NAME_MAX_W = 640, NAME_MAX_SIZE = 72, NAME_MIN_SIZE = 26;
-  var FONT = '"Anek Malayalam", sans-serif';
+  // Measured from poster.jpg (1792 x 2400): the magenta photo circle, and the beige name space below it
+  var CX = 1276, CY = 1038, R = 254;
+  var RING_X = 1012, RING_Y = 774;               // poster-ring.png: the circle area with the photo hole cut out
+  var NAME_X = 1304, NAME_Y = 1467, PILL_MAX_W = 640, PILL_H = 120, NAME_MAX_SIZE = 70, NAME_MIN_SIZE = 30;
+  var OLIVE = "#6B6B2E";
+  var FONT = '"Baloo Chettan 2", sans-serif';
 
   var cv = document.getElementById("cv"), ctx = cv.getContext("2d");
   var nameIn = document.getElementById("name"), zoomIn = document.getElementById("zoom");
@@ -105,7 +108,7 @@
   var zoom = 1, ox = 0, oy = 0;                    // photo offset from the circle centre
   var fontReady = false, framesLoaded = 0;
 
-  poster.src = "poster.png"; frame.src = "poster-frame.png";
+  poster.src = "poster.jpg"; frame.src = "poster-ring.png";
   poster.onload = frame.onload = function () { if (++framesLoaded === 2) draw(); };
 
   function loadFont() {
@@ -128,26 +131,32 @@
   function draw() {
     if (framesLoaded < 2) return;
     ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(poster, 0, 0);
     if (photo) {
       var s = size();
       ctx.save();
-      ctx.beginPath(); ctx.arc(CX, CY, R + 3, 0, Math.PI * 2); ctx.clip();
+      ctx.beginPath(); ctx.arc(CX, CY, R + 4, 0, Math.PI * 2); ctx.clip();
       ctx.drawImage(photo, CX + ox - s.w / 2, CY + oy - s.h / 2, s.w, s.h);
       ctx.restore();
-      ctx.drawImage(frame, 0, 0);
-    } else {
-      ctx.drawImage(poster, 0, 0);
+      ctx.drawImage(frame, RING_X, RING_Y);         // ring and edge back on top of the photo
     }
     var name = nameIn.value.trim();
     if (name) {
-      var px = NAME_MAX_SIZE;
+      // olive pill with a thin white border; its width follows the name, up to PILL_MAX_W
+      var pad = 56, px = NAME_MAX_SIZE;
       ctx.font = "800 " + px + "px " + FONT;
-      while (ctx.measureText(name).width > NAME_MAX_W && px > NAME_MIN_SIZE) { px -= 2; ctx.font = "800 " + px + "px " + FONT; }
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(name, NAME_X, NAME_Y, NAME_MAX_W);
+      while (ctx.measureText(name).width + 2 * pad > PILL_MAX_W && px > NAME_MIN_SIZE) { px -= 2; ctx.font = "800 " + px + "px " + FONT; }
+      var tw = Math.min(ctx.measureText(name).width, PILL_MAX_W - 2 * pad);
+      var w = Math.max(tw + 2 * pad, 260), h = PILL_H, x = NAME_X - w / 2, y = NAME_Y - h / 2, r = h / 2;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
+      ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+      ctx.fillStyle = OLIVE; ctx.fill();
       ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.lineWidth = 5; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffffff";
+      ctx.fillText(name, NAME_X, NAME_Y + px * 0.06, PILL_MAX_W - 2 * pad);
     }
     dlBtn.disabled = shareBtn.disabled = !(photo && name);
     result.hidden = true;
