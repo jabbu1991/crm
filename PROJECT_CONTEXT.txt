@@ -1,0 +1,170 @@
+REAL VIEW CRM + REAL VIEW CREATIVE STUDIO WEBSITE — PROJECT CONTEXT
+(Paste this into a new Claude chat so it knows the whole project. Last updated: 17 Oct 2026.)
+
+======================================================================
+0. HOW TO WORK WITH ME (the owner)
+======================================================================
+- Owner: M Jabbar (Abdul Jabbar), founder/CEO of Real View Creative Studio, a marketing,
+  branding and creative agency in Kerala, India. Beginner in tech.
+- Please reply in MALAYALAM, step by step, simple language. Short answers preferred.
+- Workflow rule: DISCUSS first. Do not change the CRM until I explicitly say
+  "മാറ്റം വരുത്താം" (make the change). Collect several changes and do them together.
+- Principle: never add extra clicks or work for users ("ജോലി കൂട്ടരുത്").
+  If work goes up, people stop using the CRM.
+- Existing data must never be lost. Every database change must only ADD things.
+- Ideas are discussed in a normal Claude chat. Actual code changes are done in
+  Claude Code (cloud session on the GitHub repo), to save Claude Code usage.
+
+======================================================================
+1. WHAT EXISTS (LIVE)
+======================================================================
+Website:  https://www.realviewcreativestudio.in   (root domain redirects to www)
+CRM:      https://crm.realviewcreativestudio.in   (backup address: https://realview-crm.onrender.com)
+Code:     GitHub repo jabbu1991/crm, branch "claude/marketing-agency-crm-y3shvh" (the only branch)
+Hosting:  Render.com
+  - Website = free Render Static Site "realview-website" (publish dir: website, build: echo done)
+  - CRM = Render Web Service "realview-crm", created from render.yaml (Blueprint),
+    Starter plan + 1 GB persistent disk at /var/data (database + uploaded photos live there).
+  - Every git push to the branch redeploys both automatically (CRM is down ~10-30 s during a deploy).
+Domain/DNS: bought at Hostinger (realviewcreativestudio.in, 1 year).
+  - A @ -> 216.24.57.1, CNAME www -> realview-website.onrender.com,
+    CNAME crm -> realview-crm.onrender.com. All verified, HTTPS certificates issued.
+  - Render workspace has used 2/2 included custom domains.
+Payment: SBI Visa card on Render. Cost about US$7.25/month (Starter $7 + disk $0.25),
+  billed monthly in arrears, prorated (October 2026 ~ $3.89). Website is free.
+  Leads/users/updates do NOT increase the bill. Only plan/disk upgrades do.
+Contact on website: WhatsApp +91 85472 75320.
+
+======================================================================
+2. TECH STACK
+======================================================================
+- Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
+- Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
+  templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
+  render.yaml, requirements.txt, tests/test_crm.py (29 pytest tests, all passing),
+  seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
+  README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
+- Database migrations: PRAGMA user_version, currently version 6. Before any upgrade the app
+  copies the whole DB to backups/ automatically. Migrations only add tables/columns.
+- Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
+  CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
+  CRM_ENQUIRY_ORIGINS (website origins allowed to post enquiries), PYTHON_VERSION.
+  Optional: CRM_UPLOAD_DIR (default: "uploads" next to the database).
+- Security: hashed passwords, CSRF tokens, login throttling, single-use invite/reset links,
+  tenant isolation enforced in code AND by SQLite triggers, safe CSV export (no formulas).
+
+======================================================================
+3. CRM — WHO USES IT (MULTI-TENANT SaaS)
+======================================================================
+- Sold to client businesses for a monthly fee. Everyone logs in at the same address.
+- Roles:
+  * Super Admin (Jabbar / agency): manages client organizations, can open any client's
+    workspace READ-ONLY (every visit is logged in that client's access log), exports everything,
+    turns plan features on/off per client (WhatsApp templates, Digital catalogue).
+  * Organization Admin (client owner): sees all leads of their organization, manages projects,
+    products, staff, templates, catalogue, settings, Recycle Bin.
+  * Staff: sees/edits only leads they created or that are assigned to them.
+- Clients never see each other's data.
+- Current real client example: STARWAY TECH HYDRAULIC (gate automation / hydraulic machines).
+
+======================================================================
+4. CRM — FEATURES (ALL BUILT AND LIVE)
+======================================================================
+Leads
+- Fields: customer name, company/business name, phone, WhatsApp, email, place, district,
+  state (Indian states list + other), country, project, products (multi), requirement,
+  source, quality, buying possibility, priority, status, assigned staff, next follow-up, notes.
+- "Created by" is recorded automatically and can never be changed.
+- Statuses: New, Contacted, Interested, Follow-up, Quotation, Negotiation, Converted, Not Interested, Lost.
+- Sources: Facebook, Instagram, Google Ads, YouTube, Website, WhatsApp, Referral, Walk-in, Phone Call, Other.
+- Quality Hot/Warm/Cold; Possibility High/Medium/Low; Priority Urgent/High/Normal/Low.
+- Lists: search (incl. company), filters, sorting, 15 per page by default (Show 15/50/100).
+- Inline editing in lists (status, quality, possibility, priority dropdowns save instantly) + ✏️ Edit.
+- Phone layout: each lead is a card (name, company, place, status, Call, WhatsApp, Edit, Delete);
+  filters fold behind a "🔍 Filters" button. Computer: full table.
+- Tick boxes + "select all": bulk change status/quality/possibility/priority/source/follow-up date,
+  assign to staff (admins), export selected, delete selected.
+- Delete: admins any lead; staff their own/assigned leads. Deleted leads go to a Recycle Bin
+  for 30 days (with products, follow-ups, history); admins can Restore or Delete forever.
+- Duplicate warning, CSV import, CSV export, full activity history per lead.
+Other pages
+- Dashboard (per role), Projects/Campaigns (end date optional), Products & Services,
+  State-wise leads, Product-wise leads (interest vs ordered vs purchased tracked separately),
+  Follow-ups (overdue/today/upcoming/completed), Reports, Export page (CSV/ZIP by role scope),
+  Staff & Users, Organization Settings, Client Organizations (Super Admin).
+- Organization name shown in the top bar with a coloured initial badge.
+Website enquiries
+- The website contact form also creates a lead in the agency workspace (project "Website
+  Enquiries", source Website), with rate limit + honeypot.
+
+WhatsApp (free click-to-chat, no API)
+- Pressing a lead's WhatsApp opens WhatsApp with the message filled in; the user presses Send.
+- One-click rule: no template ON -> sends "Hi <name>,"; one template ON -> that one;
+  several ON -> small menu of the ON templates with "👋 Hi only" at the bottom.
+- Phone: opens the WhatsApp app. Computer: asks ONCE "WhatsApp app or Browser", remembered per
+  browser (change in My Account). Browser mode opens a new tab each time (WhatsApp Web blocks
+  reusing tabs); App mode (WhatsApp Desktop) avoids new tabs.
+- Message is sent from whatever WhatsApp account is logged in on that phone/browser.
+- Which template was opened is written to the lead history.
+- WhatsApp Templates page: Company templates (admin), My templates (each user), Default
+  templates (Super Admin; copied to every new client). Each row: ON/OFF, Edit, Delete.
+  10 default English templates (Welcome, Missed call, Product details, Quotation, Follow-up,
+  Meeting/Demo confirmation, Order confirmation, Thank you, Re-connect, Offer/Festival);
+  all start OFF. Placeholders: {name} {company} {product} {my_name} {my_phone} {org_name} {catalog_link}.
+- Switches: Super Admin per client (plan), Admin per organization, each user in My Account.
+- My Account: "Contact number" (used for {my_phone}).
+
+Digital Catalogue (built 16 Oct 2026)
+- Public page per client: crm.realviewcreativestudio.in/c/<client code>, product pages,
+  logo + about text, WhatsApp us / Call buttons (use the organization's phone number).
+- Admin turns it on in Organization Settings (publish, about, logo). Products get photos (max 3,
+  any size, auto-shrunk to ~60-200 KB JPEG), price (optional), YouTube link, brochure as a
+  Google Drive link (no PDF upload), "Show in the catalogue" tick.
+- {catalog_link} in a template gives each customer a personal link. When they open it, the lead
+  history shows "📒 Customer opened the catalogue / viewed <product>" and the dashboard shows
+  "🔥 Opened the catalogue in the last 24 hours" (good time to call).
+- Super Admin can switch the catalogue off per client (plan).
+
+======================================================================
+5. WEBSITE (website/ folder)
+======================================================================
+- One static page: home, about, services (7), process, CRM product section, Careers, Contact.
+- Brand: blue -> cyan gradient "R" logo, Montserrat/Inter fonts.
+- Contact form -> opens WhatsApp with details + saves a lead in the CRM.
+- "Careers with us" form (name, place, WhatsApp, services they can offer) -> WhatsApp only.
+- Founder section and client portfolio were REMOVED on request (do not add client names).
+- Pending content from owner: email, address, social links.
+
+======================================================================
+6. OPEN ITEMS / NEXT STEPS
+======================================================================
+A) PROPOSED, waiting for owner's decision (not built yet):
+   - Follow-ups page + Dashboard "Follow-ups due" + "Recently added leads":
+     add WhatsApp button, Call button, inline Status and Quality change, Edit; phone card layout
+     (with ✅ Done on follow-ups).
+     Open question: only Status + Quality editable there (my suggestion), or also Priority/Possibility?
+   - Tapping the organization name in the top bar should open the main Dashboard.
+B) Keyboard language bug on phones: on the lead form, switching Gboard language (ML/EN) closes the
+   keyboard. Chrome shows autofill suggestions (owner's own name/email) above the keyboard;
+   autocomplete="off" did NOT remove them. Owner was asked to test: Chrome > Settings >
+   Addresses and more > turn off "Save and fill addresses", then retry. If that fixes it, the CRM fix
+   is to rename form field names so Chrome doesn't recognise them. Result not yet reported.
+C) Owner to test: WhatsApp Desktop app mode on a computer.
+D) Later / deferred:
+   - Official WhatsApp Business API (Interakt / AiSensy / Wati etc.): automatic replies with photos,
+     videos, buttons, bulk messages, incoming WhatsApp leads into the CRM. Needs a provider account;
+     could be sold as a premium plan. Not started.
+   - Meta (Facebook/Instagram) Lead Ads -> CRM automatically. Not started.
+   - Subscription/billing tracking per client inside the CRM. Not started.
+E) Business ideas discussed: Basic vs Premium plans (templates + catalogue as premium),
+   WhatsApp Business app setup (catalog, greeting, quick replies, labels) as a paid service.
+   Render bill: check monthly; first charge ~1 Nov 2026 (~$3.89). Indian cards may ask OTP for
+   recurring charges; if "payment failed" email arrives, pay manually on Render billing page.
+
+======================================================================
+7. HOW CHANGES GET LIVE
+======================================================================
+1. Code is changed in the repo (Claude Code session), tests run (python -m pytest -q).
+2. git push to branch claude/marketing-agency-crm-y3shvh.
+3. Render auto-deploys the CRM (and the website) in ~3-5 minutes. Database on the disk is kept;
+   schema upgrades back up the database first.
