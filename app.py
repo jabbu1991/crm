@@ -590,7 +590,6 @@ SORTABLE = {
     "requirement": "product_names COLLATE NOCASE",
     "status": "l.status",
     "possibility": "CASE l.buying_possibility WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 3 ELSE 4 END",
-    "quality": "CASE l.lead_quality WHEN 'Hot' THEN 1 WHEN 'Warm' THEN 2 WHEN 'Cold' THEN 3 ELSE 4 END",
     "priority": "CASE l.priority WHEN 'Urgent' THEN 1 WHEN 'High' THEN 2 WHEN 'Normal' THEN 3 WHEN 'Low' THEN 4 ELSE 5 END",
     "followup": "COALESCE(l.next_follow_up, '9999')",
     "staff": "u.name COLLATE NOCASE",
@@ -599,7 +598,7 @@ SORTABLE = {
 }
 
 TEXT_FILTERS = {
-    "status": "l.status", "possibility": "l.buying_possibility", "quality": "l.lead_quality",
+    "status": "l.status", "possibility": "l.buying_possibility",
     "priority": "l.priority", "state": "l.state", "district": "l.district", "place": "l.place",
     "country": "l.country", "source": "l.source",
 }
@@ -727,7 +726,10 @@ def dashboard():
                            SUM(l.lead_quality = 'Hot') hot, SUM(l.status = 'Converted') converted
                          FROM leads l JOIN users u ON u.id = l.entered_by WHERE {where}
                          GROUP BY u.id ORDER BY c DESC""", args) if is_admin() else []
-    due_followups = query(f"""SELECT f.*, l.customer_name, l.phone FROM follow_ups f JOIN leads l ON l.id = f.lead_id
+    due_followups = query(f"""SELECT f.*, l.customer_name, l.company_name, l.phone, l.whatsapp, l.status lead_status,
+                             (SELECT GROUP_CONCAT(pr.name, ', ') FROM lead_products lp JOIN products pr ON pr.id = lp.product_id
+                          WHERE lp.lead_id = l.id) product_names
+                             FROM follow_ups f JOIN leads l ON l.id = f.lead_id
                              WHERE {where} AND f.status = 'Pending' AND f.due_date <= ?
                              ORDER BY f.due_date LIMIT 8""", args + [today()])
     recent = query(f"SELECT {LEAD_COLUMNS} {LEAD_FROM} WHERE {where} ORDER BY l.created_at DESC, l.id DESC LIMIT 8",
@@ -1066,7 +1068,8 @@ def product_toggle(pid):
 # ---------------------------------------------------------------- leads
 
 LEAD_TEXT_FIELDS = ["customer_name", "company_name", "phone", "whatsapp", "email", "place", "district", "state", "country",
-                    "requirement", "status", "buying_possibility", "lead_quality", "priority", "source", "notes"]
+                    "requirement", "status", "buying_possibility", "priority", "source", "notes"]
+# lead_quality (Hot/Warm/Cold) was retired from every screen; stored values are kept untouched.
 
 
 def lead_form_data():
@@ -1095,7 +1098,7 @@ def validate_lead(data, lead=None):
         errors.append("Email address looks invalid.")
     if data["status"] not in LEAD_STATUSES:
         data["status"] = "New"
-    for key, options in (("buying_possibility", BUYING_POSSIBILITIES), ("lead_quality", LEAD_QUALITIES),
+    for key, options in (("buying_possibility", BUYING_POSSIBILITIES),
                          ("priority", PRIORITIES), ("source", LEAD_SOURCES)):
         if data[key] not in options:
             data[key] = ""
@@ -1224,12 +1227,12 @@ def leads_csv_response(rows):
     writer = SafeCsvWriter(out)
     writer.writerow(["ID", "Project", "Project Code", "Customer Name", "Company", "Phone", "WhatsApp", "Email", "Place",
                      "District", "State", "Country", "Products", "Requirement", "Status", "Buying Possibility",
-                     "Lead Quality", "Priority", "Source", "Next Follow-up", "Assigned To", "Created By",
+                     "Priority", "Source", "Next Follow-up", "Assigned To", "Created By",
                      "Created At", "Updated By", "Updated At", "Notes"])
     for r in rows:
         writer.writerow([r["id"], r["project_name"], r["project_code"], r["customer_name"], r["company_name"], r["phone"], r["whatsapp"],
                          r["email"], r["place"], r["district"], r["state"], r["country"], r["product_stages"],
-                         r["requirement"], r["status"], r["buying_possibility"], r["lead_quality"], r["priority"],
+                         r["requirement"], r["status"], r["buying_possibility"], r["priority"],
                          r["source"], r["next_follow_up"], r["assigned_name"], r["staff_name"], r["created_at"],
                          r["updated_by_name"], r["updated_at"], r["notes"]])
     if g.get("viewing"):
@@ -1336,7 +1339,7 @@ def touch_lead(db, lid, ts):
     db.execute("UPDATE leads SET updated_by = ?, updated_at = ? WHERE id = ?", (g.user["id"], ts, lid))
 
 
-QUICK_FIELDS = {"status": ("Status", LEAD_STATUSES), "lead_quality": ("Quality", LEAD_QUALITIES),
+QUICK_FIELDS = {"status": ("Status", LEAD_STATUSES),
                 "buying_possibility": ("Buying possibility", BUYING_POSSIBILITIES), "priority": ("Priority", PRIORITIES)}
 
 
@@ -1618,7 +1621,6 @@ CSV_ALIASES = {
     "products": ["products", "product", "product / service", "service"],
     "status": ["status"],
     "buying_possibility": ["buying_possibility", "buying possibility", "possibility"],
-    "lead_quality": ["lead_quality", "lead quality", "quality"],
     "priority": ["priority"],
     "source": ["source", "lead source"],
     "notes": ["notes", "remarks", "comment", "comments"],
@@ -1791,7 +1793,9 @@ def followups():
         clauses.append("l.assigned_to = ?")
         args.append(staff_id)
     order = "f.completed_at DESC" if view == "done" else "f.due_date, f.id"
-    rows = query(f"""SELECT f.*, l.customer_name, l.phone, l.whatsapp, l.status lead_status, l.lead_quality,
+    rows = query(f"""SELECT f.*, l.customer_name, l.company_name, l.phone, l.whatsapp, l.status lead_status,
+                       (SELECT GROUP_CONCAT(pr.name, ', ') FROM lead_products lp JOIN products pr ON pr.id = lp.product_id
+                          WHERE lp.lead_id = l.id) product_names,
                        ua.name assigned_name, cu.name created_by_name, co.name completed_by_name
                      FROM follow_ups f JOIN leads l ON l.id = f.lead_id
                      LEFT JOIN users ua ON ua.id = l.assigned_to JOIN users cu ON cu.id = f.created_by
@@ -1848,11 +1852,11 @@ def _export_leads():
                      WHERE {where} ORDER BY o.name, l.created_at DESC""", args)
     head = ["Organization", "Lead ID", "Project", "Project Code", "Customer Name", "Company", "Phone", "WhatsApp",
             "Email", "Place", "District", "State", "Country", "Products [stage]", "Requirement", "Status",
-            "Buying Possibility", "Lead Quality", "Priority", "Source", "Next Follow-up", "Assigned To",
+            "Buying Possibility", "Priority", "Source", "Next Follow-up", "Assigned To",
             "Created By", "Created At", "Updated By", "Updated At", "Notes"]
     return head, [[r["org_name"], r["id"], r["project_name"], r["project_code"], r["customer_name"], r["company_name"],
                    r["phone"], r["whatsapp"], r["email"], r["place"], r["district"], r["state"], r["country"],
-                   r["product_stages"], r["requirement"], r["status"], r["buying_possibility"], r["lead_quality"],
+                   r["product_stages"], r["requirement"], r["status"], r["buying_possibility"],
                    r["priority"], r["source"], r["next_follow_up"], r["assigned_name"], r["staff_name"],
                    r["created_at"], r["updated_by_name"], r["updated_at"], r["notes"]] for r in rows]
 
@@ -2036,7 +2040,6 @@ GROUPABLE = {
     "country": ("Country", "l.country"),
     "status": ("Status", "l.status"),
     "possibility": ("Buying Possibility", "l.buying_possibility"),
-    "quality": ("Lead Quality", "l.lead_quality"),
     "priority": ("Priority", "l.priority"),
     "source": ("Lead Source", "l.source"),
     "staff": ("Created By (Staff)", "u.name"),

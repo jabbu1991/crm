@@ -25,7 +25,6 @@
     </dl>
     <h2>Qualification</h2>
     <dl class="details">
-      <dt>Lead quality</dt><dd>{% if lead.lead_quality %}<span class="badge {{ lead.lead_quality|badge }}">{{ lead.lead_quality }}</span>{% else %}—{% endif %}</dd>
       <dt>Buying possibility</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>
       <dt>Priority</dt><dd>{% if lead.priority %}<span class="badge {{ ('p-' ~ lead.priority)|badge }}">{{ lead.priority }}</span>{% else %}—{% endif %}</dd>
       <dt>Source</dt><dd>{{ lead.source or '—' }}</dd>

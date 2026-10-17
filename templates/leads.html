@@ -12,7 +12,7 @@
 
 <div class="quicksort">
   <span class="muted">Sort by:</span>
-  {% for key, label in [('name','Name'), ('phone','Number'), ('email','Email'), ('place','Place'), ('state','State'), ('requirement','Product'), ('quality','Lead quality'), ('possibility','Buying possibility'), ('priority','Priority'), ('status','Status'), ('followup','Follow-up'), ('created','Date')] %}
+  {% for key, label in [('name','Name'), ('phone','Number'), ('email','Email'), ('place','Place'), ('state','State'), ('requirement','Product'), ('possibility','Buying possibility'), ('priority','Priority'), ('status','Status'), ('followup','Follow-up'), ('created','Date')] %}
     <a class="chip {{ 'on' if sort == key }}" href="{{ url_for('leads', **dict(params, sort=key, dir=('desc' if key == 'created' else 'asc'), page=1)) }}">{{ label }}</a>
   {% endfor %}
 </div>

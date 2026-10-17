@@ -12,7 +12,6 @@
   <input type="hidden" name="by" value="{{ by }}">
   <select name="project"><option value="">All projects</option>{% for p in projects_all %}<option value="{{ p.id }}" {{ 'selected' if params.project == p.id|string }}>{{ p.name }}</option>{% endfor %}</select>
   <select name="status"><option value="">All statuses</option>{% for s in LEAD_STATUSES %}<option {{ 'selected' if params.status == s }}>{{ s }}</option>{% endfor %}</select>
-  <select name="quality"><option value="">Any quality</option>{% for s in LEAD_QUALITIES %}<option {{ 'selected' if params.quality == s }}>{{ s }}</option>{% endfor %}</select>
   <label class="inline-label">From <input type="date" name="date_from" value="{{ params.date_from or '' }}"></label>
   <label class="inline-label">To <input type="date" name="date_to" value="{{ params.date_to or '' }}"></label>
   <button class="btn btn-primary">Apply</button>
@@ -20,20 +19,19 @@
 </form>
 <div class="card table-wrap">
 <table class="table">
-  <thead><tr><th>{{ label }}</th><th class="num">Leads</th><th class="num">Share</th><th class="num">Hot</th><th class="num">Warm</th><th class="num">Cold</th><th class="num">High possibility</th><th class="num">Converted</th><th class="num">Lost</th><th></th></tr></thead>
+  <thead><tr><th>{{ label }}</th><th class="num">Leads</th><th class="num">Share</th><th class="num">High possibility</th><th class="num">Converted</th><th class="num">Lost</th><th></th></tr></thead>
   <tbody>
   {% for r in groups %}
     {% set fv = r.group_id if by in ('staff', 'assigned', 'project') else r.grp %}
     <tr>
       <td><b>{{ r.grp }}</b></td><td class="num">{{ r.total }}</td>
       <td class="num">{{ (r.total / grand_total * 100)|round(1) }}%</td>
-      <td class="num">{{ r.hot or 0 }}</td><td class="num">{{ r.warm or 0 }}</td><td class="num">{{ r.cold or 0 }}</td>
       <td class="num">{{ r.high_possibility or 0 }}</td><td class="num">{{ r.converted or 0 }}</td><td class="num">{{ r.lost or 0 }}</td>
       <td class="nowrap">{% if fv is not none %}<a href="{{ url_for('leads', **dict(params, **{by: fv})) }}">View leads →</a>{% endif %}</td>
     </tr>
   {% else %}<tr><td colspan="10" class="muted center">No leads yet.</td></tr>{% endfor %}
   </tbody>
-  {% if groups %}<tfoot><tr><th>Total</th><th class="num">{{ grand_total }}</th><th colspan="8"></th></tr></tfoot>{% endif %}
+  {% if groups %}<tfoot><tr><th>Total</th><th class="num">{{ grand_total }}</th><th colspan="5"></th></tr></tfoot>{% endif %}
 </table>
 </div>
 {% endblock %}

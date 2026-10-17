@@ -6,7 +6,7 @@
   <a class="state-card" href="{{ url_for('state_view', state=r.state, country=(r.country if r.country and r.country != 'India' else None), project=params.get('project')) }}">
     <b>{{ r.state }}</b>{% if r.country and r.country != 'India' %} <small class="muted">{{ r.country }}</small>{% endif %}
     <span class="state-count">{{ r.total }} lead{{ 's' if r.total != 1 }}</span>
-    <span class="small muted">{{ r.hot or 0 }} hot · {{ r.converted or 0 }} converted</span>
+    <span class="small muted">{{ r.converted or 0 }} converted</span>
   </a>
 {% endfor %}
 </div>

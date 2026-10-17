@@ -436,7 +436,7 @@ def test_pagination(world):
 
 def product_row(html, name):
     row = re.search(rf"<b>{re.escape(name)}</b>.*?</tr>", html, re.S).group(0)
-    return [int(x) for x in re.findall(r'class="num">(?:<b>)?(\d+)', row)][:7]
+    return [int(x) for x in re.findall(r'class="num">(?:<b>)?(\d+)', row)][:6]
 
 
 def test_product_report_counts_and_interest_vs_purchase(world):
@@ -446,19 +446,19 @@ def test_product_report_counts_and_interest_vs_purchase(world):
     l2 = add_lead(w["a_s1"], w["proj_a"], "Multi again", "4000000001", products=[p1])  # same customer phone
     l3 = add_lead(w["a_s2"], w["proj_a"], "Other", "4000000003", products=[p1], extra={"lead_quality": "Cold"})
     html = w["a_admin"].get("/product-leads").get_data(as_text=True)
-    # total, customers, hot, still interested, ordered, purchased, lost
-    assert product_row(html, "A Product 1") == [3, 2, 2, 3, 0, 0, 0]
-    assert product_row(html, "A Product 2") == [1, 1, 1, 1, 0, 0, 0]
+    # total, customers, still interested, ordered, purchased, lost
+    assert product_row(html, "A Product 1") == [3, 2, 3, 0, 0, 0]
+    assert product_row(html, "A Product 2") == [1, 1, 1, 0, 0, 0]
 
     # Converting the lead does NOT mark products as purchased.
     w["a_admin"].post(f"/leads/{l1}/status", {"status": "Converted"})
-    assert product_row(w["a_admin"].get("/product-leads").get_data(as_text=True), "A Product 1")[5] == 0
+    assert product_row(w["a_admin"].get("/product-leads").get_data(as_text=True), "A Product 1")[4] == 0
     # Explicit stages are counted separately.
     w["a_admin"].post(f"/leads/{l1}/products", {f"stage_{p1}": "Purchased", f"stage_{p2}": "Ordered"})
     w["a_admin"].post(f"/leads/{l3}/status", {"status": "Lost"})
     html = w["a_admin"].get("/product-leads").get_data(as_text=True)
-    assert product_row(html, "A Product 1") == [3, 2, 2, 1, 0, 1, 1]
-    assert product_row(html, "A Product 2") == [1, 1, 1, 0, 1, 0, 0]
+    assert product_row(html, "A Product 1") == [3, 2, 1, 0, 1, 1]
+    assert product_row(html, "A Product 2") == [1, 1, 0, 1, 0, 0]
 
     # Staff1 sees only their own leads in the report.
     html = w["a_s1"].get("/product-leads").get_data(as_text=True)
@@ -704,27 +704,39 @@ def test_exports_follow_each_role_scope(world):
 
 def test_quick_update_from_lead_list(world):
     w = world
-    lid = add_lead(w["a_s1"], w["proj_a"], "Quick Lead", "6200000001", extra={"lead_quality": "Cold"})
+    lid = add_lead(w["a_s1"], w["proj_a"], "Quick Lead", "6200000001", extra={"whatsapp": "6200000001"})
+    with w["db"]() as conn:  # an old Hot/Warm/Cold value stays stored, untouched
+        conn.execute("UPDATE leads SET lead_quality = 'Cold' WHERE id = ?", (lid,))
     page = w["a_s1"].get("/leads").get_data(as_text=True)
-    assert f'href="/leads/{lid}/edit"' in page and f'form="q{lid}"' in page
-    r = w["a_s1"].post(f"/leads/{lid}/status", {"lead_quality": "Hot", "next": "/leads?sort=name"})
-    assert "Quality: &#39;Cold&#39; → &#39;Hot&#39;" in r.text and "Quick Lead" in r.text
+    assert f'href="/leads/{lid}/edit"' in page and "Lead quality" not in page and "Any quality" not in page
+    # the computer table and the phone card each have their own save form, so a change on the
+    # phone card is not overridden by the hidden table's value
+    assert page.count(f'name="status" form="q{lid}"') == 1 and page.count(f'name="status" form="qc{lid}"') == 1
+    assert f'id="q{lid}"' in page and f'id="qc{lid}"' in page
     r = w["a_s1"].post(f"/leads/{lid}/status", {"status": "Negotiation", "buying_possibility": "High",
-                                                "priority": "Urgent", "next": "/leads"})
+                                                "priority": "Urgent", "lead_quality": "Hot", "next": "/leads"})
     with w["db"]() as conn:
         row = conn.execute("SELECT status, lead_quality, buying_possibility, priority, updated_by FROM leads"
                            " WHERE id = ?", (lid,)).fetchone()
         history = [a for (a,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (lid,))]
-    assert row == ("Negotiation", "Hot", "High", "Urgent", w["uid"]("a_staff1"))
+    assert row == ("Negotiation", "Cold", "High", "Urgent", w["uid"]("a_staff1"))
     assert any("Status: 'New' → 'Negotiation'" in h for h in history)
-    # invalid values and other staff are rejected; an off-site "next" is ignored
-    w["a_s1"].post(f"/leads/{lid}/status", {"lead_quality": "Boiling", "next": "/leads"})
-    assert w["a_s2"].post(f"/leads/{lid}/status", {"lead_quality": "Cold"}).status_code == 404
+    # editing the lead keeps the stored quality too
+    assert "lead_quality" not in w["a_s1"].get(f"/leads/{lid}/edit").get_data(as_text=True)
+    # other staff are rejected; an off-site "next" is ignored
+    assert w["a_s2"].post(f"/leads/{lid}/status", {"status": "Lost"}).status_code == 404
     r = w["a_s1"].post(f"/leads/{lid}/status", {"priority": "Low", "next": "https://evil.example/"}, follow=False)
     assert r.headers["Location"].endswith(f"/leads/{lid}")
+    # follow-ups page and dashboard lists: WhatsApp, status change and edit, with their own forms
+    w["a_s1"].post(f"/leads/{lid}/followups", {"due_date": "2026-01-01", "note": "call"})
+    fu = w["a_s1"].get("/followups").get_data(as_text=True)
+    assert f'form="qf{lid}"' in fu and f'form="qfc{lid}"' in fu and 'data-wa="916200000001"' in fu
+    dash = w["a_s1"].get("/").get_data(as_text=True)
+    assert f'form="qd{lid}"' in dash and f'form="qr{lid}"' in dash and f'href="/leads/{lid}/edit"' in dash
+    assert 'class="orgname" href="/"' in dash
+    w["a_s1"].post(f"/leads/{lid}/status", {"status": "Quotation", "next": "/followups"})
     with w["db"]() as conn:
-        assert conn.execute("SELECT lead_quality FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Hot"
-
+        assert conn.execute("SELECT status FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Quotation"
 
 def test_company_name_quotation_youtube_and_whatsapp_link(world):
     w = world
@@ -754,13 +766,13 @@ def test_bulk_actions_recycle_bin_and_restore(world):
     w["a_s1"].post(f"/leads/{a}/followups", {"due_date": "2026-11-01", "note": "call back"})
     # staff bulk update touches only their own leads, even if another id is sent
     w["a_s1"].post("/leads/bulk", {"ids": [str(a), str(b), str(other)], "action": "update", "status": "Quotation",
-                                   "lead_quality": "Hot", "source": "YouTube", "next_follow_up": "2026-12-01",
+                                   "source": "YouTube", "next_follow_up": "2026-12-01",
                                    "next": "/leads"})
     with w["db"]() as conn:
         rows = dict((r[0], r[1:]) for r in conn.execute(
-            "SELECT id, status, lead_quality, source, next_follow_up FROM leads WHERE id IN (?,?,?)", (a, b, other)))
+            "SELECT id, status, source, next_follow_up FROM leads WHERE id IN (?,?,?)", (a, b, other)))
         hist = [h for (h,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (b,))]
-    assert rows[a] == ("Quotation", "Hot", "YouTube", "2026-12-01") and rows[b][0] == "Quotation"
+    assert rows[a] == ("Quotation", "YouTube", "2026-12-01") and rows[b][0] == "Quotation"
     assert rows[other][0] == "New" and any(h.startswith("Bulk update:") for h in hist)
     # admin bulk-assigns; staff cannot assign
     w["a_s1"].post("/leads/bulk", {"ids": [str(b)], "action": "update", "assigned_to": str(w["uid"]("a_staff2"))})

@@ -1,5 +1,5 @@
 REAL VIEW CRM + REAL VIEW CREATIVE STUDIO WEBSITE — PROJECT CONTEXT
-(Paste this into a new Claude chat so it knows the whole project. Last updated: 17 Oct 2026.)
+(Paste this into a new Claude chat so it knows the whole project. Last updated: 17 Oct 2026, evening.)
 
 ======================================================================
 0. HOW TO WORK WITH ME (the owner)
@@ -77,12 +77,15 @@ Leads
 - "Created by" is recorded automatically and can never be changed.
 - Statuses: New, Contacted, Interested, Follow-up, Quotation, Negotiation, Converted, Not Interested, Lost.
 - Sources: Facebook, Instagram, Google Ads, YouTube, Website, WhatsApp, Referral, Walk-in, Phone Call, Other.
-- Quality Hot/Warm/Cold; Possibility High/Medium/Low; Priority Urgent/High/Normal/Low.
+- Possibility High/Medium/Low; Priority Urgent/High/Normal/Low.
+- Lead QUALITY (Hot/Warm/Cold) was REMOVED from every screen, filter, report and export on 17 Oct
+  (owner's request). Old values are still stored in the database (column lead_quality), untouched.
 - Lists: search (incl. company), filters, sorting, 15 per page by default (Show 15/50/100).
-- Inline editing in lists (status, quality, possibility, priority dropdowns save instantly) + ✏️ Edit.
+- Inline editing in lists (status, possibility, priority dropdowns save instantly) + ✏️ Edit.
+  Each place has its own small save form (fixed 17 Oct: phone-card changes used to be ignored).
 - Phone layout: each lead is a card (name, company, place, status, Call, WhatsApp, Edit, Delete);
   filters fold behind a "🔍 Filters" button. Computer: full table.
-- Tick boxes + "select all": bulk change status/quality/possibility/priority/source/follow-up date,
+- Tick boxes + "select all": bulk change status/possibility/priority/source/follow-up date,
   assign to staff (admins), export selected, delete selected.
 - Delete: admins any lead; staff their own/assigned leads. Deleted leads go to a Recycle Bin
   for 30 days (with products, follow-ups, history); admins can Restore or Delete forever.
@@ -92,7 +95,9 @@ Other pages
   State-wise leads, Product-wise leads (interest vs ordered vs purchased tracked separately),
   Follow-ups (overdue/today/upcoming/completed), Reports, Export page (CSV/ZIP by role scope),
   Staff & Users, Organization Settings, Client Organizations (Super Admin).
-- Organization name shown in the top bar with a coloured initial badge.
+- Organization name shown in the top bar with a coloured initial badge; tapping it opens the Dashboard.
+- Follow-ups page, Dashboard "Follow-ups due" and "Recently added leads": WhatsApp, Call, Status change,
+  Edit (and ✅ Done on follow-ups); phone shows cards.
 Website enquiries
 - The website contact form also creates a lead in the agency workspace (project "Website
   Enquiries", source Website), with rate limit + honeypot.
@@ -138,18 +143,15 @@ Digital Catalogue (built 16 Oct 2026)
 ======================================================================
 6. OPEN ITEMS / NEXT STEPS
 ======================================================================
-A) PROPOSED, waiting for owner's decision (not built yet):
-   - Follow-ups page + Dashboard "Follow-ups due" + "Recently added leads":
-     add WhatsApp button, Call button, inline Status and Quality change, Edit; phone card layout
-     (with ✅ Done on follow-ups).
-     Open question: only Status + Quality editable there (my suggestion), or also Priority/Possibility?
-   - Tapping the organization name in the top bar should open the main Dashboard.
+A) (Done 17 Oct: phone-card save bug, follow-ups/dashboard lists, org name link, Quality removed.)
 B) Keyboard language bug on phones: on the lead form, switching Gboard language (ML/EN) closes the
    keyboard. Chrome shows autofill suggestions (owner's own name/email) above the keyboard;
    autocomplete="off" did NOT remove them. Owner was asked to test: Chrome > Settings >
    Addresses and more > turn off "Save and fill addresses", then retry. If that fixes it, the CRM fix
    is to rename form field names so Chrome doesn't recognise them. Result not yet reported.
-C) Owner to test: WhatsApp Desktop app mode on a computer.
+C) Owner to test: WhatsApp Desktop app mode on a computer. Decided: no more WhatsApp changes for now.
+   Option kept for later: a small own Chrome extension that reuses one WhatsApp Web tab (for agencies
+   using several WhatsApp accounts in different Chrome profiles).
 D) Later / deferred:
    - Official WhatsApp Business API (Interakt / AiSensy / Wati etc.): automatic replies with photos,
      videos, buttons, bulk messages, incoming WhatsApp leads into the CRM. Needs a provider account;

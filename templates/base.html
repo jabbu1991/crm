@@ -12,9 +12,9 @@
 {% set ep = request.endpoint or '' %}
 <header class="topbar">
   <a class="brand" href="{{ url_for('dashboard') }}" title="{{ brand.product }} by {{ brand.company }}"><img class="brand-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
-  <div class="orgname" title="Current organization">
+  <a class="orgname" href="{{ url_for('dashboard') }}" title="{{ g.org.name }}: dashboard">
     <span class="org-badge"><span class="org-initial">{{ (g.org.name or '?')[:1]|upper }}</span><span class="org-text">{{ g.org.name }}</span></span>{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
-  </div>
+  </a>
   <button class="menu-btn" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">☰</button>
   <div class="userbox">
     <a href="{{ url_for('account') }}" title="My account">{{ g.user.name }} <small>({{ ROLE_LABELS[g.user.role] }})</small></a>

@@ -84,7 +84,6 @@
     <legend>Qualification &amp; follow-up</legend>
     <div class="row-4">
       <label>Lead status<select name="status">{% for s in LEAD_STATUSES %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select></label>
-      <label>Lead quality<select name="lead_quality"><option value="">—</option>{% for s in LEAD_QUALITIES %}<option {{ 'selected' if data.lead_quality == s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Buying possibility<select name="buying_possibility"><option value="">—</option>{% for s in BUYING_POSSIBILITIES %}<option {{ 'selected' if data.buying_possibility == s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Priority<select name="priority"><option value="">—</option>{% for s in PRIORITIES %}<option {{ 'selected' if data.priority == s }}>{{ s }}</option>{% endfor %}</select></label>
     </div>

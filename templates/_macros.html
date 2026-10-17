@@ -30,11 +30,33 @@
   <th class="sortable {{ 'sorted' if c.sort == key }}"><a href="{{ url_for(c.endpoint, **dict(dict(c.params, **c.url_args), sort=key, dir=nd, page=1)) }}">{{ label }}{% if c.sort == key %} {{ '▲' if c.direction == 'asc' else '▼' }}{% endif %}</a></th>
 {%- endmacro %}
 
-{% macro quick_select(l, field, options, allow_blank=True, prefix='') -%}
-<select class="quick badge {{ (prefix ~ (l[field] or 'none'))|badge }}" name="{{ field }}" form="q{{ l.id }}" onchange="this.form.submit()" title="Change and it saves">
+{% macro quick_select(l, field, options, allow_blank=True, prefix='', fid='q') -%}
+<select class="quick badge {{ (prefix ~ (l[field] or 'none'))|badge }}" name="{{ field }}" form="{{ fid }}{{ l.id }}" onchange="this.form.submit()" title="Change and it saves">
   {% if allow_blank %}<option value="">—</option>{% endif %}
   {% for o in options %}<option {{ 'selected' if l[field] == o }}>{{ o }}</option>{% endfor %}
 </select>
+{%- endmacro %}
+
+{% macro quick_form(l, fid) -%}
+<form id="{{ fid }}{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}" hidden><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form>
+{%- endmacro %}
+
+{# A compact lead card for phones and short lists: status, call, WhatsApp, edit. `l` needs id, customer_name,
+   company_name, phone, whatsapp, status, product_names. #}
+{% macro mini_card(l, fid, top='') -%}
+<article class="lead-card">
+  {% if top %}<div class="small muted">{{ top }}</div>{% endif %}
+  <div class="lc-top">
+    <a class="lc-name" href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b>{% if l.company_name %}<span class="muted small"> · {{ l.company_name }}</span>{% endif %}</a>
+    {% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_form(l, fid) }}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', fid) }}{% endif %}
+  </div>
+  {% if caller is defined %}{{ caller() }}{% endif %}
+  <div class="lc-actions">
+    {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}">📞 Call</a>{% endif %}
+    {% if l.whatsapp %}{{ wa_link(l, '🟢 WhatsApp', 'btn btn-sm') }}{% endif %}
+    {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('lead_edit', lid=l.id) }}">✏️ Edit</a>{% endif %}
+  </div>
+</article>
 {%- endmacro %}
 
 {% macro wa_link(l, label=None, cls='') -%}
@@ -48,7 +70,6 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
   <b class="bulk-count">0 selected</b>
   <select name="status"><option value="">Status…</option>{% for o in LEAD_STATUSES %}<option>{{ o }}</option>{% endfor %}</select>
-  <select name="lead_quality"><option value="">Quality…</option>{% for o in LEAD_QUALITIES %}<option>{{ o }}</option>{% endfor %}</select>
   <select name="buying_possibility"><option value="">Buying possibility…</option>{% for o in BUYING_POSSIBILITIES %}<option>{{ o }}</option>{% endfor %}</select>
   <select name="priority"><option value="">Priority…</option>{% for o in PRIORITIES %}<option>{{ o }}</option>{% endfor %}</select>
   <select name="source"><option value="">Source…</option>{% for o in LEAD_SOURCES %}<option>{{ o }}</option>{% endfor %}</select>
@@ -64,7 +85,7 @@
   <thead><tr>
     {% if not viewing %}<th class="sel"><input type="checkbox" class="sel-all" title="Select all on this page"></th><th></th>{% endif %}
     {{ th('name', 'Customer', ctx) }}
-    {{ th('status', 'Status', ctx) }}{{ th('quality', 'Quality', ctx) }}{{ th('possibility', 'Buying poss.', ctx) }}{{ th('priority', 'Priority', ctx) }}
+    {{ th('status', 'Status', ctx) }}{{ th('possibility', 'Buying poss.', ctx) }}{{ th('priority', 'Priority', ctx) }}
     {{ th('followup', 'Next follow-up', ctx) }}
     {{ th('phone', 'Phone', ctx) }}<th>WhatsApp</th>{{ th('email', 'Email', ctx) }}
     {{ th('place', 'Place', ctx) }}{{ th('district', 'District', ctx) }}{{ th('state', 'State', ctx) }}{{ th('requirement', 'Products', ctx) }}
@@ -82,12 +103,10 @@
       <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a>{% if l.company_name %}<div class="small muted">{{ l.company_name }}</div>{% endif %}</td>
       {% if viewing %}
       <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
-      <td>{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}</td>
       <td>{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}</td>
       <td>{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}</td>
       {% else %}
       <td>{{ quick_select(l, 'status', LEAD_STATUSES, False) }}</td>
-      <td>{{ quick_select(l, 'lead_quality', LEAD_QUALITIES) }}</td>
       <td>{{ quick_select(l, 'buying_possibility', BUYING_POSSIBILITIES) }}</td>
       <td>{{ quick_select(l, 'priority', PRIORITIES, True, 'p-') }}</td>
       {% endif %}
@@ -115,13 +134,13 @@
     <div class="lc-top">
       {% if not viewing %}<input type="checkbox" class="sel-one" name="ids" value="{{ l.id }}" form="bulk" aria-label="Select {{ l.customer_name }}">{% endif %}
       <a class="lc-name" href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b>{% if l.company_name %}<span class="muted small"> · {{ l.company_name }}</span>{% endif %}</a>
-      {% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_select(l, 'status', LEAD_STATUSES, False) }}{% endif %}
+      {% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_form(l, 'qc') }}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', 'qc') }}{% endif %}
     </div>
     {% if l.place or l.district or l.state %}<div class="muted small">📍 {{ [l.place, l.district, l.state]|select|join(', ') }}</div>{% endif %}
     {% if l.product_names %}<div class="small">🛒 {{ l.product_names }}</div>{% endif %}
     <div class="lc-quals">
-      {% if viewing %}{% if l.lead_quality %}<span class="badge {{ l.lead_quality|badge }}">{{ l.lead_quality }}</span>{% endif %}
-      {% else %}{{ quick_select(l, 'lead_quality', LEAD_QUALITIES) }}{{ quick_select(l, 'priority', PRIORITIES, True, 'p-') }}{% endif %}
+      {% if viewing %}{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}
+      {% else %}{{ quick_select(l, 'priority', PRIORITIES, True, 'p-', 'qc') }}{% endif %}
       {% if l.next_follow_up %}<span class="small {{ 'overdue' if l.next_follow_up < today }}">📅 {{ l.next_follow_up }}</span>{% endif %}
     </div>
     <div class="lc-actions">
@@ -136,7 +155,7 @@
 {%- endmacro %}
 
 {# Filter bar. `fixed` holds keys that are locked by the page (e.g. state, product) and rendered hidden. #}
-{% macro lead_filter_form(params, o, action, fixed={}, show=('q','project','product','status','quality','possibility','priority','state','district','place','source','staff','assigned','dates','followup')) -%}
+{% macro lead_filter_form(params, o, action, fixed={}, show=('q','project','product','status','possibility','priority','state','district','place','source','staff','assigned','dates','followup')) -%}
 <form method="get" action="{{ action }}" class="card filters">
   {% for k, v in fixed.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
   {% if params.sort %}<input type="hidden" name="sort" value="{{ params.sort }}"><input type="hidden" name="dir" value="{{ params.dir }}">{% endif %}
@@ -147,7 +166,6 @@
   {% if 'product' in show %}<select name="product"><option value="">All products</option>{% for p in o.products_all %}<option value="{{ p.id }}" {{ 'selected' if params.product == p.id|string }}>{{ p.name }}{{ '' if p.active else ' (inactive)' }}</option>{% endfor %}</select>{% endif %}
   {% if 'stage' in show %}<select name="stage"><option value="">Any product stage</option>{% for s in PRODUCT_STAGES %}<option {{ 'selected' if params.stage == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
   {% if 'status' in show %}<select name="status"><option value="">All statuses</option>{% for s in LEAD_STATUSES %}<option {{ 'selected' if params.status == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
-  {% if 'quality' in show %}<select name="quality"><option value="">Any quality</option>{% for s in LEAD_QUALITIES %}<option {{ 'selected' if params.quality == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
   {% if 'possibility' in show %}<select name="possibility"><option value="">Any possibility</option>{% for s in BUYING_POSSIBILITIES %}<option {{ 'selected' if params.possibility == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
   {% if 'priority' in show %}<select name="priority"><option value="">Any priority</option>{% for s in PRIORITIES %}<option {{ 'selected' if params.priority == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
   {% if 'state' in show %}<select name="state"><option value="">All states</option>{% for s in o.states %}<option {{ 'selected' if params.state == s }}>{{ s }}</option>{% endfor %}</select>{% endif %}
