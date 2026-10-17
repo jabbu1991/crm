@@ -1,77 +1,100 @@
 <!doctype html>
-<html lang="ml">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>ജനകീയ ഐക്യദാർഢ്യ സംഗമം · പോസ്റ്റർ</title>
+<title>Poster Maker · Real View Creative Studio</title>
+<link rel="icon" href="../assets/favicon-64.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+Chettan+2:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@700;800&family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
 <style>
+  :root {
+    --ink: #0b1736; --text: #334155; --muted: #5b6b85; --line: #dbe7f5;
+    --bg: #ffffff; --bg-alt: #f2f8ff; --accent: #2563eb; --accent-2: #06b6d4; --soft: #e8f3ff;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #0d1b3e; color: #fff; font-family: "Baloo Chettan 2", system-ui, sans-serif; }
-  main { max-width: 520px; margin: 0 auto; padding: 16px 14px 40px; display: flex; flex-direction: column; gap: 14px; }
-  h1 { margin: 0; font-size: 22px; line-height: 1.3; text-align: center; }
-  .sub { margin: 0; text-align: center; color: #c9d4ef; font-size: 15px; }
-  .stage { position: relative; border-radius: 12px; overflow: hidden; background: #fff; }
+  body { margin: 0; background: var(--bg-alt); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { background: #fff; border-bottom: 1px solid var(--line); }
+  .brand { max-width: 520px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .brand img { width: 38px; height: 38px; border-radius: 10px; }
+  .brand b { font: 800 17px Montserrat, sans-serif; color: var(--ink); display: block; line-height: 1.1; }
+  .brand small { font: 600 11px Montserrat, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  main { max-width: 520px; margin: 0 auto; padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font: 800 24px/1.2 Montserrat, sans-serif; color: var(--ink); text-align: center; }
+  .sub { margin: 0; text-align: center; color: var(--muted); }
+  .stage { border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 10px 30px -12px rgba(15, 23, 42, .25); }
   canvas { display: block; width: 100%; height: auto; touch-action: none; }
-  .hint { font-size: 14px; color: #c9d4ef; text-align: center; margin: 0; }
+  .hint { font-size: 14px; color: var(--muted); text-align: center; margin: 0; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .step { font: 700 13px Montserrat, sans-serif; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
   .pick { position: relative; display: block; }
-  .pick span, .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 54px;
-    border-radius: 14px; font: 700 18px "Baloo Chettan 2", system-ui, sans-serif; border: 0; }
-  .pick span { background: #fff; color: #0d1b3e; }
+  .pick span, .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px;
+    border-radius: 999px; font: 700 16px Montserrat, sans-serif; border: 2px solid transparent; }
+  .pick span { background: #fff; color: var(--accent); border-color: #bfdbfe; }
   .pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
-  input[type=text] { font: 600 20px "Baloo Chettan 2", system-ui, sans-serif; padding: 12px 14px; border-radius: 12px; border: 2px solid #3b5bbf; }
-  .zoom { display: flex; align-items: center; gap: 10px; font-size: 16px; }
-  .zoom input { flex: 1; }
-  .btn-dl { background: #e53935; color: #fff; }
+  label.field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; color: var(--ink); }
+  input[type=text] { font: 700 19px "Anek Malayalam", Inter, sans-serif; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); color: var(--ink); }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .zoom { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+  .zoom input { flex: 1; accent-color: var(--accent); }
+  .btn-dl { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 10px 24px -10px rgba(37, 99, 235, .6); }
   .btn-share { background: #16a34a; color: #fff; }
-  .btn:disabled { background: #4a5679; color: #aab3cc; }
+  .btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; }
   .result { display: flex; flex-direction: column; gap: 8px; }
-  .result img { width: 100%; border-radius: 12px; }
-  .note { margin: 0; font-size: 15px; color: #ffd54f; text-align: center; }
-  .privacy { margin: 0; font-size: 13px; color: #8ea0cc; text-align: center; }
+  .result img { width: 100%; border-radius: 16px; }
+  .note { margin: 0; font-size: 14px; color: var(--ink); background: var(--soft); border-radius: 12px; padding: 10px 12px; text-align: center; }
+  .privacy { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+  footer { text-align: center; font-size: 13px; color: var(--muted); padding: 0 16px 24px; }
 </style>
 </head>
 <body>
+<header>
+  <div class="brand"><img src="../assets/logo-mark.png" alt=""><span><b>Real View</b><small>Creative Studio</small></span></div>
+</header>
 <main>
-  <h1>ലഹരി മാഫിയക്കെതിരെ — നിങ്ങളുടെ പോസ്റ്റർ</h1>
-  <p class="sub">ഫോട്ടോയും പേരും ചേർത്ത് പോസ്റ്റർ ഡൗൺലോഡ് ചെയ്യൂ</p>
+  <h1>Make your campaign poster</h1>
+  <p class="sub">Add your photo and name, then download or share.</p>
 
-  <div class="stage"><canvas id="cv" width="1145" height="1374" aria-label="പോസ്റ്റർ"></canvas></div>
-  <p class="hint" id="hint" hidden>ഫോട്ടോ വിരൽ കൊണ്ട് നീക്കാം · രണ്ടു വിരൽ കൊണ്ട് വലുതാക്കാം</p>
+  <div class="stage"><canvas id="cv" width="1145" height="1374" aria-label="Poster preview"></canvas></div>
+  <p class="hint" id="hint" hidden>Drag the photo to move it · pinch or use the slider to zoom</p>
 
-  <label class="pick">
-    <span>📷 ഫോട്ടോ തിരഞ്ഞെടുക്കുക</span>
-    <input type="file" id="photo" accept="image/*" aria-label="ഫോട്ടോ തിരഞ്ഞെടുക്കുക">
-  </label>
-
-  <div class="zoom" id="zoomRow" hidden>
-    <span>🔍</span><input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="സൂം">
+  <div class="card">
+    <span class="step">Step 1 · Photo</span>
+    <label class="pick">
+      <span>📷 Choose photo</span>
+      <input type="file" id="photo" accept="image/*" aria-label="Choose photo">
+    </label>
+    <div class="zoom" id="zoomRow" hidden>
+      <span>Zoom</span><input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+    </div>
   </div>
 
-  <label class="field">നിങ്ങളുടെ പേര്
-    <input type="text" id="name" maxlength="30" placeholder="ഉദാ: മുഹമ്മദ് / Muhammed" autocomplete="off">
-  </label>
+  <div class="card">
+    <span class="step">Step 2 · Name</span>
+    <label class="field">Your name <small style="font-weight:400;color:var(--muted)">Malayalam or English, up to 30 characters</small>
+      <input type="text" id="name" maxlength="30" placeholder="e.g. മുഹമ്മദ് / Muhammed" autocomplete="off">
+    </label>
+  </div>
 
-  <button class="btn btn-dl" id="dl" disabled>⬇️ പോസ്റ്റർ ഡൗൺലോഡ് ചെയ്യുക</button>
-  <button class="btn btn-share" id="share" hidden>📤 WhatsApp-ലേക്ക് ഷെയർ ചെയ്യുക</button>
+  <button class="btn btn-dl" id="dl" disabled>⬇️ Download poster</button>
+  <button class="btn btn-share" id="share" hidden disabled>📤 Share to WhatsApp</button>
 
   <div class="result" id="result" hidden>
-    <p class="note">ഡൗൺലോഡ് ആയില്ലെങ്കിൽ ചിത്രത്തിൽ അമർത്തിപ്പിടിച്ച് Save ചെയ്യുക</p>
-    <img id="out" alt="നിങ്ങളുടെ പോസ്റ്റർ">
+    <p class="note">If the download doesn't start, press and hold the image below and choose Save.</p>
+    <img id="out" alt="Your poster">
   </div>
-  <p class="privacy">ഫോട്ടോ ഈ ഫോണിൽ മാത്രം ഉപയോഗിക്കുന്നു. എവിടേക്കും അപ്‌ലോഡ് ചെയ്യുന്നില്ല.</p>
+  <p class="privacy">Your photo stays on this phone. Nothing is uploaded.</p>
 </main>
+<footer>Poster maker by Real View Creative Studio</footer>
 
 <script>
 (function () {
   // Poster geometry (pixels of the 1145 x 1374 poster)
   var CX = 564.5, CY = 578.5, R = 236;           // photo circle, up to the blue ring
   var NAME_X = 582, NAME_Y = 790, NAME_MAX_W = 640, NAME_MAX_SIZE = 72, NAME_MIN_SIZE = 26;
-  var FONT = '"Baloo Chettan 2", sans-serif';
+  var FONT = '"Anek Malayalam", sans-serif';
 
   var cv = document.getElementById("cv"), ctx = cv.getContext("2d");
   var nameIn = document.getElementById("name"), zoomIn = document.getElementById("zoom");
@@ -88,7 +111,7 @@
   function loadFont() {
     if (!document.fonts || !document.fonts.load) { fontReady = true; return Promise.resolve(); }
     var sample = (nameIn.value || "") + " അആ Aa";
-    return Promise.all([document.fonts.load("700 60px " + FONT, sample), document.fonts.load("800 60px " + FONT, sample)])
+    return Promise.all([document.fonts.load("800 60px " + FONT, sample)])
       .catch(function () {}).then(function () { fontReady = true; });
   }
   loadFont().then(draw);
