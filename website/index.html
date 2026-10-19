@@ -17,6 +17,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <!-- Meta Pixel -->
+  <script>
+  !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+  n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+  document,'script','https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '2198935647714328');
+  fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=2198935647714328&ev=PageView&noscript=1"></noscript>
+  <!-- End Meta Pixel -->
 </head>
 <body>
 
@@ -30,7 +42,7 @@
     <nav class="links">
       <a href="#about">About</a>
       <a href="#services">Services</a>
-      <a href="#careers">Careers</a>
+      <a href="/careers/">Careers</a>
       <a href="#process">Process</a>
       <a href="#crm">CRM</a>
       <a href="#contact">Contact</a>
@@ -64,7 +76,7 @@
   </section>
 
   <!-- ABOUT -->
-  <section class="section" id="about">
+  <section class="section" id="about" data-track-section="About">
     <div class="wrap">
       <p class="kicker">About us</p>
       <h2>Good marketing starts with understanding the business</h2>
@@ -85,24 +97,24 @@
   </section>
 
   <!-- SERVICES -->
-  <section class="section alt" id="services">
+  <section class="section alt" id="services" data-track-section="Services">
     <div class="wrap">
       <p class="kicker">Services</p>
       <h2>Seven services, from brand identity to customer enquiry</h2>
       <div class="cards services">
-        <article class="card"><span class="num">01</span><h3>Branding and Brand Identity</h3><p>Visual identity direction, logo applications, brand colours, typography, business stationery and brand-consistent marketing materials.</p></article>
-        <article class="card"><span class="num">02</span><h3>Social Media Creatives</h3><p>Instagram and Facebook post designs, product promotion creatives, campaign graphics and platform-specific content.</p></article>
-        <article class="card"><span class="num">03</span><h3>Performance Ads</h3><p>Meta ad campaigns built for enquiries, admissions and sales, with click-to-WhatsApp flows that turn clicks into conversations.</p></article>
-        <article class="card"><span class="num">04</span><h3>Reels and Video Content</h3><p>Short-form reels and promotional video concepts that explain products and drive action.</p></article>
-        <article class="card"><span class="num">05</span><h3>Product Marketing</h3><p>Product positioning, posters, feature communication, catalogues and sales-support materials.</p></article>
-        <article class="card"><span class="num">06</span><h3>Brochures and Catalogues</h3><p>Product and service brochures, information layouts and business presentation materials.</p></article>
-        <article class="card"><span class="num">07</span><h3>Campaigns and Business Communication</h3><p>Seasonal and festival campaigns, registration-focused creatives, website copy, landing-page messaging and sales presentations.</p></article>
+        <article class="card" data-service="Branding and Brand Identity"><span class="num">01</span><h3>Branding and Brand Identity</h3><p>Visual identity direction, logo applications, brand colours, typography, business stationery and brand-consistent marketing materials.</p></article>
+        <article class="card" data-service="Social Media Creatives"><span class="num">02</span><h3>Social Media Creatives</h3><p>Instagram and Facebook post designs, product promotion creatives, campaign graphics and platform-specific content.</p></article>
+        <article class="card" data-service="Performance Ads"><span class="num">03</span><h3>Performance Ads</h3><p>Meta ad campaigns built for enquiries, admissions and sales, with click-to-WhatsApp flows that turn clicks into conversations.</p></article>
+        <article class="card" data-service="Reels and Video Content"><span class="num">04</span><h3>Reels and Video Content</h3><p>Short-form reels and promotional video concepts that explain products and drive action.</p></article>
+        <article class="card" data-service="Product Marketing"><span class="num">05</span><h3>Product Marketing</h3><p>Product positioning, posters, feature communication, catalogues and sales-support materials.</p></article>
+        <article class="card" data-service="Brochures and Catalogues"><span class="num">06</span><h3>Brochures and Catalogues</h3><p>Product and service brochures, information layouts and business presentation materials.</p></article>
+        <article class="card" data-service="Campaigns and Business Communication"><span class="num">07</span><h3>Campaigns and Business Communication</h3><p>Seasonal and festival campaigns, registration-focused creatives, website copy, landing-page messaging and sales presentations.</p></article>
       </div>
     </div>
   </section>
 
   <!-- PROCESS -->
-  <section class="section alt" id="process">
+  <section class="section alt" id="process" data-track-section="Process">
     <div class="wrap">
       <p class="kicker">Our process</p>
       <h2>Five steps, so you always know what happens next</h2>
@@ -117,7 +129,7 @@
   </section>
 
   <!-- CRM PRODUCT -->
-  <section class="section crm" id="crm">
+  <section class="section crm" id="crm" data-track-section="CRM">
     <div class="wrap crm-inner">
       <div>
         <p class="kicker light">Our product</p>
@@ -130,7 +142,7 @@
           <li>Follow-up reminders so no enquiry is missed</li>
         </ul>
         <div class="hero-cta">
-          <a class="btn btn-primary wa-link" data-wa-text="Hi, I'd like a demo of Real View CRM." href="https://wa.me/918547275320" target="_blank" rel="noopener">Request a demo</a>
+          <a class="btn btn-primary wa-link" id="crm-demo" data-wa-text="I'd like a demo of Real View CRM" data-track-label="Book a CRM demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a CRM demo</a>
           <a class="btn btn-ghost-light" href="https://crm.realviewcreativestudio.in/login">CRM Login</a>
         </div>
       </div>
@@ -146,25 +158,15 @@
     </div>
   </section>
 
-  <!-- CAREERS -->
-  <section class="section alt" id="careers">
-    <div class="wrap contact-grid">
+  <!-- CAREERS (teaser; the full page is /careers/) -->
+  <section class="section alt" id="careers" data-track-section="Careers">
+    <div class="wrap careers-teaser">
       <div>
-        <p class="kicker">Careers with us</p>
-        <h2>Work with Real View Creative Studio</h2>
-        <p class="big">Are you a designer, video editor, content writer, ads specialist or marketer? We work with full-time team members and freelancers across Kerala. Tell us about yourself and what you can offer.</p>
-        <p>Your details come to us on WhatsApp. We will contact you when there is a suitable opportunity.</p>
+        <p class="kicker">Careers</p>
+        <h2>We're hiring creative people</h2>
+        <p class="big">Designers, video editors, writers, marketers and developers: work on branding, social media and digital marketing for many different brands, at our office or remotely.</p>
       </div>
-      <form class="enquiry card" id="careers-form" novalidate>
-        <h3>Apply on WhatsApp</h3>
-        <label>Your name *<input name="name" required autocomplete="name"></label>
-        <label>Place *<input name="place" required autocomplete="address-level2" placeholder="e.g. Tirur, Malappuram"></label>
-        <label>WhatsApp number *<input name="phone" type="tel" required autocomplete="tel" inputmode="tel"></label>
-        <label>What services can you offer? *<textarea name="skills" rows="4" required placeholder="e.g. Poster design, reels editing, Meta ads, Malayalam copywriting. Mention your experience and portfolio link if you have one."></textarea></label>
-        <button class="btn btn-primary" type="submit">Send on WhatsApp</button>
-        <p class="form-note">This opens WhatsApp with your details filled in. Just press send.</p>
-        <p class="form-error" hidden></p>
-      </form>
+      <a class="btn btn-primary" href="/careers/">View careers →</a>
     </div>
   </section>
 
@@ -216,7 +218,8 @@
   <div class="wrap footer-inner">
     <div class="logo small"><img class="logo-mark" src="assets/logo-mark.png" alt="" width="42" height="42"><span class="logo-text"><b>Real View</b><small>Creative Studio</small></span></div>
     <p>Creative, branding and marketing agency · Kerala, India</p>
-    <p>© <span id="year">2026</span> Real View Creative Studio · <a href="https://crm.realviewcreativestudio.in/login">CRM Login</a></p>
+    <p>© <span id="year">2026</span> Real View Creative Studio · <a href="/careers/">Careers</a> · <a href="https://crm.realviewcreativestudio.in/login">CRM Login</a></p>
+    <p class="cookie-note">This website uses cookies and the Meta Pixel to measure our ads.</p>
   </div>
 </footer>
 
@@ -224,6 +227,7 @@
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a13 13 0 0 0-11.2 19.6L3 29l6.6-1.7A13 13 0 1 0 16 3zm0 23.6c-2 0-4-.5-5.7-1.6l-.4-.2-3.9 1 1-3.8-.3-.4A10.6 10.6 0 1 1 16 26.6zm5.8-7.9c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.7 8.7 0 0 1-4.3-3.8c-.3-.6.3-.5.9-1.7.1-.2 0-.4 0-.5l-1-2.4c-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4s-1.2 1.2-1.2 2.9 1.2 3.3 1.4 3.6 2.4 3.7 5.9 5.2c2.2.9 3 1 4.1.8.7-.1 1.9-.8 2.2-1.5s.3-1.4.2-1.5-.3-.2-.6-.4z"/></svg>
 </a>
 
+<script src="assets/pixel-events.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

@@ -152,3 +152,28 @@ a { color: var(--accent); }
 
 .footer .logo-text b { color: #fff; } .footer .logo-text small { color: #94a3b8; }
 .footer .logo-mark { background: #fff; padding: 2px; }
+
+/* careers teaser (home) and careers page */
+.careers-teaser { display: flex; align-items: center; justify-content: space-between; gap: 28px; flex-wrap: wrap; }
+.careers-teaser > div { max-width: 720px; }
+.careers-teaser .big { margin: 0; }
+.careers-hero { padding: 72px 0 64px; }
+.links .nav-apply { margin-left: 8px; padding: 8px 18px; color: #fff; }
+.pills { list-style: none; padding: 0; margin: 28px 0 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.pills li { padding: 12px 18px; border-radius: 999px; background: #fff; border: 1px solid var(--line); box-shadow: 0 8px 20px -14px rgba(37, 99, 235, .5); font-weight: 600; color: var(--ink); }
+.cards.why-cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.why-ico { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #dbeafe, #cffafe); font-size: 22px; margin-bottom: 14px; }
+.ticks.dark li { color: var(--ink-2); }
+.enquiry fieldset.choice { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.enquiry fieldset.choice legend { font-weight: 600; font-size: 14px; color: var(--ink); margin-bottom: 8px; padding: 0; width: 100%; }
+.enquiry fieldset.choice legend small, .enquiry small.opt { font-weight: 400; color: var(--muted); }
+.enquiry fieldset.choice label { flex-direction: row; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 999px; font-weight: 500; cursor: pointer; background: #fff; }
+.enquiry fieldset.choice label:has(input:checked) { border-color: var(--accent); background: var(--soft); color: var(--accent); }
+.enquiry fieldset.choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.form-success { margin: 0; padding: 12px 14px; border-radius: 12px; background: #ecfdf5; border: 1px solid #86efac; color: #166534; font-weight: 600; }
+.footer .cookie-note { flex-basis: 100%; font-size: 12px; color: #64748b; }
+@media (max-width: 760px) {
+  .links .nav-apply { margin: 8px 0 0; justify-content: center; }
+  .careers-hero { padding: 48px 0 44px; }
+  .careers-teaser .btn { width: 100%; }
+}
