@@ -290,3 +290,39 @@ th.sel, td.sel { width: 28px; text-align: center; }
 a.orgname { text-decoration: none; }
 .lc-done { display: flex; gap: 6px; }
 .lc-done input { flex: 1; min-width: 0; padding: 6px 8px; }
+
+/* Lead lists: header row and Name column stay put; a scroll bar is always reachable on computers */
+.lt-wrap { max-height: calc(100vh - 130px); overflow: auto; }
+.lt-wrap thead th { position: sticky; top: 0; z-index: 2; }
+.lt-wrap .name-cell { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: inset -1px 0 0 var(--border); min-width: 210px; max-width: 290px; white-space: normal; }
+.lt-wrap thead th.name-cell { z-index: 3; background: #f8f9fc; }
+.lt-wrap tbody tr:hover .name-cell { background: #fafbff; }
+.nc { display: flex; gap: 8px; align-items: flex-start; }
+.nc-name { flex: 1; min-width: 0; }
+.nc .row-actions { display: flex; gap: 2px; flex: none; }
+.nc .del-btn { margin-left: 0; }
+tr.hl td, .lt-wrap tbody tr.hl .name-cell { background: #fef9c3; }
+.lead-card.hl { border-color: #facc15; background: #fefce8; }
+.hscroll { position: fixed; bottom: 0; height: 17px; overflow-x: auto; overflow-y: hidden; z-index: 20; background: rgba(248, 249, 252, .96); border-top: 1px solid var(--border); display: none; }
+.hscroll > div { height: 1px; }
+.btn-big { font-size: 16px; padding: 10px 18px; }
+
+/* Notes and next follow-up edited in place */
+.due-today { color: #c2410c; font-weight: 600; }
+.ied summary { cursor: pointer; list-style: none; }
+.ied summary::-webkit-details-marker { display: none; }
+.ied summary:hover .notes-text, .ied summary:hover span { text-decoration: underline dotted; }
+.ied-box { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; min-width: 250px; }
+.ied-row { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ied-row input[type=date] { width: auto; padding: 4px 6px; }
+.ied textarea { min-height: 70px; }
+.ied .chip { cursor: pointer; font: inherit; font-size: 12px; padding: 3px 10px; }
+.notes-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; word-break: break-word; }
+.ied[open] .notes-text { display: none; }
+.leads-table td.col-notes, .table td.col-notes { white-space: normal; min-width: 180px; max-width: 300px; }
+.leads-table td.col-next_follow_up { white-space: nowrap; }
+.lc-notes { font-size: 14px; }
+.lc-field { font-size: 13px; color: #374151; }
+.col-order td { vertical-align: middle; }
+.col-order .check { margin: 0; }
+.card-fields label:has(input:disabled) { opacity: .5; }

@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from '_macros.html' import bars, quick_form, quick_select, wa_link, mini_card with context %}
+{% extends 'base.html' %}{% from '_macros.html' import bars, quick_form, quick_select, wa_link, mini_card, notes_edit, fu_edit with context %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 {% set mine = not is_admin() %}
@@ -29,7 +29,11 @@
 
 <div class="page-head">
   <h1>{{ 'My dashboard' if mine else 'Dashboard · ' ~ g.org.name }}</h1>
-  {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('lead_new') }}">+ Add Lead</a>{% endif %}
+  <div class="actions">
+    {% if is_admin() and not viewing %}<a class="btn" href="{{ url_for('list_columns_settings') }}">⚙️ List columns</a>{% endif %}
+    <a class="btn" href="{{ url_for('leads_today') }}">Today's leads</a>
+    {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('lead_new') }}">+ Add Lead</a>{% endif %}
+  </div>
 </div>
 
 <div class="stats">
@@ -88,18 +92,19 @@
     <table class="table compact desktop-only">
       <tbody>
       {% for f in due_followups %}
-        {% set L = dict(id=f.lead_id, customer_name=f.customer_name, company_name=f.company_name, phone=f.phone, whatsapp=f.whatsapp, status=f.lead_status, product_names=f.product_names) %}
-        <tr><td class="nowrap {{ 'overdue' if f.due_date < today }}">{{ f.due_date }}</td>
+        {% set L = dict(id=f.lead_id, customer_name=f.customer_name, company_name=f.company_name, phone=f.phone, whatsapp=f.whatsapp, status=f.lead_status, product_names=f.product_names, notes=f.lead_notes, next_follow_up=f.lead_next) %}
+        <tr><td class="nowrap col-next_follow_up">{{ fu_edit(L) }}</td>
         <td><a href="{{ url_for('lead_view', lid=f.lead_id) }}">{{ f.customer_name }}</a></td>
         <td class="nowrap">{% if f.phone %}<a href="tel:{{ f.phone }}">{{ f.phone }}</a>{% endif %}{% if f.whatsapp %} · {{ wa_link(L, 'WhatsApp') }}{% endif %}</td>
         <td>{% if viewing %}<span class="badge {{ f.lead_status|badge }}">{{ f.lead_status }}</span>{% else %}{{ quick_form(L, 'qd') }}{{ quick_select(L, 'status', LEAD_STATUSES, False, '', 'qd') }}{% endif %}</td>
+        <td class="col-notes">{{ notes_edit(L) }}</td>
         <td>{% if not viewing %}<a class="edit-btn" href="{{ url_for('lead_edit', lid=f.lead_id) }}">✏️</a>{% endif %}</td></tr>
       {% else %}<tr><td class="muted">Nothing due. 🎉</td></tr>{% endfor %}
       </tbody>
     </table>
     <div class="lead-cards mobile-only">
       {% for f in due_followups %}
-        {% set L = dict(id=f.lead_id, customer_name=f.customer_name, company_name=f.company_name, phone=f.phone, whatsapp=f.whatsapp, status=f.lead_status, product_names=f.product_names) %}
+        {% set L = dict(id=f.lead_id, customer_name=f.customer_name, company_name=f.company_name, phone=f.phone, whatsapp=f.whatsapp, status=f.lead_status, product_names=f.product_names, notes=f.lead_notes, next_follow_up=f.lead_next) %}
         {{ mini_card(L, 'qdc', '📅 ' ~ f.due_date ~ ((' · ' ~ f.note) if f.note else '')) }}
       {% else %}<p class="muted">Nothing due. 🎉</p>{% endfor %}
     </div>
@@ -110,7 +115,7 @@
   <h2>{{ 'My recent leads' if mine else 'Recently added leads' }}</h2>
   <div class="table-wrap desktop-only">
   <table class="table leads-table">
-    <thead><tr><th>Customer</th><th>Phone</th><th>WhatsApp</th><th>Products</th><th>State</th><th>Project</th><th>Status</th><th>Created by</th><th>Date</th><th></th></tr></thead>
+    <thead><tr><th>Customer</th><th>Phone</th><th>WhatsApp</th><th>Products</th><th>State</th><th>Project</th><th>Status</th><th>Notes</th><th>Next follow-up</th><th>Created by</th><th>Date</th><th></th></tr></thead>
     <tbody>
     {% for l in recent %}
       <tr>
@@ -119,10 +124,11 @@
         <td class="nowrap">{% if l.whatsapp %}{{ wa_link(l) }}{% endif %}</td>
         <td class="wrap">{{ l.product_names or '' }}</td><td>{{ l.state or '' }}</td><td>{{ l.project_name }}</td>
         <td>{% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_form(l, 'qr') }}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', 'qr') }}{% endif %}</td>
+        <td class="col-notes">{{ notes_edit(l) }}</td><td class="col-next_follow_up">{{ fu_edit(l) }}</td>
         <td>{{ l.staff_name }}</td><td>{{ l.created_at[:10] }}</td>
         <td>{% if not viewing %}<a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}">✏️</a>{% endif %}</td>
       </tr>
-    {% else %}<tr><td colspan="10" class="muted">No leads yet. <a href="{{ url_for('lead_new') }}">Add the first lead →</a></td></tr>{% endfor %}
+    {% else %}<tr><td colspan="12" class="muted">No leads yet. <a href="{{ url_for('lead_new') }}">Add the first lead →</a></td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

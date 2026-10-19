@@ -24,7 +24,7 @@ import sqlite3
 import time
 import uuid
 import zipfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
 from flask import (Flask, Response, abort, flash, g, redirect, render_template,
@@ -132,8 +132,25 @@ def log_activity(lead_id, action, commit=True):
         get_db().commit()
 
 
+IST = timezone(timedelta(hours=5, minutes=30))  # Asia/Kolkata (no daylight saving)
+
+
 def today():
-    return date.today().isoformat()
+    """Today's date in India, whatever time zone the server runs in."""
+    return datetime.now(IST).date().isoformat()
+
+
+def ist_day_bounds(day=None):
+    """Start and end of an Indian day as server-local timestamps (how created_at is stored)."""
+    start = datetime.combine(day or datetime.now(IST).date(), datetime.min.time(), IST)
+    fmt = lambda d: d.astimezone().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    return fmt(start), fmt(start + timedelta(days=1))
+
+
+def quick_dates():
+    """Dates for the [Tomorrow] [+3 days] [+1 week] follow-up buttons."""
+    t = datetime.now(IST).date()
+    return [(label, (t + timedelta(days=n)).isoformat()) for label, n in (("Tomorrow", 1), ("+3 days", 3), ("+1 week", 7))]
 
 
 def valid_date(value):
@@ -278,6 +295,7 @@ def inject_globals():
         LEAD_SOURCES=LEAD_SOURCES, PRIORITIES=PRIORITIES, PRODUCT_STAGES=PRODUCT_STAGES,
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
         COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link,
+        list_settings=list_settings, LIST_COLUMNS=LIST_COLUMNS, quick_dates=quick_dates(),
     )
 
 
@@ -597,6 +615,39 @@ SORTABLE = {
     "project": "p.name COLLATE NOCASE",
 }
 
+# Columns an organization admin can show in lead lists (Name is always shown first).
+# key: (label, sort key or None)
+LIST_COLUMNS = {
+    "phone": ("Phone", "phone"), "whatsapp": ("WhatsApp", None), "email": ("Email", "email"),
+    "company": ("Company", None), "place": ("Place", "place"), "district": ("District", "district"),
+    "state": ("State", "state"), "country": ("Country", "country"), "products": ("Products", "requirement"),
+    "requirement": ("Requirement", None), "project": ("Project", "project"), "status": ("Status", "status"),
+    "possibility": ("Buying possibility", "possibility"), "priority": ("Priority", "priority"),
+    "source": ("Source", None), "notes": ("Notes", None), "next_follow_up": ("Next follow-up", "followup"),
+    "assigned": ("Assigned to", "assigned"), "created_by": ("Created by", "staff"), "created": ("Created", "created"),
+}
+DEFAULT_LIST_COLUMNS = ["phone", "place", "status", "notes", "next_follow_up", "assigned"]
+# Phone cards always show status, notes and the follow-up date; up to 4 more fields under the name.
+CARD_FIELD_CHOICES = [k for k in LIST_COLUMNS if k not in ("status", "notes", "next_follow_up")]
+DEFAULT_CARD_FIELDS = ["place", "products", "priority"]
+MAX_CARD_FIELDS = 4
+
+
+def list_settings():
+    """Lead list columns for the current organization: {'columns': [...], 'card': [...]}."""
+    if "list_settings" not in g:
+        row = query("SELECT columns, card_fields FROM org_list_settings WHERE org_id = ?", (org_id(),), one=True)
+        cols, card = DEFAULT_LIST_COLUMNS, DEFAULT_CARD_FIELDS
+        if row:
+            try:
+                cols = [c for c in json.loads(row["columns"]) if c in LIST_COLUMNS]
+                card = [c for c in json.loads(row["card_fields"]) if c in CARD_FIELD_CHOICES][:MAX_CARD_FIELDS]
+            except (ValueError, TypeError):
+                pass
+        g.list_settings = {"columns": list(dict.fromkeys(cols)), "card": list(dict.fromkeys(card))}
+    return g.list_settings
+
+
 TEXT_FILTERS = {
     "status": "l.status", "possibility": "l.buying_possibility",
     "priority": "l.priority", "state": "l.state", "district": "l.district", "place": "l.place",
@@ -727,6 +778,7 @@ def dashboard():
                          FROM leads l JOIN users u ON u.id = l.entered_by WHERE {where}
                          GROUP BY u.id ORDER BY c DESC""", args) if is_admin() else []
     due_followups = query(f"""SELECT f.*, l.customer_name, l.company_name, l.phone, l.whatsapp, l.status lead_status,
+                             l.notes lead_notes, l.next_follow_up lead_next,
                              (SELECT GROUP_CONCAT(pr.name, ', ') FROM lead_products lp JOIN products pr ON pr.id = lp.product_id
                           WHERE lp.lead_id = l.id) product_names
                              FROM follow_ups f JOIN leads l ON l.id = f.lead_id
@@ -1209,6 +1261,27 @@ def leads():
     return render_template("leads.html", params=params, project=project, **ctx, **filter_options())
 
 
+@app.route("/leads/today")
+@login_required
+def leads_today():
+    """Leads added today (India time), newest first. Staff: the ones they added. Admins: the whole organization."""
+    where, args = lead_scope()
+    start, end = ist_day_bounds()
+    where += " AND l.created_at >= ? AND l.created_at < ?"
+    args = args + [start, end]
+    if not is_admin():
+        where += " AND l.entered_by = ?"
+        args.append(g.user["id"])
+    params = clean_params(exclude=("new",))
+    sort = params.get("sort") if params.get("sort") in SORTABLE else "created"
+    direction = "asc" if params.get("dir") == "asc" else "desc"
+    rows = query(f"SELECT {LEAD_COLUMNS} {LEAD_FROM} WHERE {where} "
+                 f"ORDER BY {SORTABLE[sort]} {direction.upper()}, l.id {direction.upper()} LIMIT 500", args)
+    return render_template("leads_today.html", leads=rows, params=params, sort=sort, direction=direction,
+                           new_id=request.args.get("new", type=int),
+                           staff=org_users(active_only=False) if is_admin() else [])
+
+
 @app.route("/leads/export")
 @login_required
 def leads_export():
@@ -1275,7 +1348,7 @@ def lead_new():
             flash(f"Lead '{data['customer_name']}' saved. Created by {g.user['name']}.", "success")
             if request.form.get("save_and_new"):
                 return redirect(url_for("lead_new", project=data["project_id"]))
-            return redirect(url_for("lead_view", lid=lead_id))
+            return redirect(url_for("leads_today", new=lead_id))
     return render_template("lead_form.html", **lead_form_context(data))
 
 
@@ -1312,7 +1385,7 @@ def lead_edit(lid):
             changes = [f"{k.replace('_', ' ')}: '{lead[k] or ''}' → '{data[k]}'"
                        for k in LEAD_TEXT_FIELDS if k != "notes" and (lead[k] or "") != data[k]]
             if (lead["notes"] or "") != data["notes"]:
-                changes.append("notes updated")
+                changes.append(f"notes updated (previous notes: {lead['notes']})" if lead["notes"] else "notes added")
             if lead["project_id"] != data["project_id"]:
                 changes.append("moved to another project")
             if lead["assigned_to"] != data["assigned_to"]:
@@ -1376,6 +1449,57 @@ def lead_quick_status(lid):
             flash(f"{lead['customer_name']}: " + "; ".join(changes), "success")
         return redirect(nxt)
     return redirect(url_for("lead_view", lid=lid))
+
+
+def form_date(name):
+    """Last non-empty valid date sent under `name` (a quick-date button comes after the date box)."""
+    for value in reversed(request.form.getlist(name)):
+        if clean(value):
+            return valid_date(clean(value))
+    return ""
+
+
+@app.route("/leads/<int:lid>/inline", methods=["POST"])
+@login_required
+def lead_inline(lid):
+    """Notes and next follow-up edited straight from a lead list.
+    Saving notes closes the current follow-up (Done); a date given becomes the next pending follow-up."""
+    lead = get_lead(lid)
+    db = get_db()
+    ts = now()
+    due = form_date("next_follow_up")
+    if due is None:
+        flash("Choose a valid follow-up date.", "error")
+        return redirect(safe_next(url_for("lead_view", lid=lid)))
+    changes = []
+    if "notes" in request.form:
+        notes = (request.form.get("notes") or "").strip()
+        old = lead["notes"] or ""
+        if notes != old:
+            db.execute("UPDATE leads SET notes = ? WHERE id = ?", (notes, lid))
+            changes.append(f"Notes changed. Previous notes: {old}" if old else "Notes added")
+        if changes or due:
+            pending = db.execute("SELECT id, due_date FROM follow_ups WHERE lead_id = ? AND status = 'Pending'"
+                                 " ORDER BY due_date LIMIT 1", (lid,)).fetchone()
+            if pending:
+                db.execute("UPDATE follow_ups SET status = 'Done', outcome = ?, completed_by = ?, completed_at = ?"
+                           " WHERE id = ?", (notes[:200] or "Notes updated", g.user["id"], ts, pending[0]))
+                changes.append(f"Follow-up ({pending[1]}) done")
+            if due:
+                db.execute("INSERT INTO follow_ups (org_id, lead_id, due_date, note, created_by, created_at)"
+                           " VALUES (?,?,?,?,?,?)", (org_id(), lid, due, "", g.user["id"], ts))
+                changes.append(f"Next follow-up {due}")
+            sync_next_follow_up(db, lid)
+    elif due:
+        msg = schedule_follow_up(db, lid, due, lead["next_follow_up"], ts)
+        if msg:
+            changes.append(msg)
+    if changes:
+        touch_lead(db, lid, ts)
+        log_activity(lid, "; ".join(changes), commit=False)
+        db.commit()
+        flash(f"{lead['customer_name']}: saved.", "success")
+    return redirect(safe_next(url_for("lead_view", lid=lid)))
 
 
 @app.route("/leads/<int:lid>/products", methods=["POST"])
@@ -1624,7 +1748,48 @@ CSV_ALIASES = {
     "priority": ["priority"],
     "source": ["source", "lead source"],
     "notes": ["notes", "remarks", "comment", "comments"],
+    "project": ["project", "project name", "campaign"],
+    "next_follow_up": ["next follow-up", "next_follow_up", "next follow up", "follow-up", "follow up", "followup",
+                       "follow-up date"],
 }
+# Columns of the downloadable import template, in order (each one is an alias above).
+IMPORT_TEMPLATE_HEADERS = [
+    ("customer_name", "Customer Name"), ("company_name", "Company"), ("phone", "Phone"), ("whatsapp", "WhatsApp"),
+    ("email", "Email"), ("place", "Place"), ("district", "District"), ("state", "State"), ("country", "Country"),
+    ("project", "Project"), ("products", "Products"), ("requirement", "Requirement"), ("status", "Status"),
+    ("buying_possibility", "Buying Possibility"), ("priority", "Priority"), ("source", "Source"),
+    ("next_follow_up", "Next Follow-up"), ("notes", "Notes")]
+EXAMPLE_ROW_MARK = "delete this row"
+
+
+def import_date(value):
+    """A follow-up date from a spreadsheet: YYYY-MM-DD, or DD-MM-YYYY / DD/MM/YYYY as Excel often rewrites it."""
+    value = clean(value)
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(value, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return ""
+
+
+@app.route("/leads/import/template.csv")
+@login_required
+def leads_import_template():
+    projects_all = visible_projects(active_only=True)
+    products = org_products()
+    example = dict(customer_name="Example – delete this row", company_name="Example Traders", phone="9876543210",
+                   whatsapp="9876543210", email="example@example.com", place="Kochi", district="Ernakulam",
+                   state="Kerala", country=DEFAULT_COUNTRY, project=projects_all[0]["name"] if projects_all else "",
+                   products=products[0]["name"] if products else "", requirement="Wants a price quote",
+                   status=LEAD_STATUSES[0], buying_possibility=BUYING_POSSIBILITIES[0], priority="Normal",
+                   source=LEAD_SOURCES[0], next_follow_up=quick_dates()[0][1], notes="Called once, call again")
+    out = io.StringIO()
+    writer = SafeCsvWriter(out)
+    writer.writerow([h for _, h in IMPORT_TEMPLATE_HEADERS])
+    writer.writerow([example[k] for k, _ in IMPORT_TEMPLATE_HEADERS])
+    return Response("\ufeff" + out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=leads-import-template.csv"})
 
 
 @app.route("/leads/import", methods=["GET", "POST"])
@@ -1652,13 +1817,22 @@ def leads_import():
                 flash("CSV must have a 'Name' (or 'Customer Name') column.", "error")
             else:
                 products_by_name = {p["name"].lower(): p["id"] for p in org_products()}
+                projects_by_name = {}
+                for p in projects_all:
+                    projects_by_name[p["name"].strip().lower()] = p["id"]
+                    if p["code"]:
+                        projects_by_name.setdefault(p["code"].strip().lower(), p["id"])
                 imported, skipped, ts = 0, 0, now()
                 db = get_db()
                 cols = LEAD_TEXT_FIELDS + ["project_id", "assigned_to"]
                 for row in reader:
                     data = {f: clean(row.get(mapping[f])) if f in mapping else "" for f in LEAD_TEXT_FIELDS}
+                    if EXAMPLE_ROW_MARK in data["customer_name"].lower():
+                        continue  # the template's example row
                     data["state"], data["country"] = normalize_location(data["state"], data["country"] or DEFAULT_COUNTRY)
-                    data.update(project_id=pid, assigned_to=None, next_follow_up="", product_ids=[])
+                    row_pid = projects_by_name.get(clean(row.get(mapping["project"])).lower()) if "project" in mapping else None
+                    due = import_date(row.get(mapping["next_follow_up"])) if "next_follow_up" in mapping else ""
+                    data.update(project_id=row_pid or pid, assigned_to=None, next_follow_up="", product_ids=[])
                     names = [n.split("[")[0].strip() for n in
                              clean(row.get(mapping["products"])).replace(";", ",").split(",")] if "products" in mapping else []
                     data["product_ids"] = [products_by_name[n.lower()] for n in names if n.lower() in products_by_name]
@@ -1675,6 +1849,8 @@ def leads_import():
                         (org_id(), g.user["id"], phone_key(data["phone"] or data["whatsapp"]), ts, ts,
                          *[data[k] for k in cols])).lastrowid
                     sync_products(db, lead_id, data["product_ids"], ts)
+                    if due:
+                        schedule_follow_up(db, lead_id, due, "", ts)
                     log_activity(lead_id, "Imported from CSV", commit=False)
                     imported += 1
                 db.commit()
@@ -1794,6 +1970,7 @@ def followups():
         args.append(staff_id)
     order = "f.completed_at DESC" if view == "done" else "f.due_date, f.id"
     rows = query(f"""SELECT f.*, l.customer_name, l.company_name, l.phone, l.whatsapp, l.status lead_status,
+                       l.notes lead_notes, l.next_follow_up lead_next,
                        (SELECT GROUP_CONCAT(pr.name, ', ') FROM lead_products lp JOIN products pr ON pr.id = lp.product_id
                           WHERE lp.lead_id = l.id) product_names,
                        ua.name assigned_name, cu.name created_by_name, co.name completed_by_name
@@ -2218,6 +2395,28 @@ def staff_toggle(uid):
 
 
 # ---------------------------------------------------------------- organization settings
+
+@app.route("/settings/list-columns", methods=["GET", "POST"])
+@admin_required
+def list_columns_settings():
+    """The organization admin picks and orders the lead list columns, and the fields on phone cards."""
+    if request.method == "POST":
+        cols = [c for c in dict.fromkeys(request.form.getlist("col")) if c in LIST_COLUMNS]
+        card = [c for c in dict.fromkeys(request.form.getlist("card")) if c in CARD_FIELD_CHOICES][:MAX_CARD_FIELDS]
+        db = get_db()
+        db.execute("""INSERT INTO org_list_settings (org_id, columns, card_fields, updated_by, updated_at)
+                      VALUES (?,?,?,?,?) ON CONFLICT(org_id) DO UPDATE SET columns = excluded.columns,
+                      card_fields = excluded.card_fields, updated_by = excluded.updated_by,
+                      updated_at = excluded.updated_at""",
+                   (org_id(), json.dumps(cols), json.dumps(card), g.user["id"], now()))
+        db.commit()
+        flash("List columns saved. Everyone in your organization now sees these columns.", "success")
+        return redirect(url_for("list_columns_settings"))
+    current = list_settings()
+    order = current["columns"] + [k for k in LIST_COLUMNS if k not in current["columns"]]
+    return render_template("list_columns.html", order=order, current=current, card_choices=CARD_FIELD_CHOICES,
+                           max_card=MAX_CARD_FIELDS, defaults=DEFAULT_LIST_COLUMNS)
+
 
 @app.route("/organization", methods=["GET", "POST"])
 @admin_required

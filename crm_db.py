@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -476,8 +476,18 @@ def _migrate_v6(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_catalog_views ON catalog_views(org_id, created_at)")
 
 
+def _migrate_v7(conn):
+    """Lead list columns chosen by the organization admin. No row means the default columns."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS org_list_settings (
+        org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
+        columns TEXT NOT NULL,
+        card_fields TEXT NOT NULL,
+        updated_by INTEGER REFERENCES users(id),
+        updated_at TEXT)""")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
-              (6, _migrate_v6)]
+              (6, _migrate_v6), (7, _migrate_v7)]
 
 
 def migrate(db_path):

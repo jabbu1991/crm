@@ -26,6 +26,7 @@
   <a href="{{ url_for('dashboard') }}" class="{{ 'active' if ep == 'dashboard' }}">Dashboard</a>
   <a href="{{ url_for('projects') }}" class="{{ 'active' if ep.startswith('project_') or ep == 'projects' }}">Projects</a>
   <a href="{{ url_for('leads') }}" class="{{ 'active' if ep in ('leads', 'lead_view', 'lead_edit', 'leads_import') }}">Leads</a>
+  <a href="{{ url_for('leads_today') }}" class="{{ 'active' if ep == 'leads_today' }}">Today's Leads</a>
   {% if not viewing %}<a href="{{ url_for('lead_new') }}" class="nav-cta {{ 'active' if ep == 'lead_new' }}">+ Add Lead</a>{% endif %}
   <a href="{{ url_for('products') }}" class="{{ 'active' if ep in ('products', 'product_new', 'product_edit') }}">Products &amp; Services</a>
   <a href="{{ url_for('states') }}" class="{{ 'active' if ep in ('states', 'state_view') }}">State-wise Leads</a>
@@ -157,6 +158,27 @@
     }
     if (e.target.classList.contains("sel-one") || e.target.classList.contains("sel-all")) refresh();
   });
+  // Wide lead tables: a horizontal scroll bar fixed at the bottom of the screen while the table's own bar is off screen.
+  document.querySelectorAll(".lt-wrap").forEach(function (wrap) {
+    var hs = document.createElement("div"), inner = document.createElement("div");
+    hs.className = "hscroll"; hs.appendChild(inner); document.body.appendChild(hs);
+    function update() {
+      var r = wrap.getBoundingClientRect(), vh = window.innerHeight;
+      var show = wrap.offsetParent !== null && wrap.scrollWidth > wrap.clientWidth + 1 && r.top < vh - 60 && r.bottom > vh;
+      hs.style.display = show ? "block" : "none";
+      if (!show) return;
+      hs.style.left = (r.left + wrap.clientLeft) + "px"; hs.style.width = wrap.clientWidth + "px";
+      inner.style.width = wrap.scrollWidth + "px";
+      if (Math.abs(hs.scrollLeft - wrap.scrollLeft) > 1) hs.scrollLeft = wrap.scrollLeft;
+    }
+    hs.addEventListener("scroll", function () { if (Math.abs(hs.scrollLeft - wrap.scrollLeft) > 1) wrap.scrollLeft = hs.scrollLeft; });
+    wrap.addEventListener("scroll", function () { if (Math.abs(hs.scrollLeft - wrap.scrollLeft) > 1) hs.scrollLeft = wrap.scrollLeft; });
+    window.addEventListener("scroll", update, {passive: true});
+    window.addEventListener("resize", update);
+    document.addEventListener("toggle", update, true);
+    update();
+  });
+
   if (bar) bar.addEventListener("submit", function () {
     // a lead ticked in both the table and its phone card is sent once
     var seen = {};

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}List columns{% endblock %}
+{% block content %}
+<div class="page-head"><h1>⚙️ Lead list columns</h1><a class="btn" href="{{ url_for('dashboard') }}">← Dashboard</a></div>
+<form method="post" class="card form narrow" id="colform">
+  {{ csrf() }}
+  <p class="muted">Choose the columns everyone in <b>{{ g.org.name }}</b> sees in lead lists (Leads, Today's leads, State-wise and Product-wise lists), and their order. <b>Customer name</b> is always the first column. Hidden columns are only hidden in lists: the lead page, edit form, export and import keep every field.</p>
+  <h2>Computer: table columns</h2>
+  <table class="table compact col-order">
+    <tbody>
+    <tr class="fixed-row"><td>✔</td><td><b>Customer name</b> <span class="muted small">(always shown)</span></td><td></td></tr>
+    {% for key in order %}
+    <tr>
+      <td><input type="checkbox" name="col" value="{{ key }}" id="col-{{ key }}" {{ 'checked' if key in current.columns }}></td>
+      <td><label for="col-{{ key }}" class="check">{{ LIST_COLUMNS[key][0] }}</label></td>
+      <td class="nowrap"><button type="button" class="btn btn-sm mv" data-d="-1" aria-label="Move up">↑</button> <button type="button" class="btn btn-sm mv" data-d="1" aria-label="Move down">↓</button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h2>Phone: fields under the name <span class="muted small">up to {{ max_card }}</span></h2>
+  <p class="muted small">Phone cards always show the status, notes and next follow-up date. Pick up to {{ max_card }} more.</p>
+  <div class="checks card-fields">
+    {% for key in card_choices %}<label class="check"><input type="checkbox" name="card" value="{{ key }}" {{ 'checked' if key in current.card }}> {{ LIST_COLUMNS[key][0] }}</label>{% endfor %}
+  </div>
+  <div class="actions"><button class="btn btn-primary">Save</button></div>
+  <p class="muted small">Default: Name, {% for k in defaults %}{{ LIST_COLUMNS[k][0] }}{{ ', ' if not loop.last }}{% endfor %}.</p>
+</form>
+<script>
+(function () {
+  var form = document.getElementById("colform");
+  form.addEventListener("click", function (e) {
+    var b = e.target.closest(".mv"); if (!b) return;
+    var tr = b.closest("tr"), d = +b.dataset.d;
+    if (d < 0 && tr.previousElementSibling && !tr.previousElementSibling.classList.contains("fixed-row")) tr.parentNode.insertBefore(tr, tr.previousElementSibling);
+    if (d > 0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling, tr);
+  });
+  var boxes = form.querySelectorAll("input[name=card]"), max = {{ max_card }};
+  function limit() {
+    var n = form.querySelectorAll("input[name=card]:checked").length;
+    boxes.forEach(function (c) { c.disabled = !c.checked && n >= max; });
+  }
+  boxes.forEach(function (c) { c.addEventListener("change", limit); }); limit();
+})();
+</script>
+{% endblock %}

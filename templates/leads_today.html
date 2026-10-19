@@ -1,0 +1,11 @@
+{% extends 'base.html' %}{% from '_macros.html' import lead_table with context %}
+{% block title %}Today's leads{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ "Today's leads" if is_admin() else "Leads I added today" }} <small class="muted">· Today: {{ leads|length }} lead{{ '' if leads|length == 1 else 's' }}</small></h1>
+  {% if not viewing %}<a class="btn btn-primary btn-big" href="{{ url_for('lead_new') }}">➕ Add Lead</a>{% endif %}
+</div>
+{{ lead_table(leads, params, sort, direction, 'leads_today', highlight=new_id,
+              extra_cols=(['created_by'] if is_admin() else []), labels={'created_by': 'Added by'}) }}
+{% if not leads %}<p class="muted center">No leads added today yet. <a href="{{ url_for('lead_new') }}">Add the first one →</a></p>{% endif %}
+{% endblock %}

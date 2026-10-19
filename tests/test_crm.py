@@ -2,6 +2,7 @@
 
 Run:  python -m pytest -q
 """
+import csv
 import io
 import os
 import json
@@ -923,3 +924,160 @@ def test_digital_catalogue(world, tmp_path, monkeypatch):
     # Super Admin switches the catalogue off for this client
     w["sup"].post(f"/admin/organizations/{w['org_a']}/edit", {"name": "Org A", "code": "ORGA", "wa_templates_allowed": "1"})
     assert visitor.get("/c/orga").status_code == 404
+
+
+# ------------------------------------------------------------------ today's leads, inline notes, list columns, template
+
+def test_todays_leads_page_after_saving(world):
+    w = world
+    r = w["a_s1"].post("/leads/new", {"project_id": w["proj_a"], "customer_name": "Fresh One", "phone": "8100000001",
+                                      "status": "New", "confirm_duplicate": "1"}, follow=False)
+    lid = int(re.search(r"new=(\d+)", r.headers["Location"]).group(1))
+    assert "/leads/today?new=" in r.headers["Location"]
+    page = w["a_s1"].get(r.headers["Location"]).get_data(as_text=True)
+    assert "saved" in page and "Today: 1 lead" in page and f'id="lead-{lid}" class="hl"' in page
+    assert "➕ Add Lead" in page and f'href="/leads/{lid}/edit"' in page and f'form="q{lid}"' in page
+    assert "Today&#39;s Leads" in page or "Today's Leads" in page  # menu
+    other = add_lead(w["a_s2"], w["proj_a"], "Other Staff Lead", "8100000002")
+    with w["db"]() as conn:  # an older lead is not "today"
+        conn.execute("INSERT INTO leads (org_id, project_id, customer_name, phone, status, entered_by, assigned_to,"
+                     " created_at, updated_at) VALUES (?,?, 'Old Lead', '8100000003', 'New', ?, ?,"
+                     " '2020-01-01 10:00:00', '2020-01-01 10:00:00')",
+                     (w["org_a"], w["proj_a"], w["uid"]("a_staff1"), w["uid"]("a_staff1")))
+    mine = w["a_s1"].get("/leads/today").get_data(as_text=True)
+    assert "Fresh One" in mine and "Other Staff Lead" not in mine and "Old Lead" not in mine and "Added by" not in mine
+    # a lead assigned to staff1 but added by someone else is not in staff1's "added today"
+    w["a_admin"].post("/leads/bulk", {"ids": [str(other)], "action": "update", "assigned_to": w["uid"]("a_staff1")})
+    assert "Other Staff Lead" not in w["a_s1"].get("/leads/today").get_data(as_text=True)
+    admin = w["a_admin"].get("/leads/today").get_data(as_text=True)
+    assert "Fresh One" in admin and "Other Staff Lead" in admin and "Old Lead" not in admin
+    assert "Added by" in admin and "Anu Staff1" in admin and "Today: 2 leads" in admin
+    assert "Fresh One" not in w["b_admin"].get("/leads/today").get_data(as_text=True)
+    # editing keeps going back to the lead page; Save & new still opens a blank form
+    r = w["a_s1"].post(f"/leads/{lid}/edit", {"project_id": w["proj_a"], "customer_name": "Fresh One",
+                                              "phone": "8100000001", "status": "Contacted"}, follow=False)
+    assert r.headers["Location"].endswith(f"/leads/{lid}")
+    r = w["a_s1"].post("/leads/new", {"project_id": w["proj_a"], "customer_name": "Fresh Two", "phone": "8100000004",
+                                      "confirm_duplicate": "1", "save_and_new": "1"}, follow=False)
+    assert "/leads/new" in r.headers["Location"]
+    # Super Admin read-only view of the client
+    w["sup"].post(f"/admin/organizations/{w['org_a']}/view")
+    view = w["sup"].get("/leads/today").get_data(as_text=True)
+    assert "Fresh One" in view and "lead_inline" not in view and f'action="/leads/{lid}/inline"' not in view
+
+
+def test_inline_notes_and_next_follow_up(world):
+    w = world
+    lid = add_lead(w["a_s1"], w["proj_a"], "Note Lead", "8200000001",
+                   extra={"notes": "First call", "next_follow_up": "2020-01-01", "whatsapp": "8200000001"})
+    # editors on every list
+    for url in ("/leads", "/leads/today", "/followups", "/", "/states/view?state=Kerala"):
+        page = w["a_s1"].get(url).get_data(as_text=True)
+        assert f'action="/leads/{lid}/inline"' in page and "Tomorrow" in page, url
+    page = w["a_s1"].get("/leads").get_data(as_text=True)
+    assert "First call" in page and 'class="overdue">📅 2020-01-01' in page
+    # saving notes closes the pending follow-up and schedules the new date (quick button wins over the empty box)
+    r = w["a_s1"].post(f"/leads/{lid}/inline", {"notes": "Asked for a quote", "next_follow_up": ["", "2030-05-05"],
+                                                "next": "/leads"}, follow=False)
+    assert r.headers["Location"].endswith("/leads")
+    with w["db"]() as conn:
+        notes, nxt = conn.execute("SELECT notes, next_follow_up FROM leads WHERE id = ?", (lid,)).fetchone()
+        fus = conn.execute("SELECT due_date, status FROM follow_ups WHERE lead_id = ? ORDER BY id", (lid,)).fetchall()
+        hist = [h for (h,) in conn.execute("SELECT action FROM lead_activity a JOIN users u ON u.id = a.user_id"
+                                           " WHERE lead_id = ? AND u.username = 'a_staff1'", (lid,))]
+    assert notes == "Asked for a quote" and nxt == "2030-05-05"
+    assert fus == [("2020-01-01", "Done"), ("2030-05-05", "Pending")]
+    assert any("Previous notes: First call" in h for h in hist)
+    # changing only the date reschedules the pending follow-up
+    w["a_s1"].post(f"/leads/{lid}/inline", {"next_follow_up": "2030-06-06"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT next_follow_up FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "2030-06-06"
+        assert conn.execute("SELECT COUNT(*) FROM follow_ups WHERE lead_id = ? AND status = 'Pending'",
+                            (lid,)).fetchone()[0] == 1
+    # notes saved without a date: follow-up done, none pending
+    w["a_s1"].post(f"/leads/{lid}/inline", {"notes": "Bought elsewhere", "next_follow_up": ""})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT next_follow_up FROM leads WHERE id = ?", (lid,)).fetchone()[0] is None
+    # same permission and CSRF rules as editing the lead
+    assert w["a_s2"].post(f"/leads/{lid}/inline", {"notes": "x"}).status_code == 404
+    assert w["b_admin"].post(f"/leads/{lid}/inline", {"notes": "x"}).status_code == 404
+    assert w["a_s1"].c.post(f"/leads/{lid}/inline", data={"notes": "no token"}).status_code == 400
+    assert w["a_s1"].post(f"/leads/{lid}/inline", {"next_follow_up": "31-31-2030"}).status_code == 200
+    w["sup"].post(f"/admin/organizations/{w['org_a']}/view")
+    assert w["sup"].post(f"/leads/{lid}/inline", {"notes": "x"}).status_code == 403
+    with w["db"]() as conn:
+        assert conn.execute("SELECT notes FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Bought elsewhere"
+    # admin can edit notes of any lead in the organization
+    w["a_admin"].post(f"/leads/{lid}/inline", {"notes": "Admin note"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT notes FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Admin note"
+
+
+def test_admin_chooses_list_columns(world):
+    w = world
+    add_lead(w["a_s1"], w["proj_a"], "Col Lead", "8300000001", extra={"email": "col@example.com"})
+    page = w["a_s1"].get("/leads").get_data(as_text=True)
+    heads = re.findall(r"<th[^>]*>(?:<a[^>]*>)?([A-Za-z -]+)", page.split("<tbody>")[0])
+    assert [h.strip() for h in heads] == ["Phone", "Place", "Status", "Notes", "Next follow-up", "Assigned to"]
+    assert "lt-wrap" in page and "hscroll" in page and 'class="name-cell' in page
+    assert "⚙️ List columns" in w["a_admin"].get("/").get_data(as_text=True)
+    assert "⚙️ List columns" not in w["a_s1"].get("/").get_data(as_text=True)
+    assert w["a_s1"].get("/settings/list-columns").status_code == 403
+    assert w["a_s1"].post("/settings/list-columns", {"col": ["email"]}).status_code == 403
+    r = w["a_admin"].post("/settings/list-columns", {"col": ["email", "status", "bogus", "phone"],
+                                                     "card": ["email", "phone", "place", "state", "products", "status"]})
+    assert "List columns saved" in r.text
+    page = w["a_s1"].get("/leads").get_data(as_text=True)
+    head = page.split("<thead>")[1].split("</thead>")[0]
+    assert head.index("Email") < head.index("Status") < head.index("Phone") and "Place" not in head
+    assert "col@example.com" in page and 'form="q' in page
+    with w["db"]() as conn:
+        cols, card = conn.execute("SELECT columns, card_fields FROM org_list_settings WHERE org_id = ?",
+                                  (w["org_a"],)).fetchone()
+    assert json.loads(cols) == ["email", "status", "phone"] and json.loads(card) == ["email", "phone", "place", "state"]
+    # other organizations keep the defaults; export and the edit form keep every field
+    assert "Assigned to" in w["b_admin"].get("/leads").get_data(as_text=True).split("<tbody>")[0]
+    export = w["a_s1"].get("/leads/export").get_data(as_text=True)
+    assert "Place" in export and "Notes" in export
+    assert 'name="place"' in w["a_s1"].get("/leads/new").get_data(as_text=True)
+
+
+def test_import_template_round_trip(world):
+    w = world
+    r = w["a_s1"].get("/leads/import/template.csv")
+    raw = r.get_data()
+    assert raw.startswith("﻿".encode()) and "attachment" in r.headers["Content-Disposition"]
+    rows = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))
+    assert len(rows) == 2
+    head, example = rows
+    assert head[0] == "Customer Name" and "Next Follow-up" in head and "Project" in head and "Lead Quality" not in head
+    ex = dict(zip(head, example))
+    assert "delete this row" in ex["Customer Name"] and ex["Project"] == "A Campaign" and ex["Products"] == "A Product 1"
+    assert ex["Status"] in crm.LEAD_STATUSES and ex["Source"] in crm.LEAD_SOURCES
+    assert ex["Priority"] in crm.PRIORITIES and ex["Buying Possibility"] in crm.BUYING_POSSIBILITIES
+    # every template header is understood by the importer
+    known = {a for aliases in crm.CSV_ALIASES.values() for a in aliases}
+    assert all(h.lower() in known for h in head)
+    help_page = w["a_s1"].get("/leads/import").get_data(as_text=True)
+    assert "⬇️ Download template" in help_page and "YYYY-MM-DD" in help_page and "Quotation" in help_page
+    # the template as downloaded: the example row is skipped, nothing fails
+    r = w["a_s1"].post("/leads/import", {"project_id": w["proj_a"], "file": (io.BytesIO(raw), "template.csv")},
+                       content_type="multipart/form-data")
+    assert "Imported 0 lead(s)" in r.text and "Skipped" not in r.text
+    # a file made from the template: fill a row like the example
+    real = dict(ex, **{"Customer Name": "Template Customer", "Phone": "8400000001", "Next Follow-up": "2030-02-03"})
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(head)
+    writer.writerow(example)
+    writer.writerow([real[h] for h in head])
+    r = w["a_s1"].post("/leads/import", {"project_id": w["proj_a"],
+                                         "file": (io.BytesIO(("﻿" + out.getvalue()).encode()), "mine.csv")},
+                       content_type="multipart/form-data")
+    assert "Imported 1 lead(s)" in r.text and "Skipped" not in r.text
+    with w["db"]() as conn:
+        row = conn.execute("""SELECT l.project_id, l.status, l.source, l.state, l.next_follow_up, l.notes,
+                                (SELECT COUNT(*) FROM lead_products lp WHERE lp.lead_id = l.id),
+                                (SELECT COUNT(*) FROM leads WHERE customer_name LIKE '%delete this row%')
+                              FROM leads l WHERE customer_name = 'Template Customer'""").fetchone()
+    assert row == (w["proj_a"], ex["Status"], ex["Source"], "Kerala", "2030-02-03", ex["Notes"], 1, 0)

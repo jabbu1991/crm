@@ -1,5 +1,5 @@
 REAL VIEW CRM + REAL VIEW CREATIVE STUDIO WEBSITE — PROJECT CONTEXT
-(Paste this into a new Claude chat so it knows the whole project. Last updated: 17 Oct 2026, evening.)
+(Paste this into a new Claude chat so it knows the whole project. Last updated: 19 Oct 2026.)
 
 ======================================================================
 0. HOW TO WORK WITH ME (the owner)
@@ -41,10 +41,10 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py (29 pytest tests, all passing),
+  render.yaml, requirements.txt, tests/test_crm.py (33 pytest tests, all passing),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 6. Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 7 (v7 = org_list_settings). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -90,6 +90,17 @@ Leads
 - Delete: admins any lead; staff their own/assigned leads. Deleted leads go to a Recycle Bin
   for 30 days (with products, follow-ups, history); admins can Restore or Delete forever.
 - Duplicate warning, CSV import, CSV export, full activity history per lead.
+- After saving a new lead the user lands on "Today's Leads" (India date, newest first, the new lead highlighted,
+  "Today: N leads", big ➕ Add Lead). Staff: leads they added today; admin: whole organization + "Added by".
+- Notes and Next follow-up are editable straight from every list (Leads, Today's, Follow-ups, Dashboard,
+  State-wise, Product-wise; phone cards too). Saving notes from a list marks the current follow-up Done; a date
+  given (or Tomorrow / +3 days / +1 week) becomes the next follow-up. Old notes text goes to the lead history.
+  Follow-up date colours: overdue red, today orange.
+- Computer lead tables: header row and Name column stay fixed; a horizontal scroll bar stays at the bottom of the screen.
+- Admin "⚙️ List columns" (Dashboard button, /settings/list-columns): choose + order list columns and up to 4
+  fields on phone cards, per organization. Default: Name, Phone, Place, Status, Notes, Next follow-up, Assigned to.
+- Import page: "⬇️ Download template" (CSV with all accepted headings + one example row that the importer skips),
+  help box with allowed values. Import also reads Project and Next Follow-up (YYYY-MM-DD) columns.
 Other pages
 - Dashboard (per role), Projects/Campaigns (end date optional), Products & Services,
   State-wise leads, Product-wise leads (interest vs ordered vs purchased tracked separately),

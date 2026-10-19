@@ -41,8 +41,42 @@
 <form id="{{ fid }}{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}" hidden><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form>
 {%- endmacro %}
 
-{# A compact lead card for phones and short lists: status, call, WhatsApp, edit. `l` needs id, customer_name,
-   company_name, phone, whatsapp, status, product_names. #}
+{# Follow-up date colour: red when overdue, orange when due today. #}
+{% macro fu_class(d) -%}{{ 'overdue' if d and d < today else ('due-today' if d and d == today else '') }}{%- endmacro %}
+
+{# Notes, edited in place: tap the text, change it, Save. A follow-up date (or a quick button) schedules the next one. #}
+{% macro notes_edit(l) -%}
+{% if viewing %}<span class="notes-text">{{ l.notes or '' }}</span>{% else %}
+<details class="ied ied-notes">
+  <summary title="Tap to edit notes"><span class="notes-text {{ 'muted' if not l.notes }}">{{ l.notes or '+ Add note' }}</span></summary>
+  <form method="post" action="{{ url_for('lead_inline', lid=l.id) }}" class="ied-box">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+    <textarea name="notes" rows="3" placeholder="What happened? (call result, requirement…)">{{ l.notes or '' }}</textarea>
+    <div class="ied-row">
+      <button class="btn btn-primary btn-sm">Save</button>
+      <span class="small muted">Next follow-up:</span>
+      <input type="date" name="next_follow_up" aria-label="Next follow-up date">
+      {% for label, d in quick_dates %}<button class="chip" name="next_follow_up" value="{{ d }}" title="Save and follow up on {{ d }}">{{ label }}</button>{% endfor %}
+    </div>
+  </form>
+</details>{% endif %}
+{%- endmacro %}
+
+{# Next follow-up date, changed in place: pick a date or press a quick button. #}
+{% macro fu_edit(l) -%}
+{% if viewing %}<span class="{{ fu_class(l.next_follow_up) }}">{{ l.next_follow_up or '' }}</span>{% else %}
+<details class="ied ied-fu">
+  <summary title="Change the next follow-up"><span class="{{ fu_class(l.next_follow_up) or ('muted' if not l.next_follow_up) }}">📅 {{ l.next_follow_up or 'Set' }}</span></summary>
+  <form method="post" action="{{ url_for('lead_inline', lid=l.id) }}" class="ied-box ied-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+    <input type="date" name="next_follow_up" value="{{ l.next_follow_up or '' }}" onchange="if (this.value > '2000') this.form.submit()" aria-label="Next follow-up date">
+    {% for label, d in quick_dates %}<button class="chip" name="next_follow_up" value="{{ d }}">{{ label }}</button>{% endfor %}
+  </form>
+</details>{% endif %}
+{%- endmacro %}
+
+{# A compact lead card for phones and short lists: status, notes, follow-up, call, WhatsApp, edit. `l` needs id,
+   customer_name, company_name, phone, whatsapp, status, product_names, notes, next_follow_up. #}
 {% macro mini_card(l, fid, top='') -%}
 <article class="lead-card">
   {% if top %}<div class="small muted">{{ top }}</div>{% endif %}
@@ -51,6 +85,8 @@
     {% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_form(l, fid) }}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', fid) }}{% endif %}
   </div>
   {% if caller is defined %}{{ caller() }}{% endif %}
+  <div class="lc-notes">{{ notes_edit(l) }}</div>
+  <div class="lc-quals">{{ fu_edit(l) }}</div>
   <div class="lc-actions">
     {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}">📞 Call</a>{% endif %}
     {% if l.whatsapp %}{{ wa_link(l, '🟢 WhatsApp', 'btn btn-sm') }}{% endif %}
@@ -63,8 +99,42 @@
 <a class="wa {{ cls }}" href="https://wa.me/{{ l.whatsapp|wa_number }}" data-wa="{{ l.whatsapp|wa_number }}" data-lid="{{ l.id }}" data-name="{{ l.customer_name }}" data-company="{{ l.company_name or '' }}" data-product="{{ (l.product_names or '').split(', ')[0] }}" data-catalog="{{ catalog_link(l) }}" target="_blank" rel="noopener">{{ label or l.whatsapp }}</a>
 {%- endmacro %}
 
-{% macro lead_table(leads, params, sort, direction, endpoint, url_args={}, show_project=True, show_stage=False) -%}
+{# One cell of a lead list, by column key (see LIST_COLUMNS in app.py). #}
+{% macro col_cell(l, key, fid) -%}
+{% if key == 'phone' %}{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}
+{% elif key == 'whatsapp' %}{% if l.whatsapp %}{{ wa_link(l) }}{% endif %}
+{% elif key == 'email' %}{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
+{% elif key == 'company' %}{{ l.company_name or '' }}
+{% elif key == 'state' %}{{ l.state or '' }}{% if l.country and l.country != 'India' %} <small class="muted">({{ l.country }})</small>{% endif %}
+{% elif key == 'products' %}{{ l.product_names or '' }}
+{% elif key == 'project' %}{{ l.project_name or '' }}
+{% elif key == 'status' %}{% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', fid) }}{% endif %}
+{% elif key == 'possibility' %}{% if viewing %}{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}{% else %}{{ quick_select(l, 'buying_possibility', BUYING_POSSIBILITIES, True, '', fid) }}{% endif %}
+{% elif key == 'priority' %}{% if viewing %}{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}{% else %}{{ quick_select(l, 'priority', PRIORITIES, True, 'p-', fid) }}{% endif %}
+{% elif key == 'notes' %}{{ notes_edit(l) }}
+{% elif key == 'next_follow_up' %}{{ fu_edit(l) }}
+{% elif key == 'assigned' %}{{ l.assigned_name or '' }}
+{% elif key == 'created_by' %}{{ l.staff_name or '' }}
+{% elif key == 'created' %}{{ (l.created_at or '')[:10] }}
+{% elif key == 'stage' %}{% if l.product_stage %}<span class="badge {{ l.product_stage|badge }}">{{ l.product_stage }}</span>{% endif %}
+{% else %}{{ l[key] or '' }}{% endif %}
+{%- endmacro %}
+
+{# The same field on a phone card, short and with an icon. #}
+{% macro card_field(l, key, label) -%}
+{% if key in ('possibility', 'priority') %}{{ col_cell(l, key, 'qc') }}
+{% else %}{% set v = col_cell(l, key, 'qc')|trim %}{% if v %}<span class="lc-field" title="{{ label }}">{{ {'phone': '📞', 'whatsapp': '🟢', 'email': '✉️', 'company': '🏢', 'place': '📍', 'district': '📍', 'state': '📍', 'country': '🌍', 'products': '🛒', 'requirement': '📝', 'project': '📁', 'source': '🔖', 'assigned': '👤', 'created_by': '✍️', 'created': '🗓', 'stage': '🛒'}.get(key, '') }} {{ v }}</span>{% endif %}{% endif %}
+{%- endmacro %}
+
+{# Lead list: the organization's chosen columns (Name always first, sticky), phone cards below 760px.
+   extra_cols: columns this page adds (e.g. 'created_by' on Today's leads for admins); labels: header overrides. #}
+{% macro lead_table(leads, params, sort, direction, endpoint, url_args={}, show_project=True, show_stage=False, highlight=None, extra_cols=(), labels={}) -%}
 {% set ctx = dict(sort=sort, direction=direction, endpoint=endpoint, params=params, url_args=url_args) %}
+{% set ls = list_settings() %}
+{% set cols = [] %}
+{% for c in ls.columns|list + extra_cols|list + (['stage'] if show_stage else []) %}{% if c not in cols and (show_project or c != 'project') %}{% set _ = cols.append(c) %}{% endif %}{% endfor %}
+{% set card_cols = [] %}
+{% for c in ls.card|list + extra_cols|list %}{% if c not in card_cols and c not in ('status', 'notes', 'next_follow_up') %}{% set _ = card_cols.append(c) %}{% endif %}{% endfor %}
 {% if not viewing %}
 <form id="bulk" method="post" action="{{ url_for('leads_bulk') }}" class="bulk-bar card" hidden>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
@@ -80,49 +150,31 @@
   <button class="btn btn-sm btn-danger" name="action" value="delete" onclick="return confirm('Move the selected leads to the Recycle Bin?')">🗑 Delete selected</button>
 </form>
 {% endif %}
-<div class="card table-wrap desktop-only">
+<div class="card table-wrap desktop-only lt-wrap">
 <table class="table leads-table">
   <thead><tr>
-    {% if not viewing %}<th class="sel"><input type="checkbox" class="sel-all" title="Select all on this page"></th><th></th>{% endif %}
-    {{ th('name', 'Customer', ctx) }}
-    {{ th('status', 'Status', ctx) }}{{ th('possibility', 'Buying poss.', ctx) }}{{ th('priority', 'Priority', ctx) }}
-    {{ th('followup', 'Next follow-up', ctx) }}
-    {{ th('phone', 'Phone', ctx) }}<th>WhatsApp</th>{{ th('email', 'Email', ctx) }}
-    {{ th('place', 'Place', ctx) }}{{ th('district', 'District', ctx) }}{{ th('state', 'State', ctx) }}{{ th('requirement', 'Products', ctx) }}
-    {% if show_stage %}<th>Product stage</th>{% endif %}
-    {% if show_project %}{{ th('project', 'Project', ctx) }}{% endif %}{{ th('staff', 'Created by', ctx) }}{{ th('assigned', 'Assigned', ctx) }}{{ th('created', 'Created', ctx) }}
+    {% set nd = 'desc' if (sort == 'name' and direction == 'asc') else 'asc' %}
+    <th class="name-cell sortable {{ 'sorted' if sort == 'name' }}">{% if not viewing %}<input type="checkbox" class="sel-all" title="Select all on this page"> {% endif %}<a href="{{ url_for(endpoint, **dict(dict(params, **url_args), sort='name', dir=nd, page=1)) }}">Customer{% if sort == 'name' %} {{ '▲' if direction == 'asc' else '▼' }}{% endif %}</a></th>
+    {% for c in cols %}{% set label = labels.get(c) or (LIST_COLUMNS[c][0] if c in LIST_COLUMNS else 'Product stage') %}
+      {% if c in LIST_COLUMNS and LIST_COLUMNS[c][1] %}{{ th(LIST_COLUMNS[c][1], label, ctx) }}{% else %}<th>{{ label }}</th>{% endif %}
+    {% endfor %}
   </tr></thead>
   <tbody>
   {% for l in leads %}
-    <tr>
-      {% if not viewing %}<td class="sel"><input type="checkbox" class="sel-one" name="ids" value="{{ l.id }}" form="bulk"></td>
-      <td class="row-actions"><a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}" title="Edit all details">✏️ Edit</a>
-        <button class="del-btn" type="submit" form="d{{ l.id }}" title="Move to Recycle Bin">🗑</button>
-        <form id="q{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form>
-        <form id="d{{ l.id }}" method="post" action="{{ url_for('lead_delete', lid=l.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Move {{ l.customer_name }} to the Recycle Bin?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form></td>{% endif %}
-      <td><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a>{% if l.company_name %}<div class="small muted">{{ l.company_name }}</div>{% endif %}</td>
-      {% if viewing %}
-      <td><span class="badge {{ l.status|badge }}">{{ l.status }}</span></td>
-      <td>{% if l.buying_possibility %}<span class="badge {{ l.buying_possibility|badge }}">{{ l.buying_possibility }}</span>{% endif %}</td>
-      <td>{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}</td>
-      {% else %}
-      <td>{{ quick_select(l, 'status', LEAD_STATUSES, False) }}</td>
-      <td>{{ quick_select(l, 'buying_possibility', BUYING_POSSIBILITIES) }}</td>
-      <td>{{ quick_select(l, 'priority', PRIORITIES, True, 'p-') }}</td>
-      {% endif %}
-      <td class="{{ 'overdue' if l.next_follow_up and l.next_follow_up < today }}">{{ l.next_follow_up or '' }}</td>
-      <td>{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}</td>
-      <td>{% if l.whatsapp %}{{ wa_link(l) }}{% endif %}</td>
-      <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}</td>
-      <td>{{ l.place or '' }}</td><td>{{ l.district or '' }}</td>
-      <td>{{ l.state or '' }}{% if l.country and l.country != 'India' %} <small class="muted">({{ l.country }})</small>{% endif %}</td>
-      <td class="wrap">{{ l.product_names or '' }}</td>
-      {% if show_stage %}<td><span class="badge {{ l.product_stage|badge }}">{{ l.product_stage }}</span></td>{% endif %}
-      {% if show_project %}<td>{{ l.project_name }}</td>{% endif %}
-      <td>{{ l.staff_name }}</td><td>{{ l.assigned_name or '' }}</td><td>{{ l.created_at[:10] }}</td>
+    <tr id="lead-{{ l.id }}" class="{{ 'hl' if highlight == l.id }}">
+      <td class="name-cell">
+        <div class="nc">
+          {% if not viewing %}<input type="checkbox" class="sel-one" name="ids" value="{{ l.id }}" form="bulk" aria-label="Select {{ l.customer_name }}">{% endif %}
+          <div class="nc-name"><a href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b></a>{% if l.company_name %}<div class="small muted">{{ l.company_name }}</div>{% endif %}</div>
+          {% if not viewing %}<span class="row-actions"><a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}" title="Edit all details">✏️</a><button class="del-btn" type="submit" form="d{{ l.id }}" title="Move to Recycle Bin">🗑</button>
+          <form id="q{{ l.id }}" method="post" action="{{ url_for('lead_quick_status', lid=l.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form>
+          <form id="d{{ l.id }}" method="post" action="{{ url_for('lead_delete', lid=l.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Move {{ l.customer_name }} to the Recycle Bin?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}"></form></span>{% endif %}
+        </div>
+      </td>
+      {% for c in cols %}<td class="col-{{ c }}{{ ' wrap' if c in ('products', 'requirement') }}">{{ col_cell(l, c, 'q') }}</td>{% endfor %}
     </tr>
   {% else %}
-    <tr><td colspan="20" class="muted center">No leads match these filters.</td></tr>
+    <tr><td colspan="{{ cols|length + 1 }}" class="muted center">No leads match these filters.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -130,19 +182,15 @@
 <div class="lead-cards mobile-only">
   {% if leads and not viewing %}<label class="check sel-all-row"><input type="checkbox" class="sel-all"> Select all on this page</label>{% endif %}
   {% for l in leads %}
-  <article class="lead-card">
+  <article class="lead-card {{ 'hl' if highlight == l.id }}">
     <div class="lc-top">
       {% if not viewing %}<input type="checkbox" class="sel-one" name="ids" value="{{ l.id }}" form="bulk" aria-label="Select {{ l.customer_name }}">{% endif %}
       <a class="lc-name" href="{{ url_for('lead_view', lid=l.id) }}"><b>{{ l.customer_name }}</b>{% if l.company_name %}<span class="muted small"> · {{ l.company_name }}</span>{% endif %}</a>
       {% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_form(l, 'qc') }}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', 'qc') }}{% endif %}
     </div>
-    {% if l.place or l.district or l.state %}<div class="muted small">📍 {{ [l.place, l.district, l.state]|select|join(', ') }}</div>{% endif %}
-    {% if l.product_names %}<div class="small">🛒 {{ l.product_names }}</div>{% endif %}
-    <div class="lc-quals">
-      {% if viewing %}{% if l.priority %}<span class="badge {{ ('p-' ~ l.priority)|badge }}">{{ l.priority }}</span>{% endif %}
-      {% else %}{{ quick_select(l, 'priority', PRIORITIES, True, 'p-', 'qc') }}{% endif %}
-      {% if l.next_follow_up %}<span class="small {{ 'overdue' if l.next_follow_up < today }}">📅 {{ l.next_follow_up }}</span>{% endif %}
-    </div>
+    {% if card_cols %}<div class="lc-quals">{% for c in card_cols %}{{ card_field(l, c, labels.get(c) or LIST_COLUMNS[c][0]) }}{% endfor %}</div>{% endif %}
+    <div class="lc-notes">{{ notes_edit(l) }}</div>
+    <div class="lc-quals">{{ fu_edit(l) }}</div>
     <div class="lc-actions">
       {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}">📞 Call</a>{% endif %}
       {% if l.whatsapp %}{{ wa_link(l, '🟢 WhatsApp', 'btn btn-sm') }}{% endif %}
