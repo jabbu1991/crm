@@ -1,0 +1,41 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Offer Banners{% endblock %}
+{% macro banner_form(b=None) %}
+<form method="post" action="{{ url_for('cafe.banner_save') }}" enctype="multipart/form-data" class="form banner-form">
+  {{ csrf() }}{% if b %}<input type="hidden" name="id" value="{{ b.id }}">{% endif %}
+  <div class="row-2">
+    <label>തലക്കെട്ട്<input name="title" maxlength="80" value="{{ b.title if b else '' }}" placeholder="e.g. Weekend Special ₹99"></label>
+    <label>ഏത് item-മായി ബന്ധിപ്പിക്കണം <small>(തൊട്ടാൽ ആ item തുറക്കും)</small>
+      <select name="item_id"><option value="">— ഒന്നുമില്ല —</option>{% for i in items %}<option value="{{ i.id }}" {{ 'selected' if b and b.item_id == i.id }}>{{ i.name }}</option>{% endfor %}</select></label>
+  </div>
+  <label>ഫോട്ടോ {% if not b %}*{% endif %}<input type="file" name="photo" accept="image/*"><span class="photo-hint">📷 {{ hint }}</span></label>
+  <div class="row-3">
+    <label>തുടങ്ങുന്ന തീയതി<input type="date" name="start_date" value="{{ b.start_date if b and b.start_date else '' }}"></label>
+    <label>തീരുന്ന തീയതി<input type="date" name="end_date" value="{{ b.end_date if b and b.end_date else '' }}"></label>
+    <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if not b or b.active }}> ON</label>
+  </div>
+  <button class="btn btn-primary">{{ 'Save' if b else '+ Banner ചേർക്കുക' }}</button>
+</form>
+{% endmacro %}
+{% block content %}
+<h1>Offer banners</h1>
+<p class="muted">Menu-വിന്റെ മുകളിൽ slide ആയി കാണും. Banner ഒന്നും ഇല്ലെങ്കിൽ, offer വിലയുള്ള items-ന്റെ ഫോട്ടോ ഉപയോഗിച്ച് banner തനിയെ ഉണ്ടാകും.</p>
+<div class="banner-list">
+{% for b in banners %}
+  <div class="card banner-card {{ 'off' if not b.active }}">
+    {% if b.photo %}<img src="{{ url_for('media', name=b.photo) }}" alt="">{% else %}<div class="banner-noimg">{{ b.item_name or b.title }}</div>{% endif %}
+    <div class="banner-info">
+      <b>{{ b.title or b.item_name or '—' }}</b>
+      <span class="small muted">{% if b.item_name %}→ {{ b.item_name }} · {% endif %}{{ b.start_date or 'ഇപ്പോൾ' }} മുതൽ {{ b.end_date or 'എപ്പോഴും' }}{% if b.end_date and b.end_date < today %} · <b class="overdue">കഴിഞ്ഞു</b>{% endif %}</span>
+      {% if not viewing %}
+      <div class="actions">
+        <form method="post" action="{{ url_for('cafe.banner_action', bid=b.id, action='toggle') }}" class="inline">{{ csrf() }}<button class="switch {{ 'on' if b.active }}">{{ 'ON' if b.active else 'OFF' }}</button></form>
+        <details><summary class="btn btn-sm">✏️ Edit</summary>{{ banner_form(b) }}</details>
+        <form method="post" action="{{ url_for('cafe.banner_action', bid=b.id, action='delete') }}" class="inline" onsubmit="return confirm('Banner മാറ്റട്ടെ?')">{{ csrf() }}<button class="btn btn-sm btn-danger">🗑</button></form>
+      </div>{% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% if not viewing %}<section class="card narrow"><h2>പുതിയ banner</h2>{{ banner_form() }}</section>{% endif %}
+{% endblock %}

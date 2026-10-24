@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if bill %}Bill {{ st.bill_prefix }}{{ bill.bill_no }}{% else %}KOT{% endif %} · {{ name }}</title>
+{% set w = '48mm' if paper == '58' else ('72mm' if paper == '80' else '150mm') %}
+<style>
+  @page { {% if paper == 'A4' %}size: A4; margin: 14mm;{% else %}size: {{ '58mm' if paper == '58' else '80mm' }} auto; margin: 0;{% endif %} }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ebef; color: #000; }
+  body { font-family: "Noto Sans", "Noto Sans Malayalam", Arial, sans-serif; font-size: {{ '11px' if paper == '58' else ('12.5px' if paper == '80' else '14px') }}; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: #111827; justify-content: center; position: sticky; top: 0; }
+  .tools a, .tools button { background: #374151; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font: 600 14px system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+  .tools .primary { background: #4f46e5; } .tools .wa { background: #16a34a; }
+  .tools .papers { display: flex; gap: 4px; } .tools .papers a { padding: 10px 9px; background: #1f2937; } .tools .papers a.on { background: #6b7280; }
+  .hint { width: 100%; text-align: center; color: #cbd5e1; font: 12px system-ui, sans-serif; }
+  .sheet { width: {{ w }}; margin: 14px auto; background: #fff; padding: {{ '2mm' if paper != 'A4' else '10mm' }}; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
+  .c { text-align: center; } .r { text-align: right; } .b { font-weight: 700; }
+  h1 { font-size: 1.35em; margin: 0 0 2px; text-align: center; }
+  .logo { display: block; margin: 0 auto 4px; max-width: 40%; max-height: 22mm; filter: grayscale(1); }
+  .meta { display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+  hr { border: 0; border-top: 1px dashed #000; margin: 5px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 2px 0; vertical-align: top; } th { text-align: left; font-weight: 700; border-bottom: 1px solid #000; }
+  td.q, th.q { width: 12%; text-align: center; } td.a, th.a { width: 26%; text-align: right; } td.p, th.p { width: 20%; text-align: right; }
+  .tot td { padding: 1px 0; } .grand td { font-size: 1.3em; font-weight: 800; border-top: 1px solid #000; padding-top: 4px; }
+  .cancelled { border: 2px solid #000; text-align: center; font-weight: 800; padding: 3px; margin: 4px 0; font-size: 1.2em; }
+  .kot { page-break-before: always; break-before: page; }
+  .kot-first { page-break-before: auto; break-before: auto; }
+  .kot h2 { text-align: center; font-size: 1.5em; margin: 0; letter-spacing: .05em; }
+  .kot .big { font-size: 1.25em; font-weight: 800; }
+  .kot td.q { font-size: 1.25em; font-weight: 800; text-align: left; width: 18%; }
+  .kot td { font-size: 1.15em; padding: 3px 0; }
+  .kot .cancel td { text-decoration: line-through; }
+  .small { font-size: .85em; }
+  .menu-link { text-align: center; margin: 8px auto 20px; font: 14px system-ui, sans-serif; }
+  @media print { html, body { background: #fff; } .tools, .menu-link { display: none; } .sheet { margin: 0; box-shadow: none; width: {{ '100%' if paper == 'A4' else w }}; } }
+</style>
+</head>
+<body>
+<div class="tools">
+  <button class="primary" onclick="window.print()">🖨 Print</button>
+  {% if bill %}<button onclick="savePdf()">⬇️ Save (PDF)</button>
+  {% if not public and bill.cust_phone %}<a class="wa" href="{{ url_for('cafe.bill_view', bid=bill.id) }}#share">🟢 WhatsApp</a>{% endif %}{% endif %}
+  <span class="papers">{% for p, l in (('58', '58mm'), ('80', '80mm'), ('A4', 'A4')) %}<a class="{{ 'on' if paper == p }}" href="?{{ 'kot=' ~ request.args.kot ~ '&' if request.args.kot }}paper={{ p }}">{{ l }}</a>{% endfor %}</span>
+  {% if back and not public %}<a href="{{ back }}">{{ '✓ Done' if auto else '← Back' }}</a>{% endif %}
+  {% if not public and auto %}<a href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
+  <div class="hint" id="pdf-hint" hidden>Print window-ൽ printer ആയി <b>"Save as PDF"</b> തിരഞ്ഞെടുക്കുക.</div>
+</div>
+
+{% if bill %}
+<div class="sheet">
+  {% if st.logo and paper == 'A4' %}<img class="logo" src="{{ url_for('media', name=st.logo) }}" alt="">{% endif %}
+  <h1>{{ name }}</h1>
+  {% if st.address %}<div class="c small">{{ st.address }}</div>{% endif %}
+  {% if st.phone %}<div class="c small">📞 {{ st.phone }}</div>{% endif %}
+  {% if bill.gst_on and bill.gstin %}<div class="c small b">GSTIN: {{ bill.gstin }}</div>{% endif %}
+  {% if st.fssai %}<div class="c small">FSSAI: {{ st.fssai }}</div>{% endif %}
+  <div class="c b" style="margin-top:3px">{{ 'TAX INVOICE' if bill.gst_on else 'BILL' }}</div>
+  {% if bill.status == 'cancelled' %}<div class="cancelled">CANCELLED</div>{% endif %}
+  <hr>
+  <div class="meta"><span>Bill: <b>{{ st.bill_prefix }}{{ bill.bill_no }}</b></span><span>{{ bill.bill_date[8:10] }}-{{ bill.bill_date[5:7] }}-{{ bill.bill_date[:4] }} {{ bill.created_at[11:16] }}</span></div>
+  <div class="meta"><span>{{ ORDER_TYPES.get(bill.order_type, '') }}{% if bill.table_name %}: {{ bill.table_name }}{% endif %}</span><span>{{ bill.payment_mode }}</span></div>
+  {% if bill.cust_name %}<div>Customer: {{ bill.cust_name }}{% if bill.cust_phone and not public %} · {{ bill.cust_phone }}{% endif %}</div>{% endif %}
+  <hr>
+  <table>
+    <thead><tr><th>Item</th><th class="q">Qty</th>{% if paper != '58' %}<th class="p">Rate</th>{% endif %}<th class="a">Amount</th></tr></thead>
+    <tbody>
+    {% for i in items %}<tr><td>{{ i.name }}</td><td class="q">{{ i.qty }}</td>{% if paper != '58' %}<td class="p">{{ i.price|rs }}</td>{% endif %}<td class="a">{{ i.amount|rs }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <hr>
+  <table class="tot">
+    <tr><td>Subtotal</td><td class="r">{{ bill.subtotal|rs }}</td></tr>
+    {% if bill.discount %}<tr><td>Discount</td><td class="r">-{{ bill.discount|rs }}</td></tr>{% endif %}
+    {% if bill.gst_on %}
+    <tr><td>Taxable value</td><td class="r">{{ bill.taxable|rs }}</td></tr>
+    <tr><td>CGST</td><td class="r">{{ bill.cgst|rs }}</td></tr>
+    <tr><td>SGST</td><td class="r">{{ bill.sgst|rs }}</td></tr>
+    {% endif %}
+    {% if bill.points_redeemed %}<tr><td>Points used ({{ bill.points_redeemed }})</td><td class="r">-{{ bill.points_value|rs }}</td></tr>{% endif %}
+    {% if bill.round_off %}<tr><td>Round off</td><td class="r">{{ bill.round_off|rs }}</td></tr>{% endif %}
+    <tr class="grand"><td>TOTAL</td><td class="r">{{ bill.total|rs }}</td></tr>
+  </table>
+  {% if bill.gst_on and bill.gst_inclusive %}<div class="small c">(Prices inclusive of GST)</div>{% endif %}
+  {% if bill.points_earned or balance is not none %}<hr><div class="c">🎁 Points earned: <b>{{ bill.points_earned }}</b>{% if balance is not none %} · Balance: <b>{{ balance }}</b>{% endif %}</div>{% endif %}
+  <hr>
+  <div class="c">{{ st.bill_footer }}</div>
+</div>
+{% endif %}
+
+{% for k, lines, o in kots %}
+<div class="sheet kot {{ 'kot-first' if not bill and loop.first }}">
+  <h2>KOT #{{ k.kot_no }}</h2>
+  <div class="c big">{% if o.order_type == 'dine_in' %}🍽 {{ o.table_name or 'Table' }}{% elif o.order_type == 'takeaway' %}🥡 TAKEAWAY{% else %}🛵 DELIVERY{% endif %}</div>
+  <div class="meta"><span>Order #{{ o.order_no }}</span><span>{{ k.created_at[11:16] }}</span></div>
+  {% if o.cust_name %}<div>{{ o.cust_name }}</div>{% endif %}
+  <hr>
+  <table>
+    {% for l in lines %}<tr class="{{ 'cancel' if l.qty < 0 }}"><td class="q">{{ l.qty if l.qty > 0 else '✕' ~ (-l.qty) }}</td><td>{{ l.name }}{% if l.qty < 0 %} (CANCEL){% endif %}{% if l.note %}<div class="small">→ {{ l.note }}</div>{% endif %}</td></tr>{% endfor %}
+  </table>
+  {% if o.note %}<hr><div class="b">📝 {{ o.note }}</div>{% endif %}
+</div>
+{% endfor %}
+
+{% if public and menu_link %}<p class="menu-link"><a href="{{ menu_link }}">📱 {{ name }}-ന്റെ menu കാണുക</a></p>{% endif %}
+<script>
+function savePdf() { document.getElementById("pdf-hint").hidden = false; setTimeout(function () { window.print(); }, 150); }
+{% if auto %}window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });{% endif %}
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Menu Design{% endblock %}
+{% block content %}
+<h1>🎨 Menu design</h1>
+<div class="design-grid">
+<form method="post" class="card form" id="design-form">
+  {{ csrf() }}
+  <input type="hidden" name="preset" id="preset" value="{{ st.theme.preset }}">
+  <h2>1. Ready themes <small class="muted">ഒറ്റ click</small></h2>
+  <div class="theme-list">
+    {% for k, t in THEMES.items() %}
+    <button type="button" class="theme-chip {{ 'on' if st.theme.preset == k }}" data-key="{{ k }}" data-primary="{{ t.primary }}" data-secondary="{{ t.secondary }}" data-bg="{{ t.bg }}" data-text="{{ t.text }}">
+      <span class="sw" style="background: {{ t.bg }}"><i style="background: {{ t.primary }}"></i><i style="background: {{ t.secondary }}"></i></span>{{ t.label }}
+    </button>
+    {% endfor %}
+  </div>
+  <h2>2. സ്വന്തം നിറങ്ങൾ</h2>
+  <div class="color-rows">
+    <label>പ്രധാന നിറം <small>(ബട്ടണുകൾ, തലക്കെട്ടുകൾ)</small><input type="color" name="primary" value="{{ st.theme.primary }}"></label>
+    <label>രണ്ടാമത്തെ നിറം <small>(offer tags)</small><input type="color" name="secondary" value="{{ st.theme.secondary }}"></label>
+    <label>Background<input type="color" name="bg" value="{{ st.theme.bg }}"></label>
+    <label>അക്ഷരങ്ങൾ<input type="color" name="text" value="{{ st.theme.text }}"></label>
+  </div>
+  <p><button type="button" class="btn" id="logo-colors" {{ 'disabled' if not st.logo }}>🎨 Logo-യിൽ നിന്ന് നിറം എടുക്കുക</button>
+    {% if not st.logo %}<span class="muted small">ആദ്യം <a href="{{ url_for('cafe.settings') }}#details">Settings-ൽ logo</a> upload ചെയ്യുക.</span>{% endif %}
+    <span class="small" id="logo-msg"></span></p>
+  <h2>3. Layout</h2>
+  <div class="row-3">
+    <label>Items കാണിക്കുന്ന രീതി<select name="layout">{% for k, v in LAYOUTS.items() %}<option value="{{ k }}" {{ 'selected' if st.theme.layout == k }}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Font<select name="font">{% for k, v in FONTS.items() %}<option value="{{ k }}" {{ 'selected' if st.theme.font == k }}>{{ v }}</option>{% endfor %}</select></label>
+    <label>ബട്ടണുകളുടെ ആകൃതി<select name="shape">{% for k, v in SHAPES.items() %}<option value="{{ k }}" {{ 'selected' if st.theme.shape == k }}>{{ v }}</option>{% endfor %}</select></label>
+  </div>
+  <p class="muted small">മാറ്റങ്ങൾ വശത്തെ ഫോണിൽ ഉടൻ കാണും. <b>Save</b> ചെയ്താൽ മാത്രമേ customers-ന് മാറ്റം കാണൂ.</p>
+  <div class="actions"><button class="btn btn-primary btn-big">💾 Save design</button>
+    <a class="btn" href="{{ url_for('cafe.public_menu', code=g.org.code.lower()) }}" target="_blank" rel="noopener">Menu തുറക്കുക</a></div>
+</form>
+<div class="phone-frame"><iframe id="preview" src="{{ preview_url }}" title="Menu preview"></iframe></div>
+</div>
+<script>
+(function () {
+  var form = document.getElementById("design-form"), frame = document.getElementById("preview"), preset = document.getElementById("preset");
+  function vals() {
+    var d = {};
+    ["primary", "secondary", "bg", "text", "layout", "font", "shape"].forEach(function (k) { d[k] = form.elements[k].value; });
+    return d;
+  }
+  function send() { try { frame.contentWindow.postMessage({theme: vals()}, window.location.origin); } catch (e) {} }
+  frame.addEventListener("load", send);
+  form.addEventListener("input", function (e) {
+    if (e.target.type === "color") { preset.value = "custom"; document.querySelectorAll(".theme-chip").forEach(function (b) { b.classList.remove("on"); }); }
+    send();
+  });
+  form.addEventListener("change", send);
+  document.querySelectorAll(".theme-chip").forEach(function (b) {
+    b.addEventListener("click", function () {
+      ["primary", "secondary", "bg", "text"].forEach(function (k) { form.elements[k].value = b.dataset[k]; });
+      preset.value = b.dataset.key;
+      document.querySelectorAll(".theme-chip").forEach(function (x) { x.classList.toggle("on", x === b); });
+      send();
+    });
+  });
+  var lc = document.getElementById("logo-colors"), msg = document.getElementById("logo-msg");
+  lc.addEventListener("click", function () {
+    msg.textContent = "…";
+    fetch("{{ url_for('cafe.logo_colors') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) { msg.textContent = d.error; return; }
+      form.elements.primary.value = d.primary; form.elements.secondary.value = d.secondary; preset.value = "custom";
+      document.querySelectorAll(".theme-chip").forEach(function (x) { x.classList.remove("on"); });
+      msg.textContent = "✓ Logo-യിലെ നിറങ്ങൾ എടുത്തു"; send();
+    });
+  });
+})();
+</script>
+{% endblock %}

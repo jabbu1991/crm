@@ -1,0 +1,49 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Bill {{ st.bill_prefix }}{{ b.bill_no }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Bill {{ st.bill_prefix }}{{ b.bill_no }} {% if b.status == 'cancelled' %}<span class="badge b-lost">Cancelled</span>{% else %}<span class="badge b-done">Paid</span>{% endif %}</h1>
+  <div class="actions">
+    {% if not viewing and can('bill_create') %}<a class="btn btn-primary btn-big" href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
+  </div>
+</div>
+<div class="grid-2">
+<section class="card">
+  <div class="share-row" id="share">
+    <a class="btn btn-big" href="{{ url_for('cafe.bill_print', bid=b.id) }}">🖨 Print</a>
+    <a class="btn btn-big" href="{{ url_for('cafe.bill_print', bid=b.id, paper='A4') }}">⬇️ Save (PDF)</a>
+    {% if b.cust_phone %}<a class="btn btn-big btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ b.cust_phone|wa_number }}?text={{ wa_text|urlencode }}">🟢 WhatsApp bill</a>
+    {% else %}<a class="btn btn-big btn-wa" target="_blank" rel="noopener" href="https://wa.me/?text={{ wa_text|urlencode }}">🟢 WhatsApp-ൽ share</a>{% endif %}
+  </div>
+  <p class="muted small">Customer-ന് കിട്ടുന്ന link: <a href="{{ link }}" target="_blank" rel="noopener">{{ link }}</a></p>
+  <dl class="details">
+    <dt>തീയതി</dt><dd>{{ b.bill_date }} {{ b.created_at[11:16] }}</dd>
+    <dt>Type</dt><dd>{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</dd>
+    <dt>Payment</dt><dd>{{ b.payment_mode }}</dd>
+    <dt>Customer</dt><dd>{% if cust and can('customers_view') %}<a href="{{ url_for('cafe.customer_view', cid=cust.id) }}">{{ cust.name }}</a> · {{ cust.whatsapp }} · 🎁 {{ cust.points }} points{% else %}{{ b.cust_name or '—' }}{% endif %}</dd>
+    <dt>Billed by</dt><dd>{{ b.created_name or '' }}</dd>
+    {% if b.status == 'cancelled' %}<dt>Cancelled</dt><dd class="overdue">{{ b.cancelled_at }} · {{ b.cancelled_name }} · {{ b.cancel_reason }}</dd>{% endif %}
+  </dl>
+  {% if kots %}<p class="small muted">KOT: {% for k in kots %}<a href="{{ url_for('cafe.kot_print', kid=k.id) }}">#{{ k.kot_no }}</a> {% endfor %}</p>{% endif %}
+</section>
+<section class="card">
+  <table class="table compact">
+    <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+    <tbody>{% for i in items %}<tr><td>{{ i.name }}</td><td class="num">{{ i.qty }}</td><td class="num">{{ i.price|rs }}</td><td class="num">{{ i.amount|rs }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <dl class="details totals-dl">
+    <dt>Subtotal</dt><dd>{{ b.subtotal|rs }}</dd>
+    {% if b.discount %}<dt>Discount</dt><dd>-{{ b.discount|rs }}</dd>{% endif %}
+    {% if b.gst_on %}<dt>Taxable</dt><dd>{{ b.taxable|rs }}</dd><dt>CGST + SGST</dt><dd>{{ b.cgst|rs }} + {{ b.sgst|rs }}</dd>{% endif %}
+    {% if b.points_redeemed %}<dt>Points used</dt><dd>{{ b.points_redeemed }} (-{{ b.points_value|rs }})</dd>{% endif %}
+    {% if b.round_off %}<dt>Round off</dt><dd>{{ b.round_off|rs }}</dd>{% endif %}
+    <dt><b>Total</b></dt><dd><b class="big-total">{{ b.total|rs }}</b></dd>
+    {% if b.points_earned %}<dt>Points earned</dt><dd>🎁 {{ b.points_earned }}</dd>{% endif %}
+  </dl>
+  {% if b.status == 'paid' and can('bill_cancel') and not viewing %}
+  <details class="reject"><summary class="btn btn-danger btn-sm">Bill cancel ചെയ്യുക</summary>
+    <form method="post" action="{{ url_for('cafe.bill_cancel', bid=b.id) }}" class="inline-form" onsubmit="return confirm('Bill cancel ചെയ്യട്ടെ? Points തിരികെ ക്രമീകരിക്കും.')">{{ csrf() }}
+      <input name="reason" required maxlength="200" placeholder="കാരണം *"><button class="btn btn-sm btn-danger">Cancel ചെയ്യുക</button></form>
+  </details>{% endif %}
+</section>
+</div>
+{% endblock %}

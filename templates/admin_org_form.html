@@ -15,6 +15,11 @@
       <label>Phone<input name="phone" value="{{ data.phone or '' }}"></label>
       <label>Email<input type="email" name="email" value="{{ data.email or '' }}"></label>
     </div>
+    <label>Software type * <small>(ഈ client-ന് എന്താണ് വേണ്ടത്)</small>
+      <select name="app_type">
+        {% for k, v in APP_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if (data.app_type or 'crm') == k }}>{{ v }}{{ ' — leads, follow-ups' if k == 'crm' else (' — billing, menu, QR, online orders' if k == 'cafe' else ' — രണ്ടും, മുകളിൽ switch') }}</option>{% endfor %}
+      </select>
+    </label>
     <label>Address<textarea name="address" rows="2">{{ data.address or '' }}</textarea></label>
     <label>Internal notes<textarea name="notes" rows="2">{{ data.notes or '' }}</textarea></label>
     {% if org %}<label class="check"><input type="checkbox" name="wa_templates_allowed" value="1" {{ 'checked' if org.wa_templates_allowed }}> WhatsApp templates included in this client's plan</label>

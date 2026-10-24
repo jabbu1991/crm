@@ -1,0 +1,66 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Menu{% endblock %}
+{% macro item_row(i) %}
+<div class="mi {{ 'mi-off' if not i.available }}" id="item{{ i.id }}">
+  {% if i.photo %}<img src="{{ url_for('media', name=i.photo) }}" alt="" loading="lazy">{% else %}<span class="mi-noimg">{{ i.name[:1]|upper }}</span>{% endif %}
+  <div class="mi-body">
+    <a href="{{ url_for('cafe.item_edit', iid=i.id) }}" class="mi-name">{% if i.food_type %}<span class="ft ft-{{ i.food_type }}" title="{{ FOOD_TYPES[i.food_type] }}"></span>{% endif %}{{ i.name }}</a>
+    <div class="mi-meta">
+      {% set on = i.offer_price is not none and i.offer_price < i.price and (not i.offer_from or i.offer_from <= today) and (not i.offer_to or i.offer_to >= today) %}
+      {% if on %}<s class="muted">{{ i.price|rs }}</s> <b class="offer-price">{{ i.offer_price|rs }}</b> <span class="badge b-high">OFFER</span>
+      {% else %}<b>{{ i.price|rs }}</b>{% if i.offer_price %} <span class="small muted">(offer {{ i.offer_price|rs }}: {{ 'തുടങ്ങിയിട്ടില്ല' if i.offer_from and i.offer_from > today else 'കഴിഞ്ഞു' }})</span>{% endif %}{% endif %}
+      {% if st.gst_on %}<span class="small muted">GST {{ i.gst_rate|round(1)|string|replace('.0', '') }}%</span>{% endif %}
+      {% for t in (i.tags or '').split(',') if t in ITEM_TAGS %}<span class="badge">{{ ITEM_TAGS[t] }}</span>{% endfor %}
+    </div>
+  </div>
+  {% if not viewing %}
+  <form method="post" action="{{ url_for('cafe.item_action', iid=i.id, action='toggle') }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ url_for('cafe.menu') }}">
+    <button class="switch {{ 'on' if i.available }}" title="ലഭ്യമാണോ? (OFF ആക്കിയാൽ menu-വിൽ 'Not available')">{{ 'ON' if i.available else 'OFF' }}</button></form>
+  <a class="edit-btn" href="{{ url_for('cafe.item_edit', iid=i.id) }}">✏️</a>
+  {% endif %}
+</div>
+{% endmacro %}
+{% block content %}
+<div class="page-head"><h1>Menu <small class="muted">{{ total }} items</small></h1>
+  <div class="actions">
+    <form class="inline-form" method="get"><input name="q" value="{{ q }}" placeholder="🔍 Item തിരയുക"></form>
+    {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ Item ചേർക്കുക</a>{% endif %}
+    <a class="btn" href="{{ url_for('cafe.banners') }}">Offer banners</a>
+    <a class="btn" href="{{ url_for('cafe.public_menu', code=g.org.code.lower(), preview=1) }}" target="_blank" rel="noopener">👁 Menu കാണുക</a>
+  </div>
+</div>
+<div class="menu-layout">
+  <aside class="card cat-panel">
+    <h2>Categories</h2>
+    {% for c in cats %}
+    <div class="cat-row">
+      <a href="#cat{{ c.id }}">{{ c.name }}</a> <span class="muted small">{{ c.n }}</span>
+      {% if not viewing %}
+      <span class="cat-tools">
+        <form method="post" action="{{ url_for('cafe.category_save') }}" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><button class="linkbtn dark" name="action" value="up" title="മുകളിലേക്ക്">▲</button><button class="linkbtn dark" name="action" value="down" title="താഴേക്ക്">▼</button></form>
+        <details class="cat-edit"><summary class="linkbtn dark">✏️</summary>
+          <form method="post" action="{{ url_for('cafe.category_save') }}" class="inline-form">{{ csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><input name="name" value="{{ c.name }}" required><button class="btn btn-sm" name="action" value="rename">Save</button></form>
+          <form method="post" action="{{ url_for('cafe.category_save') }}" onsubmit="return confirm('Category മാറ്റട്ടെ? Items നഷ്ടപ്പെടില്ല.')">{{ csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><button class="btn btn-sm btn-danger" name="action" value="delete">Delete category</button></form>
+        </details>
+      </span>{% endif %}
+    </div>
+    {% else %}<p class="muted small">ഇതുവരെ category ഇല്ല. ഉദാ: Tea &amp; Coffee, Juices, Snacks, Meals</p>{% endfor %}
+    {% if not viewing %}
+    <form method="post" action="{{ url_for('cafe.category_save') }}" class="inline-form">{{ csrf() }}<input name="name" placeholder="പുതിയ category" required><button class="btn btn-sm" name="action" value="add">+ ചേർക്കുക</button></form>
+    {% endif %}
+  </aside>
+  <div class="items-panel">
+    {% for c in cats %}
+    <section class="card" id="cat{{ c.id }}">
+      <h2>{{ c.name }} {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('cafe.item_new', cat=c.id) }}">+ Item</a>{% endif %}</h2>
+      {% for i in by_cat.get(c.id, []) %}{{ item_row(i) }}{% else %}<p class="muted small">ഈ category-യിൽ items ഇല്ല.</p>{% endfor %}
+    </section>
+    {% endfor %}
+    {% if by_cat.get(None) %}
+    <section class="card"><h2>Other <small class="muted">(category ഇല്ലാത്തവ)</small></h2>
+      {% for i in by_cat.get(None) %}{{ item_row(i) }}{% endfor %}</section>
+    {% endif %}
+    {% if not total %}<div class="card empty"><p>Menu-വിൽ ഇതുവരെ items ഇല്ല.</p>{% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ ആദ്യത്തെ item ചേർക്കുക</a>{% endif %}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

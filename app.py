@@ -217,10 +217,24 @@ def load_user():
         if not token or not secrets.compare_digest(token, request.form.get("csrf_token", "")):
             abort(400, "Invalid form token. Please reload the page and try again.")
 
+    ep = request.endpoint or ""
+    if g.get("user") and g.get("org") and ep and not ep.startswith(("cafe.", "admin_")) \
+            and ep not in SHARED_ENDPOINTS:
+        kind = cafe.app_type()
+        if kind == "cafe":
+            if request.method == "GET":
+                return redirect(url_for("cafe.home"))
+            abort(404)
+        if kind == "both" and session.get("app_mode") == "cafe" and ep != "dashboard":
+            session["app_mode"] = "crm"  # opening a CRM page from a link: show the CRM menu
+
 
 # While a Super Admin views a client workspace, these are the only POSTs allowed,
 # and these form pages are hidden (their submit would be refused anyway).
 VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static"}
+# Pages a Cafe-only organization still uses (everything else in the CRM is hidden from it).
+SHARED_ENDPOINTS = {"logout", "login", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
+                    "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product"}
 WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
                         "product_edit", "staff_new", "staff_edit", "account"}
 
@@ -753,6 +767,8 @@ def count_by(column, where, args, limit=None):
 @app.route("/")
 @login_required
 def dashboard():
+    if cafe.current_mode() == "cafe":
+        return redirect(url_for("cafe.home"))
     where, args = lead_scope()
 
     def count(extra="", extra_args=()):
@@ -980,12 +996,12 @@ def media_dir():
     return path
 
 
-def save_image(upload, box=(1200, 1200)):
-    """Shrink a photo (any size) to a light JPEG of about 100-200 KB. Returns the stored file name, or None."""
+def save_image(upload, box=(1200, 1200), max_kb=220, fit=False):
+    """Shrink a photo (any size) to a light JPEG under max_kb. fit=True crops to exactly box (square / wide banner).
+    Returns the stored file name, or None."""
     from PIL import Image, ImageOps
     try:
         img = ImageOps.exif_transpose(Image.open(upload.stream))
-        img.thumbnail(box)
         if img.mode in ("RGBA", "LA", "P"):
             img = img.convert("RGBA")
             bg = Image.new("RGB", img.size, "white")
@@ -993,11 +1009,19 @@ def save_image(upload, box=(1200, 1200)):
             img = bg
         else:
             img = img.convert("RGB")
-        for quality in (80, 68, 55):
-            out = io.BytesIO()
-            img.save(out, "JPEG", quality=quality, optimize=True, progressive=True)
-            if out.tell() <= 220 * 1024:
+        if fit:
+            img = ImageOps.fit(img, box, Image.LANCZOS)
+        else:
+            img.thumbnail(box)
+        while True:
+            for quality in (80, 70, 60, 50, 42):
+                out = io.BytesIO()
+                img.save(out, "JPEG", quality=quality, optimize=True, progressive=True)
+                if out.tell() <= max_kb * 1024:
+                    break
+            if out.tell() <= max_kb * 1024 or min(img.size) < 160:
                 break
+            img = img.resize((int(img.width * 0.85), int(img.height * 0.85)), Image.LANCZOS)
     except Exception:  # not an image, damaged, or too large to decode
         return None
     name = uuid.uuid4().hex + ".jpg"
@@ -2253,22 +2277,51 @@ def manageable_user(uid):
     user = query("SELECT * FROM users WHERE id = ? AND org_id = ?", (uid, org_id()), one=True) or abort(404)
     if user["role"] == SUPER_ADMIN and user["id"] != g.user["id"]:
         abort(403)
+    if not is_admin() and (user["role"] != STAFF or user["id"] == g.user["id"]):
+        abort(403)  # a cafe staff manager manages other staff only
     return user
 
 
+def staff_manager_required(view):
+    """Organization admins, or (in a cafe) staff given the 'Staff-നെ ചേർക്കുക / മാറ്റുക' permission."""
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if not (is_admin() or (cafe.has_cafe() and cafe.can("staff_manage"))):
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def save_cafe_perms(uid, role):
+    """Store the cafe role + ticked permissions for a staff account (cafe organizations only)."""
+    if not cafe.has_cafe():
+        return
+    if role != STAFF:
+        execute("UPDATE users SET cafe_role = NULL, cafe_perms = NULL WHERE id = ? AND org_id = ?", (uid, org_id()))
+        return
+    crole, perms = cafe.staff_form_perms()
+    if not is_admin():  # a staff manager can only hand out permissions they have themselves
+        mine = cafe.user_perms()
+        perms = json.dumps([p for p in json.loads(perms) if p in mine])
+    execute("UPDATE users SET cafe_role = ?, cafe_perms = ? WHERE id = ? AND org_id = ?", (crole, perms, uid, org_id()))
+
+
 @app.route("/staff")
-@admin_required
+@staff_manager_required
 def staff():
     rows = query("""SELECT u.*, (SELECT COUNT(*) FROM leads l WHERE l.entered_by = u.id) lead_count,
                       (SELECT MAX(created_at) FROM password_tokens t WHERE t.user_id = u.id AND t.used_at IS NULL
                          AND t.expires_at > ?) pending_link
                     FROM users u WHERE u.org_id = ? ORDER BY u.active DESC, u.name COLLATE NOCASE""", (now(), org_id()))
+    if not is_admin():
+        rows = [r for r in rows if r["role"] == STAFF]
     return render_template("staff.html", staff=rows)
 
 
 def staff_form_data():
     data = {k: clean(request.form.get(k)) for k in ("name", "username", "phone", "email", "designation", "role")}
-    data["role"] = ORG_ADMIN if data["role"] == ORG_ADMIN else STAFF
+    data["role"] = ORG_ADMIN if data["role"] == ORG_ADMIN and is_admin() else STAFF
     data["active"] = 1 if request.form.get("active") else 0
     return data
 
@@ -2308,7 +2361,7 @@ def create_user(org, data, onboarding, password):
 
 
 @app.route("/staff/new", methods=["GET", "POST"])
-@admin_required
+@staff_manager_required
 def staff_new():
     data = {"role": STAFF, "active": 1}
     if request.method == "POST":
@@ -2323,17 +2376,18 @@ def staff_new():
             except ValueError as e:
                 flash(str(e), "error")
             else:
+                save_cafe_perms(uid, data["role"])
                 if link:
                     return render_template("password_link.html", user=data, link=link, expires=expires,
                                            purpose="invite", back=url_for("staff"))
                 flash(f"Account for {data['name']} created. They must change the initial password at first login.",
                       "success")
                 return redirect(url_for("staff"))
-    return render_template("staff_form.html", data=data, member=None)
+    return render_template("staff_form.html", data=data, member=None, **staff_form_extra(None))
 
 
 @app.route("/staff/<int:uid>/edit", methods=["GET", "POST"])
-@admin_required
+@staff_manager_required
 def staff_edit(uid):
     member = manageable_user(uid)
     data = dict(member)
@@ -2350,9 +2404,23 @@ def staff_edit(uid):
                        session_version = session_version + ? WHERE id = ? AND org_id = ?""",
                     (data["name"], data["username"], data["phone"], data["email"], data["designation"], data["role"],
                      data["active"], bump, uid, org_id()))
+            save_cafe_perms(uid, data["role"])
             flash("User updated.", "success")
             return redirect(url_for("staff"))
-    return render_template("staff_form.html", data=data, member=member)
+    return render_template("staff_form.html", data=data, member=member, **staff_form_extra(member))
+
+
+def staff_form_extra(member):
+    if not cafe.has_cafe():
+        return {"cafe_perms": None}
+    perms = cafe.user_perms(member) if member is not None and member["role"] == STAFF else set(cafe.ROLE_PRESETS["cashier"])
+    role = (member["cafe_role"] if member is not None else None) or "cashier"
+    if request.method == "POST":
+        role = request.form.get("cafe_role") or role
+        perms = set(request.form.getlist("cafe_perm")) if role == "custom" else set(cafe.ROLE_PRESETS.get(role, []))
+    allowed = set(cafe.PERM_KEYS) if is_admin() else cafe.user_perms()
+    return {"cafe_perms": {"all": cafe.PERMS, "have": perms, "role": role, "presets": cafe.ROLE_PRESETS,
+                           "labels": cafe.ROLE_PRESET_LABELS, "allowed": allowed}}
 
 
 def password_action(user, back):
@@ -2373,7 +2441,7 @@ def password_action(user, back):
 
 
 @app.route("/staff/<int:uid>/password", methods=["POST"])
-@admin_required
+@staff_manager_required
 def staff_password(uid):
     user = manageable_user(uid)
     if user["id"] == g.user["id"]:
@@ -2382,7 +2450,7 @@ def staff_password(uid):
 
 
 @app.route("/staff/<int:uid>/toggle", methods=["POST"])
-@admin_required
+@staff_manager_required
 def staff_toggle(uid):
     user = manageable_user(uid)
     if user["id"] == g.user["id"]:
@@ -2625,6 +2693,11 @@ def org_form_data():
     return data
 
 
+def form_app_type():
+    t = request.form.get("app_type")
+    return t if t in cafe.APP_TYPES else "crm"
+
+
 @app.route("/admin/organizations/new", methods=["GET", "POST"])
 @super_required
 def admin_org_new():
@@ -2648,9 +2721,10 @@ def admin_org_new():
         if not errors:
             ts = now()
             oid = execute("""INSERT INTO organizations (name, code, kind, status, contact_name, phone, email, address,
-                             notes, created_by, created_at, updated_at) VALUES (?,?, 'client', 'Active', ?,?,?,?,?,?,?,?)""",
+                             notes, created_by, created_at, updated_at, app_type)
+                             VALUES (?,?, 'client', 'Active', ?,?,?,?,?,?,?,?,?)""",
                           (data["name"], data["code"], data["contact_name"], data["phone"], data["email"],
-                           data["address"], data["notes"], g.user["id"], ts, ts))
+                           data["address"], data["notes"], g.user["id"], ts, ts, form_app_type()))
             crm_db.copy_default_templates(get_db(), oid, g.user["id"], ts)
             get_db().commit()
             uid, link, expires = create_user(oid, admin, request.form.get("onboarding"), request.form.get("password") or "")
@@ -2660,6 +2734,7 @@ def admin_org_new():
             flash(f"Organization '{data['name']}' created with admin {admin['username']}. "
                   "They must change the initial password at first login.", "success")
             return redirect(url_for("admin_orgs"))
+    data.setdefault("app_type", request.form.get("app_type") or "crm")
     return render_template("admin_org_form.html", data=data, admin=admin, org=None)
 
 
@@ -2677,9 +2752,9 @@ def admin_org_edit(oid):
         else:
             execute("""UPDATE organizations SET name=?, code=?, contact_name=?, phone=?, email=?, address=?, notes=?,
                        updated_at=? WHERE id = ?""", (*data.values(), now(), oid))
-            execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ? WHERE id = ?",
+            execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ?, app_type = ? WHERE id = ?",
                     (1 if request.form.get("wa_templates_allowed") else 0,
-                     1 if request.form.get("catalog_allowed") else 0, oid))
+                     1 if request.form.get("catalog_allowed") else 0, form_app_type(), oid))
             flash("Organization updated.", "success")
             return redirect(url_for("admin_orgs"))
     return render_template("admin_org_form.html", data=data, admin=None, org=org)
@@ -2862,6 +2937,12 @@ def integrity_error(e):
     app.logger.warning("Integrity error: %s", e)
     return render_template("error.html", code=409, message="That change was rejected to protect data integrity."), 409
 
+
+import sys  # noqa: E402
+
+import cafe  # noqa: E402
+
+cafe.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

@@ -31,6 +31,9 @@ echo     abc_staff1      Staff of ABC Motors (Anu Thomas)
 echo     abc_staff2      Staff of ABC Motors (Ben Joseph)
 echo     green_admin     Admin of client "Green Homes Realty"
 echo     green_staff1    Staff of Green Homes Realty
+echo     cafe_admin      Admin of cafe client "Chai Corner" (billing, menu, QR)
+echo     cafe_cashier    Cashier of Chai Corner
+echo   Digital menu:  http://localhost:5000/m/chai
 echo   KEEP THIS WINDOW OPEN. Close it to stop.
 echo   To start the demo again from scratch, delete instance\demo.db
 echo  ================================================================

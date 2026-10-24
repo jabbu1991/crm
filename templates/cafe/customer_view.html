@@ -1,0 +1,65 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ c.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ c.name }}</h1>
+  <div class="actions"><a class="btn btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ c.whatsapp|wa_number }}">🟢 WhatsApp</a>
+    <a class="btn" href="{{ url_for('cafe.customers') }}">← Customers</a></div>
+</div>
+<div class="stats compact-stats">
+  {% if st.loyalty.on %}<div class="stat stat-good"><b>🎁 {{ c.points }}</b><span>Points (= {{ (c.points * pv)|rs }})</span></div>{% endif %}
+  <div class="stat"><b>{{ c.visits }}</b><span>Visits</span></div>
+  <div class="stat"><b>{{ c.total_spent|rs0 }}</b><span>ആകെ വാങ്ങിയത്</span></div>
+  <div class="stat stat-muted"><b>{{ c.last_visit or '—' }}</b><span>അവസാനം വന്നത്</span></div>
+</div>
+<div class="grid-2">
+<section class="card">
+  <h2>വിവരങ്ങൾ</h2>
+  <form method="post" class="form">{{ csrf() }}
+    <div class="row-2"><label>പേര്<input name="name" value="{{ c.name }}" required maxlength="80"></label>
+      <label>WhatsApp<input name="whatsapp" value="{{ c.whatsapp }}" required maxlength="15"></label></div>
+    {% if st.birthday_on or c.birthday %}<label>ജന്മദിനം<input type="date" name="birthday" value="{{ '2000-' ~ c.birthday if c.birthday else '' }}"><small class="muted">വർഷം പ്രശ്നമല്ല, ദിവസവും മാസവും മാത്രം സൂക്ഷിക്കും.</small></label>{% endif %}
+    <label>കുറിപ്പ്<textarea name="notes" rows="2" maxlength="500">{{ c.notes or '' }}</textarea></label>
+    {% if not viewing %}<button class="btn btn-primary">Save</button>{% endif %}
+  </form>
+  {% if st.referral.on %}
+  <h2>🤝 Refer &amp; Earn</h2>
+  <p>Referral code: <b class="ref-code">{{ c.referral_code }}</b><br><span class="small">Link: <a href="{{ ref_link }}" target="_blank" rel="noopener">{{ ref_link }}</a></span></p>
+  {% if referrer %}<p class="small">Refer ചെയ്തത്: <a href="{{ url_for('cafe.customer_view', cid=referrer.id) }}">{{ referrer.name }}</a> {{ '(points കൊടുത്തു)' if c.referral_rewarded else '(ആദ്യ bill-ന് ശേഷം points)' }}</p>{% endif %}
+  {% if referred %}<p class="small">ഇവർ കൊണ്ടുവന്നവർ: {% for r in referred %}<a href="{{ url_for('cafe.customer_view', cid=r.id) }}">{{ r.name }}</a>{{ ' ✓' if r.referral_rewarded }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  {% endif %}
+  {% if templates %}
+  <h2 id="wa">🟢 WhatsApp message</h2>
+  <div class="tpl-buttons">{% for title, body in templates %}<a class="btn btn-sm btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ c.whatsapp|wa_number }}?text={{ body|urlencode }}" title="{{ body }}">{{ title }}</a>{% endfor %}</div>
+  {% endif %}
+</section>
+<section class="card">
+  {% if st.loyalty.on or ledger %}
+  <h2>🎁 Points history</h2>
+  {% if expiring %}<p class="small">⏳ തീരാനുള്ളത്: {% for e in expiring %}<b>{{ e.pts }}</b> points {{ e.expires_at }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  {% if can('points_adjust') and not viewing %}
+  <details class="pts-adjust"><summary class="btn btn-sm">± Points കൈകൊണ്ട് മാറ്റുക</summary>
+    <form method="post" action="{{ url_for('cafe.customer_points', cid=c.id) }}" class="inline-form">{{ csrf() }}
+      <select name="direction" style="max-width:120px"><option value="add">+ കൂട്ടുക</option><option value="sub">− കുറക്കുക</option></select>
+      <input type="number" name="points" min="1" required placeholder="Points" style="max-width:110px">
+      <input name="reason" required maxlength="200" placeholder="കാരണം * (history-യിൽ കാണും)">
+      <button class="btn btn-sm btn-primary">Save</button></form>
+  </details>{% endif %}
+  <table class="table compact">
+    <thead><tr><th>എപ്പോൾ</th><th>എന്ത്</th><th class="num">Points</th></tr></thead>
+    <tbody>{% for p in ledger %}<tr>
+      <td class="small nowrap">{{ p.created_at[:16] }}</td>
+      <td class="small">{{ KIND_LABELS.get(p.kind, p.kind) }}{% if p.note %} · {{ p.note }}{% endif %}{% if p.by_name %} <span class="muted">({{ p.by_name }})</span>{% endif %}{% if p.expires_at and p.change > 0 %}<div class="muted">{{ p.expires_at }} വരെ</div>{% endif %}</td>
+      <td class="num {{ 'num-pos' if p.change > 0 else 'num-neg' }}">{{ '+' if p.change > 0 }}{{ p.change }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">ഇതുവരെ ഒന്നുമില്ല.</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  <h2>Bills</h2>
+  <table class="table compact">
+    <tbody>{% for b in bills %}<tr class="{{ 'inactive' if b.status == 'cancelled' }}">
+      <td class="nowrap"><a href="{{ url_for('cafe.bill_view', bid=b.id) if can('bills_view') else '#' }}">{{ st.bill_prefix }}{{ b.bill_no }}</a></td>
+      <td class="small nowrap">{{ b.bill_date }}</td><td class="small wrap">{{ b.summary }}</td><td class="num">{{ b.total|rs }}</td></tr>
+    {% else %}<tr><td class="muted">ഇതുവരെ bills ഇല്ല.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+</div>
+{% endblock %}

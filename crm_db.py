@@ -4,6 +4,7 @@ The schema version lives in SQLite's PRAGMA user_version:
   0 = original single-workspace CRM
   1 = multi-tenant organizations, products, follow-ups, password tokens
   2 = audit log (Super Admin access to client workspaces)
+  ... 8 = cafe module (menu, billing, online orders, customers, points, expenses)
 Before migrating a database that already holds data, a full backup is written to
 instance/backups/. Migrations only ADD tables/columns; no existing data is dropped.
 """
@@ -13,7 +14,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -486,8 +487,323 @@ def _migrate_v7(conn):
         updated_at TEXT)""")
 
 
+CAFE_TABLES = """
+CREATE TABLE IF NOT EXISTS cafe_settings (
+    org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_by INTEGER REFERENCES users(id),
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS menu_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS menu_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    category_id INTEGER REFERENCES menu_categories(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    price INTEGER NOT NULL DEFAULT 0,
+    offer_price INTEGER,
+    offer_from TEXT,
+    offer_to TEXT,
+    food_type TEXT,
+    tags TEXT,
+    photo TEXT,
+    gst_rate REAL NOT NULL DEFAULT 5,
+    available INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS menu_banners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    title TEXT,
+    photo TEXT,
+    item_id INTEGER REFERENCES menu_items(id) ON DELETE SET NULL,
+    start_date TEXT,
+    end_date TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cafe_tables (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    seats INTEGER,
+    sort INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    whatsapp TEXT NOT NULL,
+    wa_norm TEXT NOT NULL,
+    birthday TEXT,
+    points INTEGER NOT NULL DEFAULT 0,
+    visits INTEGER NOT NULL DEFAULT 0,
+    total_spent INTEGER NOT NULL DEFAULT 0,
+    last_visit TEXT,
+    referral_code TEXT NOT NULL,
+    referred_by INTEGER REFERENCES customers(id),
+    referral_rewarded INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS points_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    customer_id INTEGER NOT NULL REFERENCES customers(id),
+    bill_id INTEGER,
+    change INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    note TEXT,
+    expires_at TEXT,
+    remaining INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cafe_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_no INTEGER NOT NULL,
+    order_date TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'counter',
+    order_type TEXT NOT NULL DEFAULT 'takeaway',
+    table_id INTEGER REFERENCES cafe_tables(id) ON DELETE SET NULL,
+    customer_id INTEGER REFERENCES customers(id),
+    cust_name TEXT,
+    cust_phone TEXT,
+    address TEXT,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    reject_reason TEXT,
+    ready_at TEXT,
+    bill_id INTEGER,
+    token TEXT NOT NULL,
+    referral_code TEXT,
+    birthday TEXT,
+    created_by INTEGER REFERENCES users(id),
+    confirmed_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS cafe_order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_id INTEGER NOT NULL REFERENCES cafe_orders(id) ON DELETE CASCADE,
+    item_id INTEGER REFERENCES menu_items(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    price INTEGER NOT NULL,
+    gst_rate REAL NOT NULL DEFAULT 0,
+    qty INTEGER NOT NULL,
+    kot_qty INTEGER NOT NULL DEFAULT 0,
+    note TEXT
+);
+CREATE TABLE IF NOT EXISTS cafe_kots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_id INTEGER NOT NULL REFERENCES cafe_orders(id) ON DELETE CASCADE,
+    kot_no INTEGER NOT NULL,
+    kot_date TEXT NOT NULL,
+    lines TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cafe_bills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    bill_no INTEGER NOT NULL,
+    bill_date TEXT NOT NULL,
+    order_id INTEGER REFERENCES cafe_orders(id),
+    order_type TEXT,
+    table_name TEXT,
+    customer_id INTEGER REFERENCES customers(id),
+    cust_name TEXT,
+    cust_phone TEXT,
+    subtotal INTEGER NOT NULL,
+    discount INTEGER NOT NULL DEFAULT 0,
+    taxable INTEGER NOT NULL DEFAULT 0,
+    cgst INTEGER NOT NULL DEFAULT 0,
+    sgst INTEGER NOT NULL DEFAULT 0,
+    points_redeemed INTEGER NOT NULL DEFAULT 0,
+    points_value INTEGER NOT NULL DEFAULT 0,
+    round_off INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL,
+    points_earned INTEGER NOT NULL DEFAULT 0,
+    payment_mode TEXT,
+    gst_on INTEGER NOT NULL DEFAULT 0,
+    gst_inclusive INTEGER NOT NULL DEFAULT 0,
+    gstin TEXT,
+    status TEXT NOT NULL DEFAULT 'paid',
+    cancel_reason TEXT,
+    cancelled_by INTEGER REFERENCES users(id),
+    cancelled_at TEXT,
+    token TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cafe_bill_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    bill_id INTEGER NOT NULL REFERENCES cafe_bills(id) ON DELETE CASCADE,
+    item_id INTEGER REFERENCES menu_items(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    qty INTEGER NOT NULL,
+    price INTEGER NOT NULL,
+    gst_rate REAL NOT NULL DEFAULT 0,
+    amount INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cafe_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    kind TEXT NOT NULL CHECK (kind IN ('expense', 'income')),
+    entry_date TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    payment_mode TEXT,
+    note TEXT,
+    photo TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS cafe_ledger_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    kind TEXT NOT NULL CHECK (kind IN ('expense', 'income')),
+    name TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS cafe_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_menu_items_org ON menu_items(org_id, category_id);
+CREATE INDEX IF NOT EXISTS idx_menu_categories_org ON menu_categories(org_id);
+CREATE INDEX IF NOT EXISTS idx_menu_banners_org ON menu_banners(org_id);
+CREATE INDEX IF NOT EXISTS idx_cafe_tables_org ON cafe_tables(org_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_org_wa ON customers(org_id, wa_norm);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_org_ref ON customers(org_id, referral_code);
+CREATE INDEX IF NOT EXISTS idx_points_customer ON points_ledger(customer_id);
+CREATE INDEX IF NOT EXISTS idx_points_org_exp ON points_ledger(org_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_cafe_orders_org ON cafe_orders(org_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cafe_orders_token ON cafe_orders(token);
+CREATE INDEX IF NOT EXISTS idx_cafe_order_items ON cafe_order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_cafe_kots_order ON cafe_kots(order_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cafe_bills_no ON cafe_bills(org_id, bill_no);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cafe_bills_token ON cafe_bills(token);
+CREATE INDEX IF NOT EXISTS idx_cafe_bills_org_date ON cafe_bills(org_id, bill_date);
+CREATE INDEX IF NOT EXISTS idx_cafe_bills_customer ON cafe_bills(customer_id);
+CREATE INDEX IF NOT EXISTS idx_cafe_bill_items ON cafe_bill_items(bill_id);
+CREATE INDEX IF NOT EXISTS idx_cafe_ledger_org ON cafe_ledger(org_id, entry_date);
+CREATE INDEX IF NOT EXISTS idx_cafe_ledger_cat_org ON cafe_ledger_categories(org_id, kind);
+CREATE INDEX IF NOT EXISTS idx_cafe_templates_org ON cafe_templates(org_id)
+"""
+
+# Tenant guards for the cafe tables: a row can never point at another organization's data.
+CAFE_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS trg_menu_items_tenant BEFORE INSERT ON menu_items
+WHEN NEW.category_id IS NOT NULL AND (SELECT org_id FROM menu_categories WHERE id = NEW.category_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: menu item/category organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_menu_items_tenant_upd BEFORE UPDATE ON menu_items
+WHEN NEW.org_id IS NOT OLD.org_id
+  OR (NEW.category_id IS NOT NULL AND (SELECT org_id FROM menu_categories WHERE id = NEW.category_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: invalid menu item update'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_menu_banners_tenant BEFORE INSERT ON menu_banners
+WHEN NEW.item_id IS NOT NULL AND (SELECT org_id FROM menu_items WHERE id = NEW.item_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: banner/item organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_menu_banners_tenant_upd BEFORE UPDATE ON menu_banners
+WHEN NEW.org_id IS NOT OLD.org_id
+  OR (NEW.item_id IS NOT NULL AND (SELECT org_id FROM menu_items WHERE id = NEW.item_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: invalid banner update'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_customers_tenant BEFORE INSERT ON customers
+WHEN NEW.referred_by IS NOT NULL AND (SELECT org_id FROM customers WHERE id = NEW.referred_by) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: referral organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_customers_tenant_upd BEFORE UPDATE OF org_id ON customers
+WHEN NEW.org_id IS NOT OLD.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: a customer cannot move between organizations'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_points_tenant BEFORE INSERT ON points_ledger
+WHEN (SELECT org_id FROM customers WHERE id = NEW.customer_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: points organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_orders_tenant BEFORE INSERT ON cafe_orders
+WHEN (NEW.table_id IS NOT NULL AND (SELECT org_id FROM cafe_tables WHERE id = NEW.table_id) IS NOT NEW.org_id)
+  OR (NEW.customer_id IS NOT NULL AND (SELECT org_id FROM customers WHERE id = NEW.customer_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: order organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_orders_tenant_upd BEFORE UPDATE ON cafe_orders
+WHEN NEW.org_id IS NOT OLD.org_id
+  OR (NEW.table_id IS NOT NULL AND (SELECT org_id FROM cafe_tables WHERE id = NEW.table_id) IS NOT NEW.org_id)
+  OR (NEW.customer_id IS NOT NULL AND (SELECT org_id FROM customers WHERE id = NEW.customer_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: invalid order update'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_order_items_tenant BEFORE INSERT ON cafe_order_items
+WHEN (SELECT org_id FROM cafe_orders WHERE id = NEW.order_id) IS NOT NEW.org_id
+  OR (NEW.item_id IS NOT NULL AND (SELECT org_id FROM menu_items WHERE id = NEW.item_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: order item organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_kots_tenant BEFORE INSERT ON cafe_kots
+WHEN (SELECT org_id FROM cafe_orders WHERE id = NEW.order_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: KOT organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_bills_tenant BEFORE INSERT ON cafe_bills
+WHEN (NEW.order_id IS NOT NULL AND (SELECT org_id FROM cafe_orders WHERE id = NEW.order_id) IS NOT NEW.org_id)
+  OR (NEW.customer_id IS NOT NULL AND (SELECT org_id FROM customers WHERE id = NEW.customer_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: bill organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_bills_tenant_upd BEFORE UPDATE OF org_id ON cafe_bills
+WHEN NEW.org_id IS NOT OLD.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: a bill cannot move between organizations'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cafe_bill_items_tenant BEFORE INSERT ON cafe_bill_items
+WHEN (SELECT org_id FROM cafe_bills WHERE id = NEW.bill_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: bill item organization mismatch'); END;
+"""
+
+
+def _migrate_v8(conn):
+    """Cafe module: billing, menu, digital menu, online orders, customers, points, expenses.
+    Adds only. Every existing organization stays a CRM organization."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("organizations", "app_type", "TEXT NOT NULL DEFAULT 'crm'")  # crm / cafe / both (Super Admin)
+    add("users", "cafe_role", "TEXT")    # cashier / manager / custom (staff only)
+    add("users", "cafe_perms", "TEXT")   # JSON list of ticked permissions (staff only)
+    for stmt in _split(CAFE_TABLES):
+        conn.execute(stmt)
+    for stmt in _split_triggers(CAFE_TRIGGERS):
+        conn.execute(stmt)
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
-              (6, _migrate_v6), (7, _migrate_v7)]
+              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8)]
 
 
 def migrate(db_path):

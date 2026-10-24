@@ -108,3 +108,14 @@ CRM_SECURE_COOKIES=1 gunicorn -w 1 -b 0.0.0.0:8000 app:app
 ```
 
 Use one worker: the login throttle is kept in memory, and SQLite works best with a single writer process.
+
+
+## Cafe module (billing, digital menu, online orders)
+
+The Super Admin chooses each client's software type: **CRM**, **Cafe**, or **CRM + Cafe** (Client Organizations → Edit).
+A cafe gets: billing for dine-in / takeaway / delivery with KOT and thermal (58/80 mm) or A4 printing, GST bills,
+menu with photos and offers, offer banners, a public digital menu with QR codes (`/m/<code>`) and online ordering
+(pending → confirm/reject), customers with loyalty points, refer & earn and birthdays, WhatsApp marketing templates,
+expenses and an income/expense analysis page with charts, and per-staff permissions.
+Code: `cafe.py`, `cafe_admin.py`, `cafe_pos.py`, `cafe_people.py`, `cafe_charts.py`, `templates/cafe/`.
+Tests: `tests/test_cafe.py`.

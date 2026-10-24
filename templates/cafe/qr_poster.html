@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR · {{ name }}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Malayalam", sans-serif; background: #eef0f4; color: #1d2433; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 16px; background: #111827; color: #fff; }
+  .bar a, .bar button { color: #fff; background: #374151; border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .bar .primary { background: #4f46e5; }
+  .sheets { display: flex; flex-wrap: wrap; gap: 20px; padding: 20px; justify-content: center; }
+  .poster { width: 105mm; min-height: 148mm; background: {{ st.theme.bg }}; color: {{ st.theme.text }}; border-radius: 14px; padding: 12mm 9mm; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4mm; box-shadow: 0 4px 18px rgba(0,0,0,.12); break-inside: avoid; page-break-inside: avoid; }
+  .poster img.logo { width: 22mm; height: 22mm; object-fit: contain; border-radius: 4mm; }
+  .poster h1 { margin: 0; font-size: 22pt; line-height: 1.1; }
+  .poster .scan { font-size: 15pt; font-weight: 700; color: {{ st.theme.primary }}; margin: 0; }
+  .poster .qr { background: #fff; padding: 4mm; border-radius: 4mm; border: 2mm solid {{ st.theme.primary }}; }
+  .poster .qr img { width: 62mm; height: 62mm; display: block; }
+  .poster .tname { font-size: 26pt; font-weight: 800; letter-spacing: .02em; }
+  .poster .small { font-size: 9pt; opacity: .75; word-break: break-all; }
+  @media print { body { background: #fff; } .bar { display: none; } .sheets { padding: 0; gap: 6mm; } .poster { box-shadow: none; border: 1px solid #ddd; } @page { margin: 8mm; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="primary" onclick="window.print()">🖨 Print</button>
+  <a href="{{ url_for('cafe.qr_image', kind='png') }}">⬇️ QR download (PNG)</a>
+  <a href="{{ url_for('cafe.tables') }}">← Back</a>
+  <span style="opacity:.75">ഈ QR scan ചെയ്താൽ menu നേരിട്ട് തുറക്കും. Table QR scan ചെയ്താൽ table നമ്പർ തനിയെ വരും.</span>
+</div>
+<div class="sheets">
+{% if not tables %}
+  <div class="poster">
+    {% if st.logo %}<img class="logo" src="{{ url_for('media', name=st.logo) }}" alt="">{% endif %}
+    <h1>{{ name }}</h1>
+    <p class="scan">📱 Scan for menu{{ ' & order' if st.online_on }}</p>
+    <div class="qr"><img src="{{ url_for('cafe.qr_image', kind='svg') }}" alt="QR"></div>
+    <div class="small">{{ link }}</div>
+  </div>
+{% endif %}
+{% for t in tables %}
+  <div class="poster">
+    {% if st.logo %}<img class="logo" src="{{ url_for('media', name=st.logo) }}" alt="">{% endif %}
+    <h1>{{ name }}</h1>
+    <div class="tname">{{ t.name }}</div>
+    <p class="scan">📱 Scan for menu{{ ' & order' if st.online_on }}</p>
+    <div class="qr"><img src="{{ url_for('cafe.qr_image', kind='svg', t=t.id) }}" alt="QR"></div>
+  </div>
+{% endfor %}
+</div>
+</body>
+</html>

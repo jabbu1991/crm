@@ -6,7 +6,7 @@
   {{ csrf() }}
   <div class="row-2">
     <label>Full name *<input name="name" required value="{{ data.name or '' }}"></label>
-    <label>Designation<input name="designation" value="{{ data.designation or '' }}" placeholder="e.g. Telecaller, Sales Executive"></label>
+    <label>Designation<input name="designation" value="{{ data.designation or '' }}" placeholder="{{ 'e.g. Cashier, Waiter, Manager' if app_type == 'cafe' else 'e.g. Telecaller, Sales Executive' }}"></label>
   </div>
   <div class="row-2">
     <label>Username *<input name="username" required value="{{ data.username or '' }}" autocomplete="off"></label>
@@ -17,10 +17,40 @@
   <div class="row-2">
     <label>Role
       {% if locked %}<input value="{{ ROLE_LABELS[member.role] }}" disabled><input type="hidden" name="role" value="{{ member.role }}">
-      {% else %}<select name="role"><option value="staff" {{ 'selected' if data.role == 'staff' }}>Staff: sees and edits only their own leads</option><option value="org_admin" {{ 'selected' if data.role == 'org_admin' }}>Organization Admin: all leads, reports and users</option></select>{% endif %}
+      {% else %}<select name="role"><option value="staff" {{ 'selected' if data.role == 'staff' }}>{{ 'Staff: താഴെ tick ചെയ്ത അധികാരങ്ങൾ മാത്രം' if app_type == 'cafe' else 'Staff: sees and edits only their own leads' }}</option>{% if is_admin() %}<option value="org_admin" {{ 'selected' if data.role == 'org_admin' }}>{{ 'Admin: എല്ലാം (billing, reports, settings, staff)' if app_type == 'cafe' else 'Organization Admin: all leads, reports and users' }}</option>{% endif %}</select>{% endif %}
     </label>
     <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if data.active }} {{ 'disabled' if locked }}> Account active (can log in)</label>
   </div>
+  {% if cafe_perms %}
+  <fieldset class="cafe-perms" id="cafe-perms">
+    <legend>☕ Cafe അധികാരങ്ങൾ <small class="muted">(Staff-ന് മാത്രം; Admin-ന് എല്ലാം ഉണ്ട്)</small></legend>
+    <label>Role
+      <select name="cafe_role" id="cafe-role">
+        {% for k, v in cafe_perms.labels.items() %}<option value="{{ k }}" {{ 'selected' if cafe_perms.role == k }}>{{ v }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="checks perm-checks">
+      {% for k, label in cafe_perms.all %}
+      <label class="check {{ 'perm-locked' if k not in cafe_perms.allowed }}"><input type="checkbox" name="cafe_perm" value="{{ k }}" {{ 'checked' if k in cafe_perms.have }} {{ 'disabled' if k not in cafe_perms.allowed }}> {{ label }}</label>
+      {% endfor %}
+    </div>
+    <p class="muted small">Role തിരഞ്ഞെടുത്താൽ ticks തനിയെ വരും. ഏതെങ്കിലും tick മാറ്റിയാൽ Role "Custom" ആകും. Tick ഇല്ലാത്ത menu ആ staff-ന്റെ screen-ൽ കാണില്ല.</p>
+    <script>
+    (function () {
+      var presets = {{ cafe_perms.presets|tojson }}, sel = document.getElementById("cafe-role"),
+          box = document.getElementById("cafe-perms"), roleSel = document.querySelector("select[name=role]");
+      function boxes() { return box.querySelectorAll("input[name=cafe_perm]"); }
+      sel.addEventListener("change", function () {
+        if (!presets[sel.value]) return;
+        boxes().forEach(function (c) { if (!c.disabled) c.checked = presets[sel.value].indexOf(c.value) >= 0; });
+      });
+      boxes().forEach(function (c) { c.addEventListener("change", function () { sel.value = "custom"; }); });
+      function showFor() { box.style.display = roleSel && roleSel.value === "org_admin" ? "none" : ""; }
+      if (roleSel) { roleSel.addEventListener("change", showFor); showFor(); }
+    })();
+    </script>
+  </fieldset>
+  {% endif %}
   {% if not member %}
   <fieldset>
     <legend>How will they get access?</legend>

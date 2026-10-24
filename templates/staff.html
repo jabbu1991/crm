@@ -4,18 +4,18 @@
 <div class="page-head"><h1>Staff &amp; users · {{ g.org.name }}</h1><a class="btn btn-primary" href="{{ url_for('staff_new') }}">+ Add user</a></div>
 <div class="card table-wrap">
 <table class="table">
-  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th class="num">Leads created</th><th>Password</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th>{% if has_crm %}<th class="num">Leads created</th>{% endif %}<th>Password</th><th></th></tr></thead>
   <tbody>
   {% for s in staff %}
     {% set protected = s.role == 'super_admin' and s.id != g.user.id %}
     <tr class="{{ 'inactive' if not s.active }}">
       <td><b>{{ s.name }}</b>{% if s.designation %}<div class="small muted">{{ s.designation }}</div>{% endif %}</td>
-      <td>{{ s.username }}</td><td>{{ s.email or '' }}</td><td>{{ ROLE_LABELS[s.role] }}</td>
+      <td>{{ s.username }}</td><td>{{ s.email or '' }}</td><td>{{ ROLE_LABELS[s.role] }}{% if has_cafe and s.role == 'staff' %}<div class="small muted">☕ {{ (s.cafe_role or 'cashier')|title }}</div>{% endif %}</td>
       <td><span class="badge {{ ('Active' if s.active else 'Inactive')|badge }}">{{ 'Active' if s.active else 'Deactivated' }}</span>
         {% if s.must_change_password %}<div class="small muted">must change password</div>{% endif %}
         {% if s.pending_link %}<div class="small muted">invite/reset link pending</div>{% endif %}</td>
       <td class="small">{{ s.last_login_at or 'never' }}</td>
-      <td class="num"><a href="{{ url_for('leads', staff=s.id) }}">{{ s.lead_count }}</a></td>
+      {% if has_crm %}<td class="num"><a href="{{ url_for('leads', staff=s.id) }}">{{ s.lead_count }}</a></td>{% endif %}
       <td>
         {% if not protected and s.id != g.user.id %}
         <details class="pw-menu"><summary>Reset…</summary>

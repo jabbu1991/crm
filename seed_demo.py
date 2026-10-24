@@ -13,6 +13,7 @@ DB = os.environ.setdefault("CRM_DB_PATH", os.path.join(os.path.dirname(os.path.a
 os.environ.pop("CRM_SETUP_KEY", None)
 
 import app as crm  # noqa: E402  (reads CRM_DB_PATH on import)
+from datetime import date  # noqa: E402
 
 PASSWORD = "demo1234"
 
@@ -95,7 +96,109 @@ def main():
                 "source": random.choice(["Facebook", "Instagram", "Google Ads", "WhatsApp"]),
                 "next_follow_up": random.choice(["", "2026-10-10", "2026-10-20"]),
                 "requirement": "Wants price details", "confirm_duplicate": "1"})
+    seed_cafe(sup)
     print("Demo data created.")
+
+
+def demo_photo(label, hue, size=(600, 600)):
+    """A simple coloured placeholder photo for demo menu items."""
+    import io
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", size)
+    d = ImageDraw.Draw(img)
+    for y in range(size[1]):
+        t = y / size[1]
+        d.line([(0, y), (size[0], y)], fill=(int(hue[0] * (1 - t) + 40 * t), int(hue[1] * (1 - t) + 30 * t),
+                                              int(hue[2] * (1 - t) + 20 * t)))
+    d.ellipse([size[0] * .18, size[1] * .2, size[0] * .82, size[1] * .84], fill=(250, 246, 238))
+    d.ellipse([size[0] * .28, size[1] * .3, size[0] * .72, size[1] * .74], fill=hue)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+    return buf
+
+
+def seed_cafe(sup):
+    """A demo cafe client: menu with photos and offers, tables, customers, a month of bills and expenses."""
+    import json
+    from datetime import date, timedelta
+    sup.post("/admin/organizations/new", {"name": "Chai Corner", "code": "CHAI", "admin_name": "Chai Corner Admin",
+                                          "admin_username": "cafe_admin", "onboarding": "password",
+                                          "password": PASSWORD, "app_type": "cafe"})
+    admin = make_user_ready("cafe_admin")
+    admin.post("/staff/new", {"name": "Rahul (Cashier)", "username": "cafe_cashier", "role": "staff", "active": "1",
+                              "designation": "Cashier", "onboarding": "password", "password": PASSWORD,
+                              "cafe_role": "cashier"})
+    make_user_ready("cafe_cashier")
+    admin.post("/cafe/settings", {
+        "name": "Chai Corner", "tagline": "Kerala chai, snacks & shawarma since 2019", "phone": "9847012345",
+        "whatsapp": "9847012345", "address": "Main Road, Malappuram, Kerala", "paper": "80", "kot_on": "1",
+        "kot_with_bill": "1", "menu_on": "1", "online_on": "1", "order_dine_in": "1", "order_takeaway": "1",
+        "order_delivery": "1", "delivery_note": "Delivery within 3 km", "gst_inclusive": "1", "default_gst": "5",
+        "bill_footer": "Thank you! Visit again 🙏", "loyalty_on": "1", "loyalty_mode": "percent",
+        "loyalty_percent": "5", "loyalty_point_value": "1", "loyalty_max_redeem_pct": "50", "loyalty_min_redeem": "20",
+        "loyalty_expiry_days": "180", "referral_on": "1", "referral_referrer_points": "50",
+        "referral_new_points": "25", "birthday_on": "1"})
+    menu = {
+        "Tea & Coffee": [("Kerala Chai", "15", "", "veg", (176, 112, 60)), ("Sulaimani", "12", "", "veg", (150, 70, 20)),
+                         ("Filter Coffee", "25", "20", "veg", (110, 70, 40))],
+        "Juices": [("Fresh Lime", "30", "", "veg", (140, 190, 60)), ("Mango Shake", "80", "65", "veg", (240, 170, 30)),
+                   ("Avil Milk", "90", "", "veg", (220, 190, 150))],
+        "Snacks": [("Pazham Pori", "15", "", "veg", (220, 150, 40)), ("Chicken Puffs", "25", "", "nonveg", (200, 120, 50)),
+                   ("Egg Puffs", "22", "", "egg", (230, 180, 70))],
+        "Shawarma & Meals": [("Chicken Shawarma", "110", "99", "nonveg", (190, 90, 40)),
+                             ("Beef Fry & Porotta", "150", "", "nonveg", (130, 50, 30)),
+                             ("Veg Fried Rice", "120", "", "veg", (200, 160, 60))],
+    }
+    for cat in menu:
+        admin.post("/cafe/menu/category", {"action": "add", "name": cat})
+    with sqlite3.connect(DB) as conn:
+        cats = {n: i for i, n in conn.execute("SELECT id, name FROM menu_categories")}
+    for cat, items in menu.items():
+        for name, price, offer, ftype, hue in items:
+            data = {"name": name, "price": price, "offer_price": offer, "food_type": ftype, "available": "1",
+                    "category_id": cats[cat], "gst_rate": "5", "photo": (demo_photo(name, hue), "p.png")}
+            if name in ("Chicken Shawarma", "Kerala Chai"):
+                data["tags"] = ["bestseller"]
+            with admin.c.session_transaction() as sess:
+                sess["csrf_token"] = "demo"
+            admin.c.post("/cafe/menu/item/new", data=dict(data, csrf_token="demo"), content_type="multipart/form-data")
+    admin.post("/cafe/tables/save", {"action": "bulk", "count": "8", "seats": "4"})
+    with sqlite3.connect(DB) as conn:
+        items = [r for r in conn.execute("SELECT id, name FROM menu_items")]
+    people = [("Riya", "9847100001"), ("Sameer", "9847100002"), ("Fathima", "9847100003"), ("Arjun", "9847100004"),
+              ("Nimmi", "9847100005"), ("Basil", "9847100006"), ("Hisham", "9847100007"), ("Divya", "9847100008")]
+    today_ = date.today()
+    for day in range(30, -1, -1):
+        for n in range(random.randint(14, 26)):
+            lines = [{"item_id": i, "qty": random.randint(1, 3)} for i, _ in random.sample(items, random.randint(1, 4))]
+            who = random.choice(people + [("", "")] * 3)
+            admin.post("/cafe/pos/save", {"payload": json.dumps({
+                "action": "bill", "order_type": random.choice(["takeaway", "takeaway", "dine_in", "delivery"]),
+                "table_id": None, "items": lines, "payment_mode": random.choice(["Cash", "Cash", "UPI", "UPI", "Card"]),
+                "customer": {"phone": who[1], "name": who[0]}})})
+        d = (today_ - timedelta(days=day)).isoformat()
+        with sqlite3.connect(DB) as conn:
+            conn.execute("UPDATE cafe_orders SET order_date = ?, created_at = ? || substr(created_at, 11)"
+                         " WHERE order_date = ? AND id > COALESCE((SELECT MAX(id) FROM cafe_orders WHERE order_date < ?), 0)",
+                         (d, d, today_.isoformat(), today_.isoformat()))
+            conn.execute("UPDATE cafe_kots SET kot_date = ? WHERE kot_date = ? AND id > COALESCE("
+                         "(SELECT MAX(id) FROM cafe_kots WHERE kot_date < ?), 0)", (d, today_.isoformat(), today_.isoformat()))
+            conn.execute("UPDATE cafe_bills SET bill_date = ?, created_at = ? || substr(created_at, 11)"
+                         " WHERE bill_date = ? AND id > COALESCE((SELECT MAX(id) FROM cafe_bills WHERE bill_date < ?), 0)",
+                         (d, d, today_.isoformat(), today_.isoformat()))
+        for cat, lo, hi in (("Raw materials", 600, 1600), ("Gas", 0, 400), ("Packing", 100, 300)):
+            amt = random.randint(lo, hi)
+            if amt:
+                admin.post("/cafe/expenses/save", {"kind": "expense", "amount": str(amt), "category": cat,
+                                                   "payment_mode": "Cash", "entry_date": d})
+        if day % 15 == 0:
+            admin.post("/cafe/expenses/save", {"kind": "expense", "amount": "6000", "category": "Salary",
+                                               "payment_mode": "Bank", "entry_date": d})
+    admin.post("/cafe/expenses/save", {"kind": "expense", "amount": "8000", "category": "Rent", "payment_mode": "Bank",
+                                       "entry_date": today_.replace(day=1).isoformat()})
+    with sqlite3.connect(DB) as conn:
+        conn.execute("UPDATE customers SET birthday = ? WHERE wa_norm = '9847100003'", (today_.isoformat()[5:],))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ cfg.name }} · Menu</title>
+<meta name="description" content="{{ st.tagline or ('Menu of ' ~ cfg.name) }}">
+<meta name="theme-color" content="{{ colors.primary }}">
+{% if st.logo %}<link rel="icon" href="{{ url_for('media', name=st.logo) }}">{% endif %}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Lora:wght@500;700&family=Baloo+Chettan+2:wght@500;700;800&family=Noto+Sans+Malayalam:wght@400;600&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='menu.css') }}">
+<style id="theme-vars">:root { --p: {{ colors.primary }}; --s: {{ colors.secondary }}; --bg: {{ colors.bg }}; --tx: {{ colors.text }}; }</style>
+</head>
+<body class="lay-{{ layout }} font-{{ font }} shape-{{ shape }}">
+{% if cfg.preview %}<div class="preview-flag">Preview{{ ' · menu is OFF for customers' if not st.menu_on }}</div>{% endif %}
+<header class="hero {{ 'has-cover' if st.cover }}">
+  {% if st.cover %}<img class="hero-img" src="{{ url_for('media', name=st.cover) }}" alt="">{% endif %}
+  <div class="hero-body">
+    {% if st.logo %}<img class="hero-logo" src="{{ url_for('media', name=st.logo) }}" alt="{{ cfg.name }} logo">{% else %}<span class="hero-logo hero-initial">{{ cfg.name[:1]|upper }}</span>{% endif %}
+    <h1>{{ cfg.name }}</h1>
+    {% if st.tagline %}<p class="tagline">{{ st.tagline }}</p>{% endif %}
+    <div class="hero-actions">
+      {% if st.phone %}<a href="tel:{{ st.phone }}">📞 Call</a>{% endif %}
+      {% if wa %}<a href="https://wa.me/{{ wa }}?text={{ ('Hi ' ~ cfg.name ~ ', ')|urlencode }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+      {% if st.map_url %}<a href="{{ st.map_url }}" target="_blank" rel="noopener">📍 Directions</a>{% endif %}
+    </div>
+  </div>
+</header>
+{% if cfg.table %}<div class="table-flag">🍽 You're at <b>{{ cfg.table.name }}</b></div>{% endif %}
+
+<main>
+  {% if st.about %}<p class="about">{{ st.about }}</p>{% endif %}
+  <section class="offers" id="offers" hidden aria-label="Offers"><div class="offer-track" id="offer-track"></div><div class="offer-dots" id="offer-dots"></div></section>
+  <nav class="catbar" id="catbar"><button class="cb-search" id="cb-search" type="button" aria-label="Search">🔍</button><div class="cb-chips" id="cb-chips"></div></nav>
+  <div class="searchbox" id="searchbox" hidden><input id="q" type="search" placeholder="Search the menu" autocomplete="off"></div>
+  <div id="sections"></div>
+  <p class="empty" id="empty" hidden>Nothing matches your search.</p>
+  {% if st.address or st.fssai %}<footer class="foot">{% if st.address %}<p>{{ st.address }}</p>{% endif %}{% if st.fssai %}<p class="small">FSSAI {{ st.fssai }}</p>{% endif %}</footer>{% endif %}
+  <p class="madeby">Menu by <a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.company }}</a></p>
+</main>
+
+<button class="cartbar" id="cartbar" type="button" hidden><span id="cart-count">0 items</span><b id="cart-total">₹0</b><span class="cb-go">View order</span></button>
+
+<div class="sheet-back" id="item-sheet" hidden><div class="sheet item-detail" role="dialog" aria-modal="true"><button class="sheet-x" type="button" data-close>✕</button><div id="item-detail"></div></div></div>
+
+<div class="sheet-back" id="order-sheet" hidden>
+  <form class="sheet" id="order-form" role="dialog" aria-modal="true" novalidate>
+    <button class="sheet-x" type="button" data-close>✕</button>
+    <h2>Your order</h2>
+    <div id="order-lines" class="order-lines"></div>
+    <div class="order-total"><span>Total</span><b id="order-total">₹0</b></div>
+    <p class="fine">Pay at the counter. Final bill may include taxes as per the cafe.</p>
+    <div class="seg" id="otype"></div>
+    <label id="table-field" hidden>Table<select name="table" id="table-sel"></select></label>
+    <label>Your name<input name="name" required maxlength="80" autocomplete="name"></label>
+    <label>WhatsApp number<input name="phone" required inputmode="tel" maxlength="15" autocomplete="tel" placeholder="10-digit number"></label>
+    <label id="addr-field" hidden>Delivery address<textarea name="address" rows="2" maxlength="300"></textarea>{% if cfg.delivery_note %}<small>{{ cfg.delivery_note }}</small>{% endif %}</label>
+    <label>Note for the kitchen <small>(optional)</small><input name="note" maxlength="300" placeholder="e.g. less spicy"></label>
+    {% if cfg.birthday_on %}<label>Birthday <small>(optional, for a birthday treat 🎂)</small><input type="date" name="birthday"></label>{% endif %}
+    {% if cfg.referral %}<label>Referral code <small>(optional)</small><input name="ref" maxlength="20" value="{{ cfg.ref }}"></label>{% endif %}
+    <input name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <p class="form-err" id="form-err" hidden></p>
+    <button class="place" id="place" type="submit">Place order</button>
+  </form>
+</div>
+
+<script id="menu-cfg" type="application/json">{{ cfg|tojson }}</script>
+<script>
+(function () {
+  var cfg = JSON.parse(document.getElementById("menu-cfg").textContent);
+  var csrf = "{{ csrf_token() }}", KEY = "cart:{{ org.code|lower }}";
+  var byId = {}; cfg.items.forEach(function (i) { byId[i.id] = i; });
+  var cart = {};
+  try { cart = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { cart = {}; }
+  Object.keys(cart).forEach(function (k) { if (!byId[k] || !byId[k].available) delete cart[k]; });
+  var $ = function (id) { return document.getElementById(id); };
+  function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
+  function rs(p) { var r = Math.floor(p / 100), s = String(r); if (s.length > 3) { var h = s.slice(0, -3); s = h.replace(/\B(?=(\d\d)+$)/g, ",") + "," + s.slice(-3); } var ps = p % 100; return "₹" + s + (ps ? "." + (ps < 10 ? "0" : "") + ps : ""); }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(cart)); } catch (e) {} }
+  var TAGS = {bestseller: "Bestseller", "new": "New", spicy: "Spicy", chef: "Chef's special"};
+
+  // ---- offers
+  function renderOffers() {
+    var list = cfg.banners.filter(function (b) { return b.photo || b.title; });
+    if (!list.length) return;
+    $("offers").hidden = false;
+    var track = $("offer-track"), dots = $("offer-dots");
+    list.forEach(function (b, i) {
+      var c = el(b.item ? "button" : "div", "offer"); if (b.item) { c.type = "button"; c.onclick = function () { openItem(b.item); }; }
+      if (b.photo) { var im = el("img"); im.src = b.photo; im.alt = ""; c.appendChild(im); } else c.classList.add("offer-text");
+      var cap = el("div", "offer-cap");
+      if (b.title) cap.appendChild(el("span", "offer-title", b.title));
+      if (b.auto && b.mrp) { var t = el("span", "tag"); t.appendChild(el("s", "", rs(b.mrp))); t.appendChild(el("b", "", " " + rs(b.price))); cap.appendChild(t); if (b.off) cap.appendChild(el("span", "off", b.off + "% OFF")); }
+      c.appendChild(cap); track.appendChild(c);
+      var d = el("span", i ? "" : "on"); dots.appendChild(d);
+    });
+    if (list.length < 2) { dots.hidden = true; return; }
+    var idx = 0, timer;
+    function go(n) { idx = (n + list.length) % list.length; track.scrollTo({left: track.children[idx].offsetLeft - track.offsetLeft, behavior: "smooth"}); }
+    track.addEventListener("scroll", function () {
+      var n = Math.round(track.scrollLeft / track.clientWidth); idx = n;
+      Array.prototype.forEach.call(dots.children, function (d, i) { d.className = i === n ? "on" : ""; });
+    }, {passive: true});
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function auto() { clearInterval(timer); if (!reduce) timer = setInterval(function () { go(idx + 1); }, 4500); }
+    track.addEventListener("pointerdown", function () { clearInterval(timer); }); auto();
+  }
+
+  // ---- menu
+  var q = "";
+  function stepper(i) {
+    var box = el("div", "add");
+    if (!i.available) { box.appendChild(el("span", "na", "Not available")); return box; }
+    if (!cfg.online) return box;
+    var n = cart[i.id] || 0;
+    if (!n) { var b = el("button", "add-btn", "Add"); b.type = "button"; b.onclick = function (e) { e.stopPropagation(); change(i.id, 1); }; box.appendChild(b); return box; }
+    box.classList.add("stepping");
+    var m = el("button", "", "−"), c = el("span", "", String(n)), p = el("button", "", "+");
+    m.type = p.type = "button"; m.setAttribute("aria-label", "Remove one"); p.setAttribute("aria-label", "Add one");
+    m.onclick = function (e) { e.stopPropagation(); change(i.id, -1); }; p.onclick = function (e) { e.stopPropagation(); change(i.id, 1); };
+    box.appendChild(m); box.appendChild(c); box.appendChild(p); return box;
+  }
+  function priceEl(i) {
+    var p = el("div", "price"); p.appendChild(el("b", "", rs(i.price)));
+    if (i.mrp) { p.appendChild(el("s", "", rs(i.mrp))); p.appendChild(el("span", "off", i.off + "% OFF")); }
+    return p;
+  }
+  function vegMark(i) { if (!i.type) return null; var v = el("span", "veg veg-" + i.type); v.title = i.type === "veg" ? "Veg" : (i.type === "egg" ? "Egg" : "Non-veg"); return v; }
+  function card(i) {
+    var c = el("article", "item" + (i.available ? "" : " unavailable")); c.id = "i" + i.id;
+    c.onclick = function () { openItem(i.id); };
+    if (i.photo) { var f = el("div", "ph"); var im = el("img"); im.src = i.photo; im.alt = i.name; im.loading = "lazy"; f.appendChild(im); c.appendChild(f); }
+    else c.classList.add("no-photo");
+    var body = el("div", "ib");
+    var h = el("h3"); var v = vegMark(i); if (v) h.appendChild(v); h.appendChild(document.createTextNode(i.name)); body.appendChild(h);
+    if (i.tags.length) { var t = el("div", "tags"); i.tags.forEach(function (x) { t.appendChild(el("span", "t t-" + x, TAGS[x] || x)); }); body.appendChild(t); }
+    if (i.desc) body.appendChild(el("p", "desc", i.desc));
+    var row = el("div", "ifoot"); row.appendChild(priceEl(i)); row.appendChild(stepper(i)); body.appendChild(row);
+    c.appendChild(body); return c;
+  }
+  function renderMenu() {
+    var box = $("sections"); box.innerHTML = "";
+    var groups = cfg.cats.map(function (c) { return {id: c.id, name: c.name, items: []}; });
+    var other = {id: "other", name: "More", items: []}, map = {};
+    groups.forEach(function (g) { map[g.id] = g; });
+    var ql = q.toLowerCase(), shown = 0;
+    cfg.items.forEach(function (i) {
+      if (ql && (i.name + " " + i.desc).toLowerCase().indexOf(ql) < 0) return;
+      (map[i.cat] || other).items.push(i); shown++;
+    });
+    if (other.items.length) groups.push(other);
+    var chips = $("cb-chips"); chips.innerHTML = "";
+    groups.forEach(function (g) {
+      if (!g.items.length) return;
+      var s = el("section", "cat"); s.id = "c-" + g.id;
+      var h = el("h2", "", g.name); h.appendChild(el("span", "count", String(g.items.length))); s.appendChild(h);
+      var grid = el("div", "grid"); g.items.forEach(function (i) { grid.appendChild(card(i)); }); s.appendChild(grid);
+      box.appendChild(s);
+      var ch = el("a", "chip", g.name); ch.href = "#c-" + g.id; chips.appendChild(ch);
+    });
+    $("empty").hidden = shown > 0 || !cfg.items.length;
+    if (!cfg.items.length) box.appendChild(el("p", "empty", "The menu will be here soon."));
+    spy();
+  }
+  function change(id, d) {
+    var n = (cart[id] || 0) + d;
+    if (n <= 0) delete cart[id]; else cart[id] = Math.min(50, n);
+    save(); refreshItem(id); renderBar();
+    if (!$("order-sheet").hidden) renderOrder();
+    if (!$("item-sheet").hidden) openItem(id);
+  }
+  function refreshItem(id) {
+    var c = $("i" + id); if (!c) return;
+    var old = c.querySelector(".add"); old.parentNode.replaceChild(stepper(byId[id]), old);
+  }
+  function totals() { var n = 0, t = 0; Object.keys(cart).forEach(function (k) { n += cart[k]; t += cart[k] * byId[k].price; }); return {n: n, t: t}; }
+  function renderBar() {
+    var t = totals(), bar = $("cartbar");
+    bar.hidden = !cfg.online || !t.n;
+    $("cart-count").textContent = t.n + (t.n === 1 ? " item" : " items"); $("cart-total").textContent = rs(t.t);
+    document.body.classList.toggle("has-cart", !bar.hidden);
+  }
+
+  // category chip follows the scroll
+  var spyT;
+  function spy() {
+    clearTimeout(spyT);
+    spyT = setTimeout(function () {
+      var secs = document.querySelectorAll("section.cat"), cur = null, top = $("catbar").getBoundingClientRect().bottom + 20;
+      secs.forEach(function (s) { if (s.getBoundingClientRect().top <= top) cur = s.id; });
+      document.querySelectorAll(".cb-chips .chip").forEach(function (c) {
+        var on = c.getAttribute("href") === "#" + cur; c.classList.toggle("on", on);
+        if (on) { var bar = $("cb-chips"); bar.scrollTo({left: c.offsetLeft - 60, behavior: "smooth"}); }
+      });
+    }, 60);
+  }
+  window.addEventListener("scroll", spy, {passive: true});
+
+  // ---- item detail
+  function openItem(id) {
+    var i = byId[id]; if (!i) return;
+    var box = $("item-detail"); box.innerHTML = "";
+    if (i.photo) { var im = el("img", "detail-img"); im.src = i.photo; im.alt = i.name; box.appendChild(im); }
+    var h = el("h2"); var v = vegMark(i); if (v) h.appendChild(v); h.appendChild(document.createTextNode(i.name)); box.appendChild(h);
+    if (i.desc) box.appendChild(el("p", "desc full", i.desc));
+    var row = el("div", "ifoot"); row.appendChild(priceEl(i)); row.appendChild(stepper(i)); box.appendChild(row);
+    $("item-sheet").hidden = false; document.body.classList.add("noscroll");
+  }
+
+  // ---- order
+  var otype = null;
+  function renderOrder() {
+    var box = $("order-lines"); box.innerHTML = "";
+    Object.keys(cart).forEach(function (k) {
+      var i = byId[k], r = el("div", "ol");
+      r.appendChild(el("span", "ol-name", i.name));
+      var st = stepper(i); st.classList.add("small"); r.appendChild(st);
+      r.appendChild(el("b", "", rs(i.price * cart[k]))); box.appendChild(r);
+    });
+    $("order-total").textContent = rs(totals().t);
+    if (!totals().n) closeSheets();
+  }
+  function setType(t) {
+    otype = t;
+    document.querySelectorAll("#otype button").forEach(function (b) { b.classList.toggle("on", b.dataset.t === t); });
+    $("table-field").hidden = t !== "dine_in"; $("addr-field").hidden = t !== "delivery";
+  }
+  function buildTypes() {
+    var seg = $("otype"); seg.innerHTML = "";
+    var keys = Object.keys(cfg.types);
+    keys.forEach(function (k) { var b = el("button", "", cfg.types[k]); b.type = "button"; b.dataset.t = k; b.onclick = function () { setType(k); }; seg.appendChild(b); });
+    seg.hidden = keys.length < 2;
+    var sel = $("table-sel"); sel.innerHTML = "";
+    var o = el("option", "", "Choose your table"); o.value = ""; sel.appendChild(o);
+    cfg.tables.forEach(function (t) { var op = el("option", "", t.name); op.value = t.id; if (cfg.table && cfg.table.id === t.id) op.selected = true; sel.appendChild(op); });
+    setType(cfg.table && cfg.types.dine_in ? "dine_in" : (keys.indexOf("takeaway") >= 0 ? "takeaway" : keys[0]));
+    try { var me = JSON.parse(localStorage.getItem("me") || "{}"); var f = $("order-form"); if (me.name) f.name.value = me.name; if (me.phone) f.phone.value = me.phone; } catch (e) {}
+  }
+  function closeSheets() { document.querySelectorAll(".sheet-back").forEach(function (s) { s.hidden = true; }); document.body.classList.remove("noscroll"); }
+  document.querySelectorAll(".sheet-back").forEach(function (s) { s.addEventListener("click", function (e) { if (e.target === s || e.target.hasAttribute("data-close")) closeSheets(); }); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSheets(); });
+  $("cartbar").onclick = function () { renderOrder(); $("order-sheet").hidden = false; document.body.classList.add("noscroll"); };
+  $("order-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = this, err = $("form-err"), btn = $("place");
+    function fail(t) { err.hidden = false; err.textContent = t; }
+    err.hidden = true;
+    if (cfg.preview) { fail("This is a preview. Customers can place orders from the live menu."); return; }
+    if (!f.name.value.trim()) return fail("Please enter your name.");
+    var ph = f.phone.value.replace(/\D/g, ""); if (ph.length === 12 && ph.indexOf("91") === 0) ph = ph.slice(2);
+    if (ph.length !== 10) return fail("Please enter a 10-digit WhatsApp number.");
+    if (otype === "dine_in" && !$("table-sel").value) return fail("Please choose your table.");
+    if (otype === "delivery" && f.address.value.trim().length < 8) return fail("Please enter the delivery address.");
+    var payload = {type: otype, table: $("table-sel").value, name: f.name.value, phone: ph, address: f.address.value, note: f.note.value,
+                   birthday: f.birthday ? f.birthday.value : "", ref: f.ref ? f.ref.value : "", website: f.website.value,
+                   items: Object.keys(cart).map(function (k) { return {item_id: +k, qty: cart[k]}; })};
+    var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payload", JSON.stringify(payload));
+    btn.disabled = true; btn.textContent = "Sending…";
+    fetch(cfg.order_url, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) { btn.disabled = false; btn.textContent = "Place order"; return fail(d.error || "Could not place the order. Please try again."); }
+      try { localStorage.setItem("me", JSON.stringify({name: f.name.value, phone: ph})); localStorage.removeItem(KEY); } catch (e2) {}
+      window.location.href = d.url;
+    }).catch(function () { btn.disabled = false; btn.textContent = "Place order"; fail("No internet connection. Please try again."); });
+  });
+
+  // ---- search
+  $("cb-search").onclick = function () { var s = $("searchbox"); s.hidden = !s.hidden; if (!s.hidden) $("q").focus(); else { $("q").value = ""; q = ""; renderMenu(); } };
+  $("q").addEventListener("input", function () { q = this.value; renderMenu(); });
+
+  // ---- live preview from the Menu Design page (same origin only)
+  if (cfg.preview) window.addEventListener("message", function (e) {
+    if (e.origin !== window.location.origin || !e.data || !e.data.theme) return;
+    var t = e.data.theme, ok = /^#[0-9a-fA-F]{6}$/;
+    if ([t.primary, t.secondary, t.bg, t.text].every(function (c) { return ok.test(c); }))
+      document.getElementById("theme-vars").textContent = ":root { --p: " + t.primary + "; --s: " + t.secondary + "; --bg: " + t.bg + "; --tx: " + t.text + "; }";
+    document.body.className = document.body.className.replace(/\b(lay|font|shape)-\w+/g, "").trim() + " lay-" + t.layout + " font-" + t.font + " shape-" + t.shape;
+  });
+
+  renderOffers(); renderMenu(); renderBar(); if (cfg.online) buildTypes();
+})();
+</script>
+</body>
+</html>

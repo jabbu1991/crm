@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order #{{ o.order_no }} · {{ st.name or org.name }}</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Lora:wght@500;700&family=Baloo+Chettan+2:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='menu.css') }}">
+<style>:root { --p: {{ colors.primary }}; --s: {{ colors.secondary }}; --bg: {{ colors.bg }}; --tx: {{ colors.text }}; }</style>
+</head>
+<body class="font-{{ font }} shape-{{ shape }} status-page">
+<main class="status">
+  <a class="back" href="{{ url_for('cafe.public_menu', code=org.code.lower()) }}">← {{ st.name or org.name }}</a>
+  <h1>Order #{{ o.order_no }}</h1>
+  <p class="muted">{{ ORDER_TYPES[o.order_type] }}{% if table %} · {{ table.name }}{% endif %} · {{ o.cust_name }}</p>
+  <ol class="steps" id="steps" data-status="{{ data.status }}">
+    <li data-s="pending"><b>Sent</b><span>Waiting for the cafe to confirm</span></li>
+    <li data-s="confirmed"><b>Confirmed</b><span>Your order is being prepared</span></li>
+    <li data-s="ready"><b>Ready</b><span>{{ 'Your food is on its way' if o.order_type == 'delivery' else 'Please collect your order' if o.order_type == 'takeaway' else 'Coming to your table' }}</span></li>
+  </ol>
+  <div class="rejected" id="rejected" {{ 'hidden' if data.status != 'rejected' }}>Sorry, the cafe could not accept this order. <span id="reason">{{ data.reason }}</span></div>
+  <div class="done" id="done" {{ 'hidden' if data.status != 'done' }}>Thank you! Your bill is done. 🙏</div>
+  <section class="order-lines">
+    {% for i in items if i.qty > 0 %}<div class="ol"><span class="ol-name">{{ i.qty }} × {{ i.name }}</span><b>{{ (i.price * i.qty)|rs }}</b></div>{% endfor %}
+    <div class="order-total"><span>Total</span><b>{% set ns = namespace(t=0) %}{% for i in items %}{% set ns.t = ns.t + i.price * i.qty %}{% endfor %}{{ ns.t|rs }}</b></div>
+  </section>
+  <p class="fine">Pay at the counter. Keep this page open; it updates by itself.</p>
+  {% if wa %}<a class="place" href="https://wa.me/{{ wa }}?text={{ ('Hi, about my order #' ~ o.order_no)|urlencode }}" target="_blank" rel="noopener">Message the cafe on WhatsApp</a>{% endif %}
+</main>
+<script>
+(function () {
+  var order = ["pending", "confirmed", "ready", "done"], steps = document.getElementById("steps");
+  function paint(s) {
+    steps.dataset.status = s; var n = order.indexOf(s);
+    steps.querySelectorAll("li").forEach(function (li) { var k = order.indexOf(li.dataset.s); li.className = n > k ? "past" : (n === k ? "now" : ""); });
+    document.getElementById("rejected").hidden = s !== "rejected"; document.getElementById("done").hidden = s !== "done";
+    steps.hidden = s === "rejected";
+  }
+  paint(steps.dataset.status);
+  var t = setInterval(function () {
+    fetch("{{ url_for('cafe.public_order_status_json', code=org.code.lower(), tok=o.token) }}").then(function (r) { return r.json(); }).then(function (d) {
+      paint(d.status); document.getElementById("reason").textContent = d.reason || "";
+      if (d.status === "done" || d.status === "rejected") clearInterval(t);
+    }).catch(function () {});
+  }, 10000);
+})();
+</script>
+</body>
+</html>

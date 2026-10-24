@@ -1,5 +1,5 @@
 REAL VIEW CRM + REAL VIEW CREATIVE STUDIO WEBSITE — PROJECT CONTEXT
-(Paste this into a new Claude chat so it knows the whole project. Last updated: 19 Oct 2026.)
+(Paste this into a new Claude chat so it knows the whole project. Last updated: 24 Oct 2026.)
 
 ======================================================================
 0. HOW TO WORK WITH ME (the owner)
@@ -41,10 +41,10 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py (33 pytest tests, all passing),
+  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py (44 pytest tests, all passing); cafe*.py (cafe module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 7 (v7 = org_list_settings). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 8 (v7 = org_list_settings, v8 = cafe module). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -140,6 +140,43 @@ Digital Catalogue (built 16 Oct 2026)
   history shows "📒 Customer opened the catalogue / viewed <product>" and the dashboard shows
   "🔥 Opened the catalogue in the last 24 hours" (good time to call).
 - Super Admin can switch the catalogue off per client (plan).
+
+======================================================================
+4B. CAFE MODULE (built 24 Oct 2026, same CRM, same server)
+======================================================================
+- Super Admin sets each client organization's "Software type": CRM / Cafe / CRM + Cafe
+  (organizations.app_type). Existing organizations are CRM. "CRM + Cafe" shows a CRM ⇄ Cafe switch in the top bar.
+  Cafe-only organizations never see CRM pages (they are redirected to the cafe home).
+- Code: cafe.py (helpers, permissions, settings, points engine, bill maths), cafe_admin.py (settings, menu design,
+  QR, menu items, banners, tables), cafe_pos.py (billing screen, orders, KOT, bills, public menu, online order),
+  cafe_people.py (customers, points, templates, expenses, analysis, CSV), cafe_charts.py (SVG charts),
+  templates/cafe/*, static/cafe.css, static/menu.css. Amounts are stored in paise (integers). QR codes: segno.
+- Staff permissions (tick boxes, role presets Cashier / Manager / Custom): bill, discount, cancel bill, old bills,
+  online orders, menu, expense add, expense view, reports, customers, redeem points, adjust points, marketing,
+  settings, staff manage. Admins have everything. Unticked menus are hidden.
+- Settings: name, tagline, logo, cover, phone, WhatsApp, address, map, FSSAI; paper 58/80 mm/A4; bill prefix + footer;
+  KOT on/off (+ KOT with takeaway bill); GST on/off, GSTIN, inclusive/exclusive, item-wise GST %;
+  digital menu on/off; online order on/off + Dine-in/Takeaway/Delivery; loyalty, refer & earn, birthday switches.
+- Menu: categories, items (photo auto-cropped square, under 50 KB), price, optional offer price with dates
+  (only shown if given; "% OFF"; billing uses it), Veg/Non-veg/Egg, tags (Bestseller, New...), ON/OFF.
+  Offer banners (photo 1200x500, under 50 KB, linked item, dates). No banner -> offer items become banners.
+- Digital menu: crm.realviewcreativestudio.in/m/<code>; QR poster + PNG; per-table QR (?t=<table id>).
+  Menu Design page: 6 ready themes, own colours, "pick colours from logo", Grid/List, font, button shape, live preview.
+- Online order: cart -> type, name, WhatsApp, address/table, note -> Pending (sound + badge for staff) ->
+  Confirm (KOT) / Reject (reason) -> Ready -> Billed. Customer status page updates itself. Pay at counter.
+- Billing screen (/cafe/pos): Dine-in (table) / Takeaway / Delivery, customer lookup by WhatsApp with points,
+  discount ₹/%, points redeem (Max button), Cash/UPI/Card, KOT / Hold / Bill & Print. Print page: Print,
+  Save (PDF via print dialog), WhatsApp bill (text + public bill link /b/<token>), 58/80/A4.
+  Bills list with filters + totals + CSV; cancel needs a reason (points reversed).
+- Customers: by WhatsApp number; visits, spent, points history; filters (30 days not visited, top, points,
+  birthday week, points expiring in 7 days, new); WhatsApp marketing templates with {name} {points} {menu_link}
+  {referral_link} {cafe_name} (click-to-chat per customer; bulk auto-send needs WhatsApp API later).
+- Points: % of bill or points per ₹X, 1 point = ₹value, min bill, min redeem, max % of bill, expiry days.
+  Refer & Earn: points to both after the new customer's first bill. Manual +/- with reason.
+- Expenses / other income with categories and bill photo; Analysis: income, expense, profit, daily line chart,
+  expense category donut, Cash/UPI/Card, 6-month comparison, top items, staff-wise; CSV exports.
+- Not built yet (ideas): online payment, WhatsApp API auto messages, inventory/stock, offline mode.
+- Demo: demo.bat creates "Chai Corner" (cafe_admin / cafe_cashier, password demo1234), menu at /m/chai.
 
 ======================================================================
 5. WEBSITE (website/ folder)

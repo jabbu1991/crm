@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Bills{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Bills</h1>
+  <div class="actions"><a class="btn btn-sm" href="{{ url_for('cafe.export', name='bills', p='custom', **{'from': d_from, 'to': d_to}) }}">⬇️ CSV</a></div>
+</div>
+<form class="card filters" method="get">
+  <label class="inline-label">From <input type="date" name="from" value="{{ d_from }}"></label>
+  <label class="inline-label">To <input type="date" name="to" value="{{ d_to }}"></label>
+  <select name="mode"><option value="">എല്ലാ payments</option>{% for m in PAYMENT_MODES %}<option {{ 'selected' if mode == m }}>{{ m }}</option>{% endfor %}</select>
+  <select name="status"><option value="">Paid + Cancelled</option><option value="paid" {{ 'selected' if status == 'paid' }}>Paid</option><option value="cancelled" {{ 'selected' if status == 'cancelled' }}>Cancelled</option></select>
+  <input name="q" value="{{ q }}" placeholder="Bill no / ഫോൺ / പേര്" class="grow">
+  <button class="btn btn-primary">കാണിക്കുക</button>
+  <a class="chip" href="{{ url_for('cafe.bills') }}">ഇന്ന്</a>
+</form>
+<div class="stats compact-stats">
+  <div class="stat stat-good"><b>{{ sums.total|rs0 }}</b><span>ആകെ ({{ sums.n }} bills)</span></div>
+  <div class="stat stat-muted"><b>{{ sums.cash|rs0 }}</b><span>💵 Cash</span></div>
+  <div class="stat stat-muted"><b>{{ sums.upi|rs0 }}</b><span>📲 UPI</span></div>
+  <div class="stat stat-muted"><b>{{ sums.card|rs0 }}</b><span>💳 Card</span></div>
+  {% if sums.discount %}<div class="stat stat-warn"><b>{{ sums.discount|rs0 }}</b><span>Discount</span></div>{% endif %}
+  {% if st.gst_on or sums.tax %}<div class="stat"><b>{{ sums.tax|rs0 }}</b><span>GST</span></div>{% endif %}
+</div>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Bill</th><th>സമയം</th><th>Type</th><th>Customer</th><th>Items</th><th class="num">Total</th><th>Payment</th><th>By</th><th></th></tr></thead>
+  <tbody>
+  {% for b in rows %}
+  <tr class="{{ 'inactive' if b.status == 'cancelled' }}">
+    <td><a href="{{ url_for('cafe.bill_view', bid=b.id) }}"><b>{{ st.bill_prefix }}{{ b.bill_no }}</b></a>{% if b.status == 'cancelled' %} <span class="badge b-lost">Cancelled</span>{% endif %}</td>
+    <td class="nowrap small">{{ b.bill_date[8:10] }}/{{ b.bill_date[5:7] }} {{ b.created_at[11:16] }}</td>
+    <td class="small">{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</td>
+    <td>{{ b.cust_name or '' }}{% if b.cust_phone %}<div class="small muted">{{ b.cust_phone }}</div>{% endif %}</td>
+    <td class="wrap small">{{ b.summary }}</td>
+    <td class="num"><b>{{ b.total|rs }}</b></td><td>{{ b.payment_mode }}</td><td class="small">{{ b.created_name or '' }}</td>
+    <td class="nowrap"><a class="btn btn-sm" href="{{ url_for('cafe.bill_print', bid=b.id) }}">🖨</a></td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="muted center">ഈ ദിവസങ്ങളിൽ bills ഇല്ല.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% if pages > 1 %}<div class="pager"><span class="muted">Page {{ page }} / {{ pages }} · {{ total_rows }} bills</span>
+  {% if page > 1 %}<a class="btn btn-sm" href="{{ url_for('cafe.bills', page=page - 1, **params) }}">‹ Prev</a>{% endif %}
+  {% if page < pages %}<a class="btn btn-sm" href="{{ url_for('cafe.bills', page=page + 1, **params) }}">Next ›</a>{% endif %}</div>{% endif %}
+{% endblock %}
