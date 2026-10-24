@@ -5,7 +5,7 @@
   <div class="actions">
     {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.pos', type='takeaway') }}">🥡 Takeaway bill</a>
     <a class="btn" href="{{ url_for('cafe.pos', type='delivery') }}">🛵 Delivery</a>{% endif %}
-    {% if tables %}<a class="btn" href="{{ url_for('cafe.qr_poster', tables=1) }}">🖨 എല്ലാ tables-ന്റെയും QR</a>{% endif %}
+    {% if tables %}<a class="btn" href="{{ url_for('cafe.qr_poster', tables=1) }}">🖨 QR codes for all tables</a>{% endif %}
   </div>
 </div>
 <div class="table-grid">
@@ -13,31 +13,31 @@
   <a class="tbl {{ 'busy' if t.order_id else 'free' }}" href="{{ url_for('cafe.pos', order=t.order_id) if t.order_id else url_for('cafe.pos', table=t.id) }}">
     <b>{{ t.name }}</b>
     {% if t.order_id %}<span class="tbl-amt">{{ t.amount|rs }}</span><span class="small">#{{ t.order_no }} · {{ t.since[11:16] }}{% if t.cust_name %} · {{ t.cust_name }}{% endif %}</span>
-    {% else %}<span class="small">ഒഴിവ്{% if t.seats %} · {{ t.seats }} പേർ{% endif %}</span>{% endif %}
+    {% else %}<span class="small">Free{% if t.seats %} · {{ t.seats }} seats{% endif %}</span>{% endif %}
   </a>
 {% else %}
-  <div class="card empty">ഇതുവരെ tables ഇല്ല. താഴെ ചേർക്കുക. Takeaway / Delivery-ക്ക് tables വേണ്ട.</div>
+  <div class="card empty">No tables yet. Add them below. Takeaway and delivery don't need tables.</div>
 {% endfor %}
 </div>
 {% if can('menu_edit') and not viewing %}
 <div class="grid-2">
   <section class="card">
-    <h2>Table ചേർക്കുക</h2>
+    <h2>Add tables</h2>
     <form method="post" action="{{ url_for('cafe.table_save') }}" class="inline-form">{{ csrf() }}
-      <input name="name" placeholder="പേര് / നമ്പർ (ഉദാ: T1, Family 1)" required maxlength="30"><input type="number" name="seats" min="1" max="50" placeholder="ഇരിപ്പിടം" style="max-width:110px">
-      <button class="btn btn-primary btn-sm">+ ചേർക്കുക</button></form>
+      <input name="name" placeholder="Name / number (e.g. T1, Family 1)" required maxlength="30"><input type="number" name="seats" min="1" max="50" placeholder="Seats" style="max-width:110px">
+      <button class="btn btn-primary btn-sm">+ Add</button></form>
     <form method="post" action="{{ url_for('cafe.table_save') }}" class="inline-form">{{ csrf() }}<input type="hidden" name="action" value="bulk">
-      <input type="number" name="count" min="1" max="100" placeholder="എത്ര tables" required style="max-width:140px"><input type="number" name="seats" min="1" max="50" value="4" style="max-width:90px">
-      <button class="btn btn-sm">ഒരുമിച്ച് ചേർക്കുക (T1, T2…)</button></form>
+      <input type="number" name="count" min="1" max="100" placeholder="How many" required style="max-width:140px"><input type="number" name="seats" min="1" max="50" value="4" style="max-width:90px">
+      <button class="btn btn-sm">Add together (T1, T2…)</button></form>
   </section>
   <section class="card">
-    <h2>Tables മാറ്റുക</h2>
+    <h2>Edit tables</h2>
     <table class="table compact">
       {% for t in tables %}<tr><td>
         <form method="post" action="{{ url_for('cafe.table_save') }}" class="inline-form">{{ csrf() }}<input type="hidden" name="id" value="{{ t.id }}">
           <input name="name" value="{{ t.name }}" required maxlength="30"><input type="number" name="seats" min="1" max="50" value="{{ t.seats or '' }}" style="max-width:80px"><button class="btn btn-sm">Save</button>
-          <a class="btn btn-sm" href="{{ url_for('cafe.qr_poster', t=t.id) }}" title="ഈ table-ന്റെ QR (scan ചെയ്താൽ table നമ്പർ തനിയെ വരും)">QR</a></form></td>
-        <td><form method="post" action="{{ url_for('cafe.table_delete', tid=t.id) }}" onsubmit="return confirm('{{ t.name }} മാറ്റട്ടെ?')">{{ csrf() }}<button class="del-btn" title="Delete">🗑</button></form></td></tr>{% endfor %}
+          <a class="btn btn-sm" href="{{ url_for('cafe.qr_poster', t=t.id) }}" title="QR for this table (scanning it fills in the table)">QR</a></form></td>
+        <td><form method="post" action="{{ url_for('cafe.table_delete', tid=t.id) }}" onsubmit="return confirm('Delete {{ t.name }}?')">{{ csrf() }}<button class="del-btn" title="Delete">🗑</button></form></td></tr>{% endfor %}
     </table>
   </section>
 </div>

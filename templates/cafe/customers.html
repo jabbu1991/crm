@@ -6,10 +6,10 @@
     {% if not viewing and (can('bill_create') or can('marketing')) %}
     <details class="add-cust"><summary class="btn btn-primary">+ Customer</summary>
       <form method="post" action="{{ url_for('cafe.customer_new') }}" class="card form">{{ csrf() }}
-        <label>പേര് *<input name="name" required maxlength="80"></label>
-        <label>WhatsApp നമ്പർ *<input name="whatsapp" required inputmode="tel" maxlength="15"></label>
-        {% if st.birthday_on %}<label>ജന്മദിനം<input type="date" name="birthday"></label>{% endif %}
-        {% if st.referral.on %}<label>Refer ചെയ്ത ആളുടെ code / നമ്പർ<input name="ref" maxlength="20"></label>{% endif %}
+        <label>Name *<input name="name" required maxlength="80"></label>
+        <label>WhatsApp number *<input name="whatsapp" required inputmode="tel" maxlength="15"></label>
+        {% if st.birthday_on %}<label>Birthday<input type="date" name="birthday"></label>{% endif %}
+        {% if st.referral.on %}<label>Referred by (code or number)<input name="ref" maxlength="20"></label>{% endif %}
         <button class="btn btn-primary">Save</button>
       </form>
     </details>{% endif %}
@@ -18,36 +18,36 @@
 <div class="quicksort">
   {% for k, v in FILTERS.items() %}{% if (k != 'birthday' or st.birthday_on) and (k not in ('points', 'expiring') or st.loyalty.on) %}
   <a class="chip {{ 'on' if f == k }}" href="{{ url_for('cafe.customers', f=k, tpl=tpl.id if tpl else None) }}">{{ v }}</a>{% endif %}{% endfor %}
-  <form method="get" class="inline-form"><input type="hidden" name="f" value="{{ f }}">{% if tpl %}<input type="hidden" name="tpl" value="{{ tpl.id }}">{% endif %}<input name="q" value="{{ q }}" placeholder="🔍 പേര് / നമ്പർ / code"></form>
+  <form method="get" class="inline-form"><input type="hidden" name="f" value="{{ f }}">{% if tpl %}<input type="hidden" name="tpl" value="{{ tpl.id }}">{% endif %}<input name="q" value="{{ q }}" placeholder="🔍 Name / number / code"></form>
 </div>
 {% if templates %}
 <div class="card wa-pick">
   <form method="get" class="inline-form">
     <input type="hidden" name="f" value="{{ f }}"><input type="hidden" name="q" value="{{ q }}">
     <b>🟢 WhatsApp marketing:</b>
-    <select name="tpl" onchange="this.form.submit()"><option value="">— Template തിരഞ്ഞെടുക്കുക —</option>
+    <select name="tpl" onchange="this.form.submit()"><option value="">— Choose a template —</option>
       {% for t in templates %}<option value="{{ t.id }}" {{ 'selected' if tpl and tpl.id == t.id }}>{{ t.title }}</option>{% endfor %}</select>
-    <a class="small" href="{{ url_for('cafe.templates') }}">Templates മാറ്റുക</a>
+    <a class="small" href="{{ url_for('cafe.templates') }}">Edit templates</a>
   </form>
-  {% if tpl %}<p class="muted small">ഓരോ customer-ന്റെയും "Send" അമർത്തിയാൽ അവരുടെ പേര് ചേർത്ത message-ഓടെ WhatsApp തുറക്കും. Send ചെയ്തവ ചാരനിറമാകും.
-    ഒറ്റ click-ൽ എല്ലാവർക്കും തനിയെ അയക്കാൻ WhatsApp API വേണം (പിന്നീട് premium).</p>{% endif %}
+  {% if tpl %}<p class="muted small">Press "Send" on each customer: WhatsApp opens with the message and their name filled in. Sent rows turn grey.
+    Sending to everyone automatically in one click needs the WhatsApp API (a premium option later).</p>{% endif %}
 </div>
 {% endif %}
 <div class="card table-wrap">
 <table class="table">
-  <thead><tr><th>Customer</th><th>WhatsApp</th>{% if st.loyalty.on %}<th class="num">Points</th>{% endif %}<th class="num">Visits</th><th class="num">ആകെ</th><th>അവസാനം വന്നത്</th>{% if st.birthday_on %}<th>🎂</th>{% endif %}{% if tpl %}<th>Message</th>{% endif %}</tr></thead>
+  <thead><tr><th>Customer</th><th>WhatsApp</th>{% if st.loyalty.on %}<th class="num">Points</th>{% endif %}<th class="num">Visits</th><th class="num">Spent</th><th>Last visit</th>{% if st.birthday_on %}<th>🎂</th>{% endif %}{% if tpl %}<th>Message</th>{% endif %}</tr></thead>
   <tbody>
   {% for c in rows %}
   <tr id="c{{ c.id }}">
     <td><a href="{{ url_for('cafe.customer_view', cid=c.id) }}"><b>{{ c.name }}</b></a></td>
     <td class="nowrap">{{ c.whatsapp }}</td>
-    {% if st.loyalty.on %}<td class="num"><b>{{ c.points }}</b>{% if c.next_expiry %}<div class="small muted">{{ c.next_expiry }} തീരും</div>{% endif %}</td>{% endif %}
+    {% if st.loyalty.on %}<td class="num"><b>{{ c.points }}</b>{% if c.next_expiry %}<div class="small muted">{{ c.next_expiry }} expiry</div>{% endif %}</td>{% endif %}
     <td class="num">{{ c.visits }}</td><td class="num">{{ c.total_spent|rs0 }}</td>
     <td class="small">{{ c.last_visit or '—' }}</td>
     {% if st.birthday_on %}<td class="small">{{ (c.birthday[3:] ~ '/' ~ c.birthday[:2]) if c.birthday else '' }}</td>{% endif %}
     {% if tpl %}<td><a class="btn btn-sm btn-wa wa-send" target="_blank" rel="noopener" href="https://wa.me/{{ c.whatsapp|wa_number }}?text={{ messages[c.id]|urlencode }}" title="{{ messages[c.id] }}">🟢 Send</a></td>{% endif %}
   </tr>
-  {% else %}<tr><td colspan="9" class="muted center">ആരുമില്ല. Billing-ൽ WhatsApp നമ്പർ കൊടുക്കുമ്പോൾ customers തനിയെ ഇവിടെ വരും.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="9" class="muted center">No customers. Customers appear here automatically when a WhatsApp number is entered in billing.</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>

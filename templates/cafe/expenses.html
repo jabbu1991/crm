@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
 {% block title %}Expenses{% endblock %}
 {% block content %}
-<div class="page-head"><h1>ചെലവ് &amp; മറ്റ് വരുമാനം</h1>
+<div class="page-head"><h1>Expenses &amp; other income</h1>
   {% if can('expense_view') %}<div class="actions"><a class="btn btn-sm" href="{{ url_for('cafe.export', name='expenses', p='custom', **{'from': d_from, 'to': d_to}) }}">⬇️ CSV</a>
   {% if can('reports_view') %}<a class="btn btn-sm" href="{{ url_for('cafe.analysis') }}">📊 Analysis</a>{% endif %}</div>{% endif %}
 </div>
@@ -9,14 +9,14 @@
 {% if can('expense_add') and not viewing %}
 <form method="post" action="{{ url_for('cafe.expense_save') }}" enctype="multipart/form-data" class="card form" id="exp-form">
   {{ csrf() }}{% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
-  <h2>{{ 'Edit entry' if edit else 'പുതിയ entry' }}</h2>
+  <h2>{{ 'Edit entry' if edit else 'New entry' }}</h2>
   <div class="seg" id="kind-seg">
-    <label><input type="radio" name="kind" value="expense" {{ 'checked' if not edit or edit.kind == 'expense' }}> 💸 ചെലവ്</label>
-    <label><input type="radio" name="kind" value="income" {{ 'checked' if edit and edit.kind == 'income' }}> 💰 മറ്റ് വരുമാനം</label>
+    <label><input type="radio" name="kind" value="expense" {{ 'checked' if not edit or edit.kind == 'expense' }}> 💸 Expense</label>
+    <label><input type="radio" name="kind" value="income" {{ 'checked' if edit and edit.kind == 'income' }}> 💰 Other income</label>
   </div>
   <div class="row-2">
-    <label>തുക (₹) *<input name="amount" required inputmode="decimal" value="{{ edit.amount|pstr if edit else '' }}" autofocus></label>
-    <label>തീയതി<input type="date" name="entry_date" value="{{ edit.entry_date if edit else today_ }}" max="{{ today_ }}"></label>
+    <label>Amount (₹) *<input name="amount" required inputmode="decimal" value="{{ edit.amount|pstr if edit else '' }}" autofocus></label>
+    <label>Date<input type="date" name="entry_date" value="{{ edit.entry_date if edit else today_ }}" max="{{ today_ }}"></label>
   </div>
   <label>Category *
     <select name="category" required id="cat-sel">
@@ -25,9 +25,9 @@
   </label>
   <div class="row-2">
     <label>Payment<select name="payment_mode">{% for m in PAYMENT_MODES %}<option {{ 'selected' if edit and edit.payment_mode == m }}>{{ m }}</option>{% endfor %}</select></label>
-    <label>Bill ഫോട്ടോ <small>(വേണമെങ്കിൽ)</small><input type="file" name="photo" accept="image/*" capture="environment"></label>
+    <label>Bill photo <small>(optional)</small><input type="file" name="photo" accept="image/*" capture="environment"></label>
   </div>
-  <label>കുറിപ്പ്<input name="note" maxlength="300" value="{{ edit.note if edit and edit.note else '' }}" placeholder="e.g. 10 kg chicken, Ravi"></label>
+  <label>Note<input name="note" maxlength="300" value="{{ edit.note if edit and edit.note else '' }}" placeholder="e.g. 10 kg chicken, Ravi"></label>
   <div class="actions"><button class="btn btn-primary btn-big">💾 Save</button>{% if edit %}<a class="btn" href="{{ url_for('cafe.expenses') }}">Cancel</a>{% endif %}</div>
 </form>
 {% endif %}
@@ -36,14 +36,14 @@
   <form method="get" class="filters">
     <label class="inline-label">From <input type="date" name="from" value="{{ d_from }}"></label>
     <label class="inline-label">To <input type="date" name="to" value="{{ d_to }}"></label>
-    <select name="kind"><option value="all">ചെലവ് + വരുമാനം</option><option value="expense" {{ 'selected' if kind == 'expense' }}>ചെലവ് മാത്രം</option><option value="income" {{ 'selected' if kind == 'income' }}>വരുമാനം മാത്രം</option></select>
-    <select name="cat"><option value="">എല്ലാ categories</option>{% for c in cats %}<option {{ 'selected' if cat == c.name }}>{{ c.name }}</option>{% endfor %}</select>
-    <button class="btn btn-primary btn-sm">കാണിക്കുക</button>
+    <select name="kind"><option value="all">Expenses + income</option><option value="expense" {{ 'selected' if kind == 'expense' }}>Expenses only</option><option value="income" {{ 'selected' if kind == 'income' }}>Income only</option></select>
+    <select name="cat"><option value="">All categories</option>{% for c in cats %}<option {{ 'selected' if cat == c.name }}>{{ c.name }}</option>{% endfor %}</select>
+    <button class="btn btn-primary btn-sm">Show</button>
   </form>
-  {% else %}<h2>താങ്കൾ ചേർത്തവ (7 ദിവസം)</h2>{% endif %}
+  {% else %}<h2>Your entries (last 7 days)</h2>{% endif %}
   <div class="stats compact-stats">
-    <div class="stat stat-hot"><b>{{ (sums.expense or 0)|rs0 }}</b><span>ചെലവ്</span></div>
-    {% if sums.income %}<div class="stat stat-good"><b>{{ sums.income|rs0 }}</b><span>മറ്റ് വരുമാനം</span></div>{% endif %}
+    <div class="stat stat-hot"><b>{{ (sums.expense or 0)|rs0 }}</b><span>Expenses</span></div>
+    {% if sums.income %}<div class="stat stat-good"><b>{{ sums.income|rs0 }}</b><span>Other income</span></div>{% endif %}
   </div>
   <table class="table compact">
     <tbody>
@@ -51,10 +51,10 @@
       <td class="nowrap small">{{ e.entry_date[8:10] }}/{{ e.entry_date[5:7] }}</td>
       <td><b>{{ e.category }}</b>{% if e.note %}<div class="small muted">{{ e.note }}</div>{% endif %}<div class="small muted">{{ e.payment_mode }} · {{ e.by_name or '' }}</div></td>
       <td class="num nowrap {{ 'num-neg' if e.kind == 'expense' else 'num-pos' }}">{{ '−' if e.kind == 'expense' else '+' }}{{ e.amount|rs }}</td>
-      <td class="nowrap">{% if e.photo %}<a href="{{ url_for('media', name=e.photo) }}" target="_blank" title="Bill ഫോട്ടോ">📎</a>{% endif %}
+      <td class="nowrap">{% if e.photo %}<a href="{{ url_for('media', name=e.photo) }}" target="_blank" title="Bill photo">📎</a>{% endif %}
         {% if can('expense_view') and not viewing %}<a class="edit-btn" href="{{ url_for('cafe.expenses', edit=e.id) }}">✏️</a>
-        <form method="post" action="{{ url_for('cafe.expense_delete', eid=e.id) }}" class="inline" onsubmit="return confirm('Entry മാറ്റട്ടെ?')">{{ csrf() }}<button class="del-btn">🗑</button></form>{% endif %}</td>
-    </tr>{% else %}<tr><td class="muted">ഒന്നുമില്ല.</td></tr>{% endfor %}
+        <form method="post" action="{{ url_for('cafe.expense_delete', eid=e.id) }}" class="inline" onsubmit="return confirm('Delete this entry?')">{{ csrf() }}<button class="del-btn">🗑</button></form>{% endif %}</td>
+    </tr>{% else %}<tr><td class="muted">Nothing yet.</td></tr>{% endfor %}
     </tbody>
   </table>
 </section>
@@ -62,13 +62,13 @@
 {% if can('expense_view') and not viewing %}
 <section class="card narrow" id="categories">
   <h2>Categories</h2>
-  {% for k, label in (('expense', 'ചെലവ്'), ('income', 'വരുമാനം')) %}
+  {% for k, label in (('expense', 'Expenses'), ('income', 'Income')) %}
   <p><b>{{ label }}:</b> {% for c in cats if c.kind == k %}<span class="chip">{{ c.name }}
-    <form method="post" action="{{ url_for('cafe.expense_categories') }}" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><button class="linkbtn dark" name="action" value="delete" title="മാറ്റുക">×</button></form></span> {% endfor %}</p>
+    <form method="post" action="{{ url_for('cafe.expense_categories') }}" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><button class="linkbtn dark" name="action" value="delete" title="Remove">×</button></form></span> {% endfor %}</p>
   {% endfor %}
   <form method="post" action="{{ url_for('cafe.expense_categories') }}" class="inline-form">{{ csrf() }}
-    <select name="kind" style="max-width:140px"><option value="expense">ചെലവ്</option><option value="income">വരുമാനം</option></select>
-    <input name="name" required maxlength="60" placeholder="പുതിയ category"><button class="btn btn-sm">+ ചേർക്കുക</button></form>
+    <select name="kind" style="max-width:140px"><option value="expense">Expense</option><option value="income">Income</option></select>
+    <input name="name" required maxlength="60" placeholder="New category"><button class="btn btn-sm">+ Add</button></form>
 </section>
 {% endif %}
 <script>

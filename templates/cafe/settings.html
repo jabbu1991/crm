@@ -12,27 +12,27 @@
   <section class="card" id="details">
     <h2>Cafe details</h2>
     <div class="row-2">
-      <label>Cafe-ന്റെ പേര് <small>(bill-ലും menu-വിലും)</small><input name="name" value="{{ st.name }}" placeholder="{{ g.org.name }}"></label>
-      <label>ചെറിയ വാചകം <small>(menu-വിൽ പേരിന് താഴെ)</small><input name="tagline" value="{{ st.tagline }}" maxlength="120" placeholder="e.g. Fresh juices · Shawarma · Desserts"></label>
+      <label>Cafe name <small>(on bills and the menu)</small><input name="name" value="{{ st.name }}" placeholder="{{ g.org.name }}"></label>
+      <label>Tagline <small>(under the name on the menu)</small><input name="tagline" value="{{ st.tagline }}" maxlength="120" placeholder="e.g. Fresh juices, shawarma &amp; desserts"></label>
     </div>
     <div class="row-3">
       <label>Phone<input name="phone" value="{{ st.phone }}"></label>
-      <label>WhatsApp <small>(menu-വിലെ WhatsApp ബട്ടൺ)</small><input name="whatsapp" value="{{ st.whatsapp }}"></label>
-      <label>FSSAI നമ്പർ <small>(വേണമെങ്കിൽ, bill-ൽ)</small><input name="fssai" value="{{ st.fssai }}"></label>
+      <label>WhatsApp <small>(WhatsApp button on the menu)</small><input name="whatsapp" value="{{ st.whatsapp }}"></label>
+      <label>FSSAI number <small>(optional, printed on bills)</small><input name="fssai" value="{{ st.fssai }}"></label>
     </div>
     <label>Address<textarea name="address" rows="2">{{ st.address }}</textarea></label>
-    <label>Google Map link<input name="map_url" value="{{ st.map_url }}" placeholder="https://maps.app.goo.gl/…"></label>
-    <label>About <small>(menu-വിൽ കാണിക്കും)</small><textarea name="about" rows="2" maxlength="600">{{ st.about }}</textarea></label>
+    <label>Google Maps link<input name="map_url" value="{{ st.map_url }}" placeholder="https://maps.app.goo.gl/…"></label>
+    <label>About <small>(shown on the menu)</small><textarea name="about" rows="2" maxlength="600">{{ st.about }}</textarea></label>
     <div class="row-2">
       <div>
-        <label>Logo<input type="file" name="logo" accept="image/*"><small class="muted">Square logo നല്ലത്. 50 KB-ൽ താഴെയാക്കി ചെറുതാക്കും.</small></label>
+        <label>Logo<input type="file" name="logo" accept="image/*"><small class="muted">A square logo works best. It is shrunk to under 50 KB.</small></label>
         {% if st.logo %}<div class="thumbs"><figure><img src="{{ url_for('media', name=st.logo) }}" alt="Logo"></figure></div>
-        <label class="check"><input type="checkbox" name="remove_logo" value="1"> Logo മാറ്റുക</label>{% endif %}
+        <label class="check"><input type="checkbox" name="remove_logo" value="1"> Remove logo</label>{% endif %}
       </div>
       <div>
-        <label>Cover ഫോട്ടോ <small>(menu-വിന്റെ മുകളിൽ)</small><input type="file" name="cover" accept="image/*"><small class="muted">Size: 1200 × 500 px (വീതിയുള്ളത്), 50 KB-ൽ താഴെ</small></label>
+        <label>Cover photo <small>(top of the menu)</small><input type="file" name="cover" accept="image/*"><small class="muted">Size: 1200 × 500 px (wide), under 50 KB</small></label>
         {% if st.cover %}<div class="thumbs"><figure><img class="wide" src="{{ url_for('media', name=st.cover) }}" alt="Cover"></figure></div>
-        <label class="check"><input type="checkbox" name="remove_cover" value="1"> Cover മാറ്റുക</label>{% endif %}
+        <label class="check"><input type="checkbox" name="remove_cover" value="1"> Remove cover</label>{% endif %}
       </div>
     </div>
   </section>
@@ -43,85 +43,85 @@
       <label>Paper size
         <select name="paper">{% for k, v in PAPER_SIZES.items() %}<option value="{{ k }}" {{ 'selected' if st.paper == k }}>{{ v }}</option>{% endfor %}</select>
       </label>
-      <label>Bill നമ്പറിന് മുന്നിൽ <small>(വേണമെങ്കിൽ, ഉദാ: B-)</small><input name="bill_prefix" value="{{ st.bill_prefix }}" maxlength="8"></label>
-      <label>Bill-ന്റെ താഴത്തെ വാക്കുകൾ<input name="bill_footer" value="{{ st.bill_footer }}" maxlength="200"></label>
+      <label>Bill number prefix <small>(optional, e.g. B-)</small><input name="bill_prefix" value="{{ st.bill_prefix }}" maxlength="8"></label>
+      <label>Bill footer text<input name="bill_footer" value="{{ st.bill_footer }}" maxlength="200"></label>
     </div>
-    <label class="check"><input type="checkbox" name="kot_on" value="1" {{ 'checked' if st.kot_on }}> Kitchen-ലേക്ക് KOT print ഉപയോഗിക്കുക</label>
-    <label class="check"><input type="checkbox" name="kot_with_bill" value="1" {{ 'checked' if st.kot_with_bill }}> Takeaway bill ചെയ്യുമ്പോൾ KOT-ഉം കൂടെ print ചെയ്യുക (kitchen-ലേക്ക് അയക്കാത്ത items)</label>
-    <details class="help-box"><summary>🖨 Printer എങ്ങനെ set ചെയ്യാം?</summary>
+    <label class="check"><input type="checkbox" name="kot_on" value="1" {{ 'checked' if st.kot_on }}> Use KOT (kitchen order ticket) printing</label>
+    <label class="check"><input type="checkbox" name="kot_with_bill" value="1" {{ 'checked' if st.kot_with_bill }}> When billing takeaway, print the KOT together with the bill (items not yet sent to the kitchen)</label>
+    <details class="help-box"><summary>🖨 How to set up the printer</summary>
       <ul>
-        <li><b>Computer + USB/WiFi printer:</b> printer-ന്റെ driver install ചെയ്യുക. Print window-ൽ ആ printer തിരഞ്ഞെടുക്കുക, Margins: None, "Headers and footers" off. ഒരിക്കൽ ചെയ്താൽ Chrome അത് ഓർക്കും.</li>
-        <li><b>Tablet/ഫോൺ + Bluetooth printer:</b> Play Store-ൽ നിന്ന് "RawBT" (free) install ചെയ്ത് printer pair ചെയ്യുക. Bill-ൽ Print അമർത്തുമ്പോൾ printer-ന്റെ പട്ടികയിൽ RawBT തിരഞ്ഞെടുക്കുക.</li>
-        <li>Printer ഇല്ലെങ്കിലും <b>Save (PDF)</b>, <b>WhatsApp</b> എപ്പോഴും പ്രവർത്തിക്കും.</li>
+        <li><b>Computer + USB/WiFi printer:</b> install the printer's driver. In the print window choose that printer, Margins: None, "Headers and footers" off. Chrome remembers it after the first time.</li>
+        <li><b>Tablet/phone + Bluetooth printer:</b> install "RawBT" (free) from the Play Store and pair the printer. When you press Print on a bill, choose RawBT in the printer list.</li>
+        <li>Without a printer, <b>Save (PDF)</b> and <b>WhatsApp</b> always work.</li>
       </ul>
     </details>
   </section>
 
   <section class="card" id="gst">
     <h2>GST</h2>
-    <label class="check"><input type="checkbox" name="gst_on" value="1" {{ 'checked' if st.gst_on }} id="gst-on"> GST bill (CGST + SGST വേർതിരിച്ച് കാണിക്കും)</label>
+    <label class="check"><input type="checkbox" name="gst_on" value="1" {{ 'checked' if st.gst_on }} id="gst-on"> GST bills (CGST and SGST shown separately)</label>
     <div class="row-3">
       <label>GSTIN<input name="gstin" value="{{ st.gstin }}" maxlength="20" placeholder="32ABCDE1234F1Z5"></label>
-      <label>പുതിയ items-ന്റെ GST %
+      <label>GST % for new items
         <select name="default_gst">{% for r in GST_RATES %}<option value="{{ r }}" {{ 'selected' if st.default_gst == r }}>{{ r }}%</option>{% endfor %}</select>
       </label>
-      <label>Menu വില
-        <select name="gst_inclusive"><option value="1" {{ 'selected' if st.gst_inclusive }}>GST ഉൾപ്പെടെ (ഉദാ: ₹100 = എല്ലാം ചേർത്ത്)</option><option value="" {{ 'selected' if not st.gst_inclusive }}>GST കൂടാതെ (bill-ൽ GST കൂട്ടും)</option></select>
+      <label>Menu prices
+        <select name="gst_inclusive"><option value="1" {{ 'selected' if st.gst_inclusive }}>Include GST (₹100 = total price)</option><option value="" {{ 'selected' if not st.gst_inclusive }}>Exclude GST (GST is added on the bill)</option></select>
       </label>
     </div>
-    <p class="muted small">ഓരോ item-ന്റെയും GST % Menu-വിൽ മാറ്റാം. GST OFF ആണെങ്കിൽ സാധാരണ bill.</p>
+    <p class="muted small">Each item's GST % can be changed in the Menu. With GST off, bills are plain bills.</p>
   </section>
 
   <section class="card" id="menu">
-    <h2>Digital menu &amp; online order</h2>
-    <label class="check"><input type="checkbox" name="menu_on" value="1" {{ 'checked' if st.menu_on }}> Digital menu publish ചെയ്യുക (QR / link വഴി customers-ന് കാണാം)</label>
+    <h2>Digital menu &amp; online orders</h2>
+    <label class="check"><input type="checkbox" name="menu_on" value="1" {{ 'checked' if st.menu_on }}> Publish the digital menu (customers open it by QR code or link)</label>
     <p>Menu link: <a href="{{ menu_link }}" target="_blank" rel="noopener">{{ menu_link }}</a> · <a href="{{ url_for('cafe.qr_poster') }}">QR code / poster</a></p>
-    <label class="check"><input type="checkbox" name="online_on" value="1" {{ 'checked' if st.online_on }}> Customers-ന് menu-വിൽ നിന്ന് order ചെയ്യാം <small class="muted">(തിരക്കുള്ളപ്പോൾ OFF ആക്കാം)</small></label>
+    <label class="check"><input type="checkbox" name="online_on" value="1" {{ 'checked' if st.online_on }}> Customers can order from the menu <small class="muted">(switch off when it's too busy)</small></label>
     <div class="checks">
-      <label class="check"><input type="checkbox" name="order_dine_in" value="1" {{ 'checked' if st.order_dine_in }}> Table (Dine-in)</label>
+      <label class="check"><input type="checkbox" name="order_dine_in" value="1" {{ 'checked' if st.order_dine_in }}> Table (dine-in)</label>
       <label class="check"><input type="checkbox" name="order_takeaway" value="1" {{ 'checked' if st.order_takeaway }}> Takeaway</label>
       <label class="check"><input type="checkbox" name="order_delivery" value="1" {{ 'checked' if st.order_delivery }}> Delivery</label>
     </div>
-    <label>Delivery കുറിപ്പ് <small>(ഉദാ: 3 km വരെ മാത്രം, delivery charge ₹30)</small><input name="delivery_note" value="{{ st.delivery_note }}" maxlength="200"></label>
-    <p class="muted small">Online order വന്നാൽ "Orders" page-ൽ Pending ആയി കാണും (ശബ്ദത്തോടെ). Confirm ചെയ്താൽ മാത്രമേ billing-ലേക്ക് പോകൂ.</p>
+    <label>Delivery note <small>(e.g. Within 3 km only, delivery charge ₹30)</small><input name="delivery_note" value="{{ st.delivery_note }}" maxlength="200"></label>
+    <p class="muted small">Online orders arrive as Pending on the Orders page (with a sound). Only confirmed orders go to billing.</p>
   </section>
 
   <section class="card" id="loyalty">
     <h2>🎁 Loyalty points</h2>
     <label class="check"><input type="checkbox" name="loyalty_on" value="1" {{ 'checked' if st.loyalty.on }}> Points system ON</label>
     <div class="row-3">
-      <label>Points കിട്ടുന്ന രീതി
+      <label>How points are earned
         <select name="loyalty_mode" id="lmode">
-          <option value="percent" {{ 'selected' if st.loyalty.mode == 'percent' }}>Bill തുകയുടെ ഇത്ര %</option>
-          <option value="per_amount" {{ 'selected' if st.loyalty.mode == 'per_amount' }}>₹ ഇത്രക്ക് ഇത്ര point</option>
+          <option value="percent" {{ 'selected' if st.loyalty.mode == 'percent' }}>A % of the bill amount</option>
+          <option value="per_amount" {{ 'selected' if st.loyalty.mode == 'per_amount' }}>Points for every ₹ spent</option>
         </select>
       </label>
-      <label class="lm-percent">എത്ര %<input type="number" name="loyalty_percent" step="0.1" min="0" max="100" value="{{ st.loyalty.percent }}" id="lpct"></label>
-      <label class="lm-amount">ഓരോ ₹<input type="number" name="loyalty_per_amount" min="1" value="{{ st.loyalty.per_amount }}" id="lamt"></label>
-      <label class="lm-amount">ന് എത്ര point<input type="number" name="loyalty_per_points" min="0" value="{{ st.loyalty.per_points }}" id="lpts"></label>
+      <label class="lm-percent">Percent<input type="number" name="loyalty_percent" step="0.1" min="0" max="100" value="{{ st.loyalty.percent }}" id="lpct"></label>
+      <label class="lm-amount">For every ₹<input type="number" name="loyalty_per_amount" min="1" value="{{ st.loyalty.per_amount }}" id="lamt"></label>
+      <label class="lm-amount">give points<input type="number" name="loyalty_per_points" min="0" value="{{ st.loyalty.per_points }}" id="lpts"></label>
     </div>
     <div class="row-3">
       <label>1 point = ₹<input name="loyalty_point_value" value="{{ paise_str(st.loyalty.point_value) }}" id="lval" inputmode="decimal"></label>
-      <label>Points കിട്ടാൻ കുറഞ്ഞ bill (₹)<input type="number" name="loyalty_min_bill" min="0" value="{{ st.loyalty.min_bill }}" id="lmin"></label>
-      <label>Points കാലാവധി (ദിവസം) <small>(ഒഴിച്ചിട്ടാൽ / 0 = ഒരിക്കലും തീരില്ല)</small><input type="number" name="loyalty_expiry_days" min="0" value="{{ st.loyalty.expiry_days or '' }}" placeholder="ഉദാ: 180"></label>
+      <label>Minimum bill to earn points (₹)<input type="number" name="loyalty_min_bill" min="0" value="{{ st.loyalty.min_bill }}" id="lmin"></label>
+      <label>Points expire after (days) <small>(empty / 0 = never)</small><input type="number" name="loyalty_expiry_days" min="0" value="{{ st.loyalty.expiry_days or '' }}" placeholder="e.g. 180"></label>
     </div>
     <div class="row-2">
-      <label>Redeem ചെയ്യാൻ കുറഞ്ഞ points<input type="number" name="loyalty_min_redeem" min="0" value="{{ st.loyalty.min_redeem }}"></label>
-      <label>ഒരു bill-ൽ points കൊണ്ട് പരമാവധി എത്ര % കുറക്കാം<input type="number" name="loyalty_max_redeem_pct" min="0" max="100" value="{{ st.loyalty.max_redeem_pct }}"></label>
+      <label>Minimum points to redeem<input type="number" name="loyalty_min_redeem" min="0" value="{{ st.loyalty.min_redeem }}"></label>
+      <label>Points can pay at most this % of a bill<input type="number" name="loyalty_max_redeem_pct" min="0" max="100" value="{{ st.loyalty.max_redeem_pct }}"></label>
     </div>
     <p class="example" id="lexample"></p>
   </section>
 
   <section class="card" id="referral">
     <h2>🤝 Refer &amp; Earn</h2>
-    <label class="check"><input type="checkbox" name="referral_on" value="1" {{ 'checked' if st.referral.on }}> Refer &amp; Earn ON <small class="muted">(Loyalty points ON ആയിരിക്കണം)</small></label>
+    <label class="check"><input type="checkbox" name="referral_on" value="1" {{ 'checked' if st.referral.on }}> Refer &amp; Earn ON <small class="muted">(loyalty points must be ON)</small></label>
     <div class="row-2">
-      <label>Refer ചെയ്ത ആൾക്ക് points<input type="number" name="referral_referrer_points" min="0" value="{{ st.referral.referrer_points }}"></label>
-      <label>പുതിയ customer-ന് points<input type="number" name="referral_new_points" min="0" value="{{ st.referral.new_points }}"></label>
+      <label>Points for the person who referred<input type="number" name="referral_referrer_points" min="0" value="{{ st.referral.referrer_points }}"></label>
+      <label>Points for the new customer<input type="number" name="referral_new_points" min="0" value="{{ st.referral.new_points }}"></label>
     </div>
-    <p class="muted small">പുതിയ ആളുടെ <b>ആദ്യ bill കഴിഞ്ഞ ശേഷം മാത്രം</b> രണ്ടുപേർക്കും points കിട്ടും (fake refer തടയാൻ). ഓരോ customer-നും സ്വന്തം referral code / link ഉണ്ടാകും.</p>
-    <h2>🎂 ജന്മദിനം</h2>
-    <label class="check"><input type="checkbox" name="birthday_on" value="1" {{ 'checked' if st.birthday_on }}> Billing-ലും online order-ലും ജന്മദിനം ചോദിക്കുക (നിർബന്ധമല്ല)</label>
+    <p class="muted small">Both get their points <b>only after the new customer's first bill</b> (stops fake referrals). Every customer gets their own referral code and link.</p>
+    <h2>🎂 Birthdays</h2>
+    <label class="check"><input type="checkbox" name="birthday_on" value="1" {{ 'checked' if st.birthday_on }}> Ask for the birthday in billing and online orders (optional for the customer)</label>
   </section>
 
   <div class="sticky-save"><button class="btn btn-primary btn-big">💾 Save settings</button></div>
@@ -138,7 +138,7 @@
     else pts = Math.floor(bill / (parseInt(document.getElementById("lamt").value, 10) || 1)) * (parseInt(document.getElementById("lpts").value, 10) || 0);
     var val = parseFloat(document.getElementById("lval").value) || 0, min = parseInt(document.getElementById("lmin").value, 10) || 0;
     if (bill < min) pts = 0;
-    document.getElementById("lexample").textContent = "ഉദാഹരണം: ₹" + bill + " bill → " + pts + " points കിട്ടും (= ₹" + (pts * val).toFixed(2).replace(/\.00$/, "") + " വില).";
+    document.getElementById("lexample").textContent = "Example: a ₹" + bill + " bill earns " + pts + " points (worth ₹" + (pts * val).toFixed(2).replace(/\.00$/, "") + ").";
   }
   document.querySelectorAll("#loyalty input, #loyalty select").forEach(function (e) { e.addEventListener("input", upd); });
   upd();

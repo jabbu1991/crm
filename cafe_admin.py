@@ -7,8 +7,8 @@ from flask import Response, abort, flash, g, jsonify, redirect, render_template,
 
 from cafe import (BANNER_PHOTO_HINT, DEFAULT_SETTINGS, FONTS, FOOD_TYPES, GST_RATES, ITEM_PHOTO_HINT, ITEM_TAGS,
                   LAYOUTS, PAPER_SIZES, SHAPES, THEMES, bp, cafe_name, cafe_view, get_category, get_item,
-                  get_settings, host as H, menu_url, paise_str, save_photo, save_settings, to_float, to_int, to_paise,
-                  valid_birthday)
+                  get_settings, host as H, menu_url, next_serial, paise_str, save_photo, save_settings, to_float, to_int,
+                  to_paise, valid_birthday)
 
 
 def clean(v, n=200):
@@ -64,7 +64,7 @@ def settings():
                 H.remove_media(st[key])
                 st[key] = ""
         save_settings(st)
-        flash("Settings save ചെയ്തു.", "success")
+        flash("Settings saved.", "success")
         return redirect(url_for("cafe.settings") + (("#" + f.get("section")) if f.get("section") else ""))
     return render_template("cafe/settings.html", st=st, PAPER_SIZES=PAPER_SIZES, GST_RATES=GST_RATES,
                            menu_link=menu_url(), paise_str=paise_str)
@@ -88,7 +88,7 @@ def design():
         t["font"] = request.form.get("font") if request.form.get("font") in FONTS else "modern"
         t["shape"] = request.form.get("shape") if request.form.get("shape") in SHAPES else "round"
         save_settings(st)
-        flash("Menu design save ചെയ്തു. Customers-ന് ഇപ്പോൾ ഈ design കാണും.", "success")
+        flash("Menu design saved. Customers now see this design.", "success")
         return redirect(url_for("cafe.design"))
     return render_template("cafe/design.html", st=st, THEMES=THEMES, FONTS=FONTS, LAYOUTS=LAYOUTS, SHAPES=SHAPES,
                            preview_url=url_for("cafe.public_menu", code=g.org["code"].lower(), preview=1))
@@ -100,13 +100,13 @@ def logo_colors():
     """Two strong colours from the logo, for the 'pick colours from the logo' button."""
     st = get_settings()
     if not st["logo"]:
-        return jsonify(ok=False, error="ആദ്യം Settings-ൽ logo upload ചെയ്യുക.")
+        return jsonify(ok=False, error="Upload a logo in Settings first.")
     from PIL import Image
     import os
     try:
         img = Image.open(os.path.join(H.media_dir(), st["logo"])).convert("RGB")
     except Exception:
-        return jsonify(ok=False, error="Logo വായിക്കാൻ പറ്റിയില്ല.")
+        return jsonify(ok=False, error="Could not read the logo.")
     img.thumbnail((120, 120))
     pal = img.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
     palette = pal.getpalette()[:24]
@@ -125,7 +125,7 @@ def logo_colors():
         if len(picks) == 2:
             break
     if not picks:
-        return jsonify(ok=False, error="Logo-യിൽ തെളിഞ്ഞ നിറങ്ങൾ കണ്ടില്ല. നിറം കൈകൊണ്ട് തിരഞ്ഞെടുക്കാം.")
+        return jsonify(ok=False, error="No strong colours found in the logo. Pick the colours by hand.")
     return jsonify(ok=True, primary=picks[0], secondary=picks[1] if len(picks) > 1 else picks[0])
 
 
@@ -177,11 +177,11 @@ def menu():
     cats = H.query("""SELECT c.*, (SELECT COUNT(*) FROM menu_items i WHERE i.category_id = c.id AND i.active = 1) n
                       FROM menu_categories c WHERE c.org_id = ? AND c.active = 1 ORDER BY c.sort, c.name COLLATE NOCASE""",
                    (oid,))
-    items = H.query("SELECT * FROM menu_items WHERE org_id = ? AND active = 1 ORDER BY sort, name COLLATE NOCASE",
+    items = H.query("SELECT * FROM menu_items WHERE org_id = ? AND active = 1 ORDER BY serial, sort, name COLLATE NOCASE",
                     (oid,))
     q = (request.args.get("q") or "").strip().lower()
     if q:
-        items = [i for i in items if q in i["name"].lower()]
+        items = [i for i in items if q in i["name"].lower() or q == str(i["serial"])]
     by_cat = {}
     for i in items:
         by_cat.setdefault(i["category_id"], []).append(i)
@@ -199,13 +199,13 @@ def category_save():
     if action == "add":
         name = clean(request.form.get("name"), 60)
         if not name:
-            flash("Category-യുടെ പേര് കൊടുക്കുക.", "error")
+            flash("Enter a category name.", "error")
         else:
             sort = (H.scalar("SELECT MAX(sort) FROM menu_categories WHERE org_id = ?", (oid,)) or 0) + 1
             db.execute("INSERT INTO menu_categories (org_id, name, sort, created_at) VALUES (?,?,?,?)",
                        (oid, name, sort, H.now()))
             db.commit()
-            flash(f"Category '{name}' ചേർത്തു.", "success")
+            flash(f"Category '{name}' added.", "success")
         return redirect(url_for("cafe.menu"))
     cat = get_category(cid)
     if action == "rename":
@@ -225,7 +225,7 @@ def category_save():
     elif action == "delete":
         db.execute("UPDATE menu_items SET category_id = NULL WHERE category_id = ? AND org_id = ?", (cid, oid))
         db.execute("UPDATE menu_categories SET active = 0 WHERE id = ? AND org_id = ?", (cid, oid))
-        flash(f"Category '{cat['name']}' മാറ്റി. അതിലെ items 'Other' ഭാഗത്തേക്ക് മാറി.", "success")
+        flash(f"Category '{cat['name']}' removed. Its items moved to 'Other'.", "success")
     db.commit()
     return redirect(url_for("cafe.menu"))
 
@@ -243,21 +243,29 @@ def item_form_data(item=None):
     data["gst_rate"] = to_float(f.get("gst_rate"), get_settings()["default_gst"], 0, 28)
     data["available"] = 1 if f.get("available") else 0
     data["sort"] = to_int(f.get("sort"), 0, 0, 9999)
+    data["serial"] = to_int(f.get("serial"), 0, 0, 99999) or None
     errors = []
+    if data["serial"] is None:
+        data["serial"] = item["serial"] if item is not None and item["serial"] else next_serial()
+    elif H.scalar("SELECT name FROM menu_items WHERE org_id = ? AND active = 1 AND serial = ? AND id != ?",
+                  (H.org_id(), data["serial"], item["id"] if item is not None else 0)):
+        other = H.scalar("SELECT name FROM menu_items WHERE org_id = ? AND active = 1 AND serial = ? AND id != ?",
+                         (H.org_id(), data["serial"], item["id"] if item is not None else 0))
+        errors.append(f"S.No {data['serial']} is already used by '{other}'.")
     if not data["name"]:
-        errors.append("Item-ന്റെ പേര് കൊടുക്കുക.")
+        errors.append("Enter the item name.")
     if data["price"] is None:
-        errors.append("വില ശരിയായി കൊടുക്കുക (ഉദാ: 120 അല്ലെങ്കിൽ 120.50).")
+        errors.append("Enter a valid price (e.g. 120 or 120.50).")
     if data["offer_price"] is None:
-        errors.append("Offer വില ശരിയല്ല.")
+        errors.append("The offer price is not valid.")
     elif data["offer_price"] == "":
         data["offer_price"] = None
     elif data["price"] is not None and data["offer_price"] >= data["price"]:
-        errors.append("Offer വില സാധാരണ വിലയേക്കാൾ കുറവായിരിക്കണം.")
+        errors.append("The offer price must be lower than the price.")
     if data["offer_from"] is None or data["offer_to"] is None:
-        errors.append("Offer തീയതി ശരിയല്ല.")
+        errors.append("The offer dates are not valid.")
     elif data["offer_from"] and data["offer_to"] and data["offer_to"] < data["offer_from"]:
-        errors.append("Offer തീരുന്ന തീയതി തുടങ്ങുന്ന തീയതിക്ക് ശേഷമായിരിക്കണം.")
+        errors.append("The offer end date must be after the start date.")
     if data["category_id"]:
         get_category(data["category_id"])
     new_cat = clean(f.get("new_category"), 60)
@@ -288,14 +296,14 @@ def _apply_new_category(data, new_cat):
 
 
 ITEM_COLS = ("name", "description", "category_id", "price", "offer_price", "offer_from", "offer_to", "food_type",
-             "tags", "gst_rate", "available", "sort")
+             "tags", "gst_rate", "available", "sort", "serial")
 
 
 @bp.route("/cafe/menu/item/new", methods=["GET", "POST"])
 @cafe_view("menu_edit")
 def item_new():
     data = {"available": 1, "gst_rate": get_settings()["default_gst"], "category_id": request.args.get("cat", type=int),
-            "price": None, "offer_price": None}
+            "price": None, "offer_price": None, "serial": next_serial()}
     if request.method == "POST":
         data, errors, new_cat = item_form_data()
         if errors:
@@ -305,7 +313,7 @@ def item_new():
         iid = H.execute(f"INSERT INTO menu_items (org_id, {', '.join(ITEM_COLS)}, photo, created_by, created_at,"
                         f" updated_at) VALUES ({', '.join('?' * (len(ITEM_COLS) + 5))})",
                         [H.org_id()] + [data[c] for c in ITEM_COLS] + [photo, g.user["id"], H.now(), H.now()])
-        flash(f"'{data['name']}' menu-വിൽ ചേർത്തു.", "success")
+        flash(f"'{data['name']}' added to the menu.", "success")
         if request.form.get("another"):
             return redirect(url_for("cafe.item_new", cat=data["category_id"] or None))
         return redirect(url_for("cafe.menu") + f"#item{iid}")
@@ -332,7 +340,7 @@ def item_edit(iid):
             photo = None
         H.execute(f"UPDATE menu_items SET {', '.join(c + ' = ?' for c in ITEM_COLS)}, photo = ?, updated_at = ?"
                   " WHERE id = ? AND org_id = ?", [data[c] for c in ITEM_COLS] + [photo, H.now(), iid, H.org_id()])
-        flash(f"'{data['name']}' save ചെയ്തു.", "success")
+        flash(f"'{data['name']}' saved.", "success")
         return redirect(url_for("cafe.menu") + f"#item{iid}")
     return _item_form(item, data, [])
 
@@ -347,7 +355,7 @@ def item_action(iid, action):
     elif action == "delete":
         H.execute("UPDATE menu_items SET active = 0, updated_at = ? WHERE id = ? AND org_id = ?",
                   (H.now(), iid, H.org_id()))
-        flash(f"'{item['name']}' menu-വിൽ നിന്ന് മാറ്റി. പഴയ bills-ൽ അത് അതുപോലെ ഉണ്ടാകും.", "success")
+        flash(f"'{item['name']}' removed from the menu. Old bills keep it as it was.", "success")
     else:
         abort(404)
     if request.headers.get("X-Requested-With") == "fetch":
@@ -382,7 +390,7 @@ def banner_save():
         get_item(item_id)
     start, end = H.valid_date(f.get("start_date")), H.valid_date(f.get("end_date"))
     if start is None or end is None:
-        flash("തീയതി ശരിയല്ല.", "error")
+        flash("The date is not valid.", "error")
         return redirect(url_for("cafe.banners"))
     photo = save_photo("photo", (1200, 500), True)
     data = (clean(f.get("title"), 80), item_id, start or None, end or None, 1 if f.get("active") else 0)
@@ -391,15 +399,15 @@ def banner_save():
             H.remove_media(banner["photo"])
         H.execute("UPDATE menu_banners SET title=?, item_id=?, start_date=?, end_date=?, active=?, photo=? WHERE id=?",
                   data + (photo or banner["photo"], bid))
-        flash("Banner save ചെയ്തു.", "success")
+        flash("Banner saved.", "success")
     else:
         if not photo and not item_id:
-            flash("Banner-ന് ഒരു ഫോട്ടോ അല്ലെങ്കിൽ ഒരു item തിരഞ്ഞെടുക്കുക.", "error")
+            flash("Choose a photo or an item for the banner.", "error")
             return redirect(url_for("cafe.banners"))
         sort = (H.scalar("SELECT MAX(sort) FROM menu_banners WHERE org_id = ?", (oid,)) or 0) + 1
         H.execute("INSERT INTO menu_banners (org_id, title, item_id, start_date, end_date, active, photo, sort,"
                   " created_at) VALUES (?,?,?,?,?,?,?,?,?)", (oid,) + data + (photo, sort, H.now()))
-        flash("Banner ചേർത്തു.", "success")
+        flash("Banner added.", "success")
     return redirect(url_for("cafe.banners"))
 
 
@@ -413,7 +421,7 @@ def banner_action(bid, action):
     elif action == "delete":
         H.remove_media(b["photo"])
         H.execute("DELETE FROM menu_banners WHERE id = ?", (bid,))
-        flash("Banner മാറ്റി.", "success")
+        flash("Banner removed.", "success")
     else:
         abort(404)
     return redirect(url_for("cafe.banners"))
@@ -446,12 +454,12 @@ def table_save():
             db.execute("INSERT INTO cafe_tables (org_id, name, seats, sort, created_at) VALUES (?,?,?,?,?)",
                        (oid, f"T{start + i}", to_int(f.get("seats"), 4, 1, 50), start + i, H.now()))
         db.commit()
-        flash(f"{n} tables ചേർത്തു.", "success")
+        flash(f"{n} tables added.", "success")
         return redirect(url_for("cafe.tables"))
     tid = f.get("id", type=int)
     name = clean(f.get("name"), 30)
     if not name:
-        flash("Table-ന്റെ പേര്/നമ്പർ കൊടുക്കുക.", "error")
+        flash("Enter a table name / number.", "error")
         return redirect(url_for("cafe.tables"))
     if tid:
         H.query("SELECT 1 FROM cafe_tables WHERE id = ? AND org_id = ?", (tid, oid), one=True) or abort(404)
@@ -461,7 +469,7 @@ def table_save():
         sort = (H.scalar("SELECT MAX(sort) FROM cafe_tables WHERE org_id = ?", (oid,)) or 0) + 1
         H.execute("INSERT INTO cafe_tables (org_id, name, seats, sort, created_at) VALUES (?,?,?,?,?)",
                   (oid, name, to_int(f.get("seats"), None, 1, 50), sort, H.now()))
-    flash("Table save ചെയ്തു.", "success")
+    flash("Table saved.", "success")
     return redirect(url_for("cafe.tables"))
 
 
@@ -471,8 +479,8 @@ def table_delete(tid):
     oid = H.org_id()
     t = H.query("SELECT * FROM cafe_tables WHERE id = ? AND org_id = ?", (tid, oid), one=True) or abort(404)
     if H.scalar("SELECT 1 FROM cafe_orders WHERE table_id = ? AND status = 'open'", (tid,)):
-        flash(f"{t['name']}-ൽ ഇപ്പോൾ order ഉണ്ട്. Bill ചെയ്ത ശേഷം മാറ്റാം.", "error")
+        flash(f"{t['name']} has a running order. Bill it first, then remove the table.", "error")
     else:
         H.execute("UPDATE cafe_tables SET active = 0 WHERE id = ?", (tid,))
-        flash(f"{t['name']} മാറ്റി.", "success")
+        flash(f"{t['name']} removed.", "success")
     return redirect(url_for("cafe.tables"))

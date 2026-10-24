@@ -24,8 +24,8 @@ def get_customer(cid):
 # ---------------------------------------------------------------- customers
 
 FILTERS = {
-    "all": "എല്ലാവരും", "inactive": "30 ദിവസമായി വരാത്തവർ", "top": "കൂടുതൽ വാങ്ങുന്നവർ", "points": "Points കൂടുതലുള്ളവർ",
-    "birthday": "ഈ ആഴ്ചയിലെ ജന്മദിനം", "expiring": "Points 7 ദിവസത്തിനുള്ളിൽ തീരുന്നവർ", "new": "ഈ മാസം പുതിയവർ",
+    "all": "All", "inactive": "Not visited in 30 days", "top": "Top spenders", "points": "Most points",
+    "birthday": "Birthdays this week", "expiring": "Points expiring in 7 days", "new": "New this month",
 }
 
 
@@ -105,26 +105,26 @@ def customer_new():
     phone = phone10(f.get("whatsapp"))
     name = (f.get("name") or "").strip()[:80]
     if not phone or not name:
-        flash("പേരും 10 അക്ക WhatsApp നമ്പറും കൊടുക്കുക.", "error")
+        flash("Enter a name and a 10-digit WhatsApp number.", "error")
         return redirect(url_for("cafe.customers"))
     oid = _org()
     existing = H.query("SELECT id FROM customers WHERE org_id = ? AND wa_norm = ?", (oid, phone), one=True)
     if existing:
-        flash("ഈ നമ്പറിൽ ഒരു customer ഇതിനകം ഉണ്ട്.", "warning")
+        flash("A customer with this number already exists.", "warning")
         return redirect(url_for("cafe.customer_view", cid=existing["id"]))
     from cafe import upsert_customer
     db = H.get_db()
     bday = valid_birthday(f.get("birthday"))
     cid = upsert_customer(db, oid, f.get("whatsapp"), name, bday, f.get("ref"), g.user["id"])
     db.commit()
-    flash(f"{name} ചേർത്തു.", "success")
+    flash(f"{name} added.", "success")
     return redirect(url_for("cafe.customer_view", cid=cid))
 
 
-KIND_LABELS = {"earn": "Bill-ൽ കിട്ടിയത്", "redeem": "Bill-ൽ ഉപയോഗിച്ചത്", "referral": "Refer ചെയ്തതിന്",
-               "referral_welcome": "Referral welcome", "manual_add": "Admin കൂട്ടിയത്", "manual_sub": "Admin കുറച്ചത്",
-               "reverse": "Bill cancel (തിരിച്ചെടുത്തു)", "refund": "Bill cancel (തിരികെ കിട്ടി)",
-               "expired": "കാലാവധി കഴിഞ്ഞു"}
+KIND_LABELS = {"earn": "Earned on bill", "redeem": "Used on bill", "referral": "Referral reward",
+               "referral_welcome": "Referral welcome", "manual_add": "Added by admin", "manual_sub": "Removed by admin",
+               "reverse": "Bill cancelled (taken back)", "refund": "Bill cancelled (returned)",
+               "expired": "Expired"}
 
 
 @bp.route("/cafe/customers/<int:cid>", methods=["GET", "POST"])
@@ -139,16 +139,16 @@ def customer_view(cid):
         phone = phone10(f.get("whatsapp"))
         bday = valid_birthday(f.get("birthday"))
         if not name or not phone:
-            flash("പേരും 10 അക്ക WhatsApp നമ്പറും വേണം.", "error")
+            flash("A name and a 10-digit WhatsApp number are required.", "error")
         elif bday is None:
-            flash("ജന്മദിനം ശരിയല്ല.", "error")
+            flash("The birthday is not valid.", "error")
         elif H.scalar("SELECT 1 FROM customers WHERE org_id = ? AND wa_norm = ? AND id != ?", (oid, phone, cid)):
-            flash("ഈ WhatsApp നമ്പർ വേറെ ഒരു customer-ന് ഉണ്ട്.", "error")
+            flash("Another customer already has this WhatsApp number.", "error")
         else:
             H.execute("UPDATE customers SET name = ?, whatsapp = ?, wa_norm = ?, birthday = ?, notes = ?, updated_at = ?"
                       " WHERE id = ? AND org_id = ?", (name, (f.get("whatsapp") or "").strip()[:20], phone, bday or None,
                                                        (f.get("notes") or "").strip()[:500], H.now(), cid, oid))
-            flash("Customer save ചെയ്തു.", "success")
+            flash("Customer saved.", "success")
         return redirect(url_for("cafe.customer_view", cid=cid))
     ledger = H.query("""SELECT p.*, u.name by_name, b.bill_no FROM points_ledger p LEFT JOIN users u ON u.id = p.created_by
                         LEFT JOIN cafe_bills b ON b.id = p.bill_id WHERE p.customer_id = ? ORDER BY p.id DESC LIMIT 100""",
@@ -179,18 +179,18 @@ def customer_points(cid):
     reason = (request.form.get("reason") or "").strip()[:200]
     direction = request.form.get("direction")
     if not pts or not reason:
-        flash("Points എണ്ണവും കാരണവും നിർബന്ധമാണ്.", "error")
+        flash("Points and a reason are required.", "error")
         return redirect(url_for("cafe.customer_view", cid=cid))
     db = H.get_db()
     if direction == "sub":
         if pts > c["points"]:
-            flash(f"Balance {c['points']} points മാത്രമേ ഉള്ളൂ.", "error")
+            flash(f"The balance is only {c['points']} points.", "error")
             return redirect(url_for("cafe.customer_view", cid=cid))
         take_points(db, _org(), cid, pts, "manual_sub", reason, None, g.user["id"])
     else:
         add_points(db, _org(), cid, pts, "manual_add", reason, None, g.user["id"])
     db.commit()
-    flash(f"{pts} points {'കുറച്ചു' if direction == 'sub' else 'കൂട്ടി'}.", "success")
+    flash(f"{pts} points {'removed' if direction == 'sub' else 'added'}.", "success")
     return redirect(url_for("cafe.customer_view", cid=cid))
 
 
@@ -224,21 +224,21 @@ def templates():
         tid = f.get("id", type=int)
         if f.get("action") == "delete" and tid:
             H.execute("DELETE FROM cafe_templates WHERE id = ? AND org_id = ?", (tid, oid))
-            flash("Template മാറ്റി.", "success")
+            flash("Template deleted.", "success")
             return redirect(url_for("cafe.templates"))
         title, body = (f.get("title") or "").strip()[:60], (f.get("body") or "").strip()[:1000]
         if not title or not body:
-            flash("പേരും message-ഉം കൊടുക്കുക.", "error")
+            flash("Enter a name and a message.", "error")
         elif tid:
             H.query("SELECT 1 FROM cafe_templates WHERE id = ? AND org_id = ?", (tid, oid), one=True) or abort(404)
             H.execute("UPDATE cafe_templates SET title = ?, body = ?, updated_at = ? WHERE id = ?",
                       (title, body, H.now(), tid))
-            flash("Template save ചെയ്തു.", "success")
+            flash("Template saved.", "success")
         else:
             sort = (H.scalar("SELECT MAX(sort) FROM cafe_templates WHERE org_id = ?", (oid,)) or 0) + 1
             H.execute("INSERT INTO cafe_templates (org_id, title, body, sort, created_at) VALUES (?,?,?,?,?)",
                       (oid, title, body, sort, H.now()))
-            flash("Template ചേർത്തു.", "success")
+            flash("Template added.", "success")
         return redirect(url_for("cafe.templates"))
     rows = H.query("SELECT * FROM cafe_templates WHERE org_id = ? ORDER BY sort, id", (oid,))
     return render_template("cafe/templates.html", rows=rows)
@@ -295,13 +295,13 @@ def expense_save():
     d = H.valid_date(f.get("entry_date")) or today()
     category = (f.get("category") or "").strip()[:60]
     if not amount or amount <= 0:
-        flash("തുക ശരിയായി കൊടുക്കുക.", "error")
+        flash("Enter a valid amount.", "error")
         return redirect(url_for("cafe.expenses"))
     if not category:
-        flash("Category തിരഞ്ഞെടുക്കുക.", "error")
+        flash("Choose a category.", "error")
         return redirect(url_for("cafe.expenses"))
     if d > today():
-        flash("ഭാവിയിലെ തീയതി കൊടുക്കാൻ പറ്റില്ല.", "error")
+        flash("The date cannot be in the future.", "error")
         return redirect(url_for("cafe.expenses"))
     mode = f.get("payment_mode") if f.get("payment_mode") in PAYMENT_MODES + ["Bank"] else "Cash"
     note = (f.get("note") or "").strip()[:300]
@@ -317,12 +317,12 @@ def expense_save():
             H.remove_media(row["photo"])
         H.execute("UPDATE cafe_ledger SET kind=?, entry_date=?, amount=?, category=?, payment_mode=?, note=?, photo=?,"
                   " updated_at=? WHERE id=?", (kind, d, amount, category, mode, note, photo or row["photo"], H.now(), eid))
-        flash("Save ചെയ്തു.", "success")
+        flash("Saved.", "success")
     else:
         H.execute("INSERT INTO cafe_ledger (org_id, kind, entry_date, amount, category, payment_mode, note, photo,"
                   " created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                   (oid, kind, d, amount, category, mode, note, photo, g.user["id"], H.now()))
-        flash(f"{'ചെലവ്' if kind == 'expense' else 'വരുമാനം'} {rupees(amount)} ചേർത്തു.", "success")
+        flash(f"{'Expense' if kind == 'expense' else 'Income'} {rupees(amount)} added.", "success")
     return redirect(url_for("cafe.expenses"))
 
 
@@ -331,7 +331,7 @@ def expense_save():
 def expense_delete(eid):
     H.query("SELECT 1 FROM cafe_ledger WHERE id = ? AND org_id = ?", (eid, _org()), one=True) or abort(404)
     H.execute("UPDATE cafe_ledger SET deleted_at = ? WHERE id = ?", (H.now(), eid))
-    flash("Entry മാറ്റി.", "success")
+    flash("Entry deleted.", "success")
     return redirect(url_for("cafe.expenses"))
 
 
@@ -452,14 +452,14 @@ def analysis():
                            "expense": led.get("expense", 0), "profit": inc - led.get("expense", 0)})
     labels = [date.fromisoformat(r["date"]).strftime("%d %b") for r in days]
     line = charts.line_chart(labels, [
-        {"name": "വരുമാനം", "color": charts.BLUE, "values": [r["sales"] + r["other"] for r in days], "area": True},
-        {"name": "ചെലവ്", "color": charts.ORANGE, "values": [r["expense"] for r in days]}])
+        {"name": "Income", "color": charts.BLUE, "values": [r["sales"] + r["other"] for r in days], "area": True},
+        {"name": "Expense", "color": charts.ORANGE, "values": [r["expense"] for r in days]}])
     parts = charts.fold([(r["category"], r["total"]) for r in exp_cats])
     donut = charts.donut(parts) if parts else None
     bars = charts.bar_chart([r["short"] for r in month_rows], [
-        {"name": "വരുമാനം", "color": charts.BLUE, "values": [r["income"] for r in month_rows]},
-        {"name": "ചെലവ്", "color": charts.ORANGE, "values": [r["expense"] for r in month_rows]},
-        {"name": "ലാഭം", "color": charts.AQUA, "values": [r["profit"] for r in month_rows]}])
+        {"name": "Income", "color": charts.BLUE, "values": [r["income"] for r in month_rows]},
+        {"name": "Expense", "color": charts.ORANGE, "values": [r["expense"] for r in month_rows]},
+        {"name": "Profit", "color": charts.AQUA, "values": [r["profit"] for r in month_rows]}])
     mode_parts = [(r["k"] or "—", r["total"]) for r in modes]
     mode_donut = charts.donut(mode_parts) if mode_parts else None
     return render_template("cafe/analysis.html", p=p, a=A, b=B, days=days, tot=tot, exp_cats=exp_cats, parts=parts,

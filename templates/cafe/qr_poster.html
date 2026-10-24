@@ -26,7 +26,7 @@
   <button class="primary" onclick="window.print()">🖨 Print</button>
   <a href="{{ url_for('cafe.qr_image', kind='png') }}">⬇️ QR download (PNG)</a>
   <a href="{{ url_for('cafe.tables') }}">← Back</a>
-  <span style="opacity:.75">ഈ QR scan ചെയ്താൽ menu നേരിട്ട് തുറക്കും. Table QR scan ചെയ്താൽ table നമ്പർ തനിയെ വരും.</span>
+  <span style="opacity:.75">Scanning this QR opens the menu. A table QR also fills in the table number.</span>
 </div>
 <div class="sheets">
 {% if not tables %}

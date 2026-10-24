@@ -45,7 +45,7 @@
   <span class="papers">{% for p, l in (('58', '58mm'), ('80', '80mm'), ('A4', 'A4')) %}<a class="{{ 'on' if paper == p }}" href="?{{ 'kot=' ~ request.args.kot ~ '&' if request.args.kot }}paper={{ p }}">{{ l }}</a>{% endfor %}</span>
   {% if back and not public %}<a href="{{ back }}">{{ '✓ Done' if auto else '← Back' }}</a>{% endif %}
   {% if not public and auto %}<a href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
-  <div class="hint" id="pdf-hint" hidden>Print window-ൽ printer ആയി <b>"Save as PDF"</b> തിരഞ്ഞെടുക്കുക.</div>
+  <div class="hint" id="pdf-hint" hidden>In the print window, choose <b>"Save as PDF"</b> as the printer.</div>
 </div>
 
 {% if bill %}
@@ -103,7 +103,7 @@
 </div>
 {% endfor %}
 
-{% if public and menu_link %}<p class="menu-link"><a href="{{ menu_link }}">📱 {{ name }}-ന്റെ menu കാണുക</a></p>{% endif %}
+{% if public and menu_link %}<p class="menu-link"><a href="{{ menu_link }}">📱 See the {{ name }} menu</a></p>{% endif %}
 <script>
 function savePdf() { document.getElementById("pdf-hint").hidden = false; setTimeout(function () { window.print(); }, 150); }
 {% if auto %}window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });{% endif %}

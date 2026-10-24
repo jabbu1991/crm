@@ -45,27 +45,27 @@ ITEM_TAGS = {"bestseller": "⭐ Bestseller", "new": "🆕 New", "spicy": "🌶 S
 DEFAULT_EXPENSE_CATEGORIES = ["Raw materials", "Gas", "Salary", "Rent", "Electricity", "Water", "Maintenance",
                               "Packing", "Marketing", "Other"]
 DEFAULT_INCOME_CATEGORIES = ["Catering", "Party order", "Other"]
-ITEM_PHOTO_HINT = "Size: 600 × 600 px (square), 50 KB-ൽ താഴെ"
-BANNER_PHOTO_HINT = "Size: 1200 × 500 px (വീതിയുള്ളത്), 50 KB-ൽ താഴെ"
+ITEM_PHOTO_HINT = "Size: 600 × 600 px (square), under 50 KB"
+BANNER_PHOTO_HINT = "Size: 1200 × 500 px (wide), under 50 KB"
 PHOTO_MAX_KB = 50
 
 # Permissions a staff member can be given (admins always have all of them).
 PERMS = [
-    ("bill_create", "Bill ഉണ്ടാക്കുക / order എടുക്കുക"),
-    ("bill_discount", "Discount കൊടുക്കുക"),
-    ("bill_cancel", "Bill cancel ചെയ്യുക"),
-    ("bills_view", "പഴയ bills കാണുക / വീണ്ടും print ചെയ്യുക"),
-    ("orders_online", "Online orders കൈകാര്യം ചെയ്യുക"),
-    ("menu_edit", "Menu / വില / offers / tables മാറ്റുക"),
-    ("expense_add", "Expense ചേർക്കുക"),
-    ("expense_view", "Expense കാണുക / edit ചെയ്യുക"),
-    ("reports_view", "Reports & Analysis (ഗ്രാഫുകൾ) കാണുക"),
-    ("customers_view", "Customers കാണുക"),
-    ("points_redeem", "Bill-ൽ points കുറക്കുക"),
-    ("points_adjust", "Points കൈകൊണ്ട് കൂട്ടുക / കുറക്കുക"),
-    ("marketing", "WhatsApp marketing messages അയക്കുക"),
-    ("settings_edit", "Cafe settings മാറ്റുക (GST, printer, design)"),
-    ("staff_manage", "Staff-നെ ചേർക്കുക / മാറ്റുക"),
+    ("bill_create", "Create bills / take orders"),
+    ("bill_discount", "Give discount"),
+    ("bill_cancel", "Cancel bills"),
+    ("bills_view", "View old bills / reprint"),
+    ("orders_online", "Handle online orders"),
+    ("menu_edit", "Edit menu / prices / offers / tables"),
+    ("expense_add", "Add expenses"),
+    ("expense_view", "View / edit expenses"),
+    ("reports_view", "View reports & analysis (graphs)"),
+    ("customers_view", "View customers"),
+    ("points_redeem", "Redeem points on bills"),
+    ("points_adjust", "Add / remove points manually"),
+    ("marketing", "Send WhatsApp marketing messages"),
+    ("settings_edit", "Change cafe settings (GST, printer, design)"),
+    ("staff_manage", "Add / edit staff"),
 ]
 PERM_KEYS = [k for k, _ in PERMS]
 ROLE_PRESETS = {
@@ -83,8 +83,8 @@ THEMES = {
     "pastel": {"label": "Pastel", "primary": "#db2777", "secondary": "#34d399", "bg": "#fff7fb", "text": "#3b1f2e"},
 }
 FONTS = {"modern": "Modern", "classic": "Classic", "rounded": "Rounded"}
-LAYOUTS = {"grid": "Grid (വലിയ ഫോട്ടോ, 2 എണ്ണം വീതം)", "list": "List (ചെറിയ ഫോട്ടോ, വിവരങ്ങൾ വശത്ത്)"}
-SHAPES = {"round": "വളഞ്ഞത്", "square": "നേരെയുള്ളത്"}
+LAYOUTS = {"grid": "Grid (big photos, 2 per row)", "list": "List (small photo, details beside)"}
+SHAPES = {"round": "Rounded", "square": "Square"}
 
 DEFAULT_SETTINGS = {
     "name": "", "tagline": "", "address": "", "phone": "", "whatsapp": "", "map_url": "", "about": "",
@@ -376,6 +376,7 @@ def item_dict(r, day=None):
         "off": round((r["price"] - r["offer_price"]) * 100 / r["price"]) if on and r["price"] else 0,
         "photo": url_for("media", name=r["photo"]) if r["photo"] else "",
         "type": r["food_type"] or "", "tags": tags, "available": bool(r["available"]), "gst": r["gst_rate"],
+        "sno": r["serial"],
     }
 
 
@@ -386,7 +387,15 @@ def menu_data(oid, for_public=False):
                        WHERE i.org_id = ? AND i.active = 1 ORDER BY COALESCE(c.sort, 9999), i.sort,
                        i.name COLLATE NOCASE""", (oid,))
     day = today()
-    return ([{"id": c["id"], "name": c["name"]} for c in cats], [item_dict(i, day) for i in items])
+    out = [item_dict(i, day) for i in items]
+    if for_public:  # serial numbers are for staff only
+        for i in out:
+            i.pop("sno", None)
+    return ([{"id": c["id"], "name": c["name"]} for c in cats], out)
+
+
+def next_serial(oid=None):
+    return (H.scalar("SELECT MAX(serial) FROM menu_items WHERE org_id = ? AND active = 1", (oid or H.org_id(),)) or 0) + 1
 
 
 def get_item(iid):
@@ -405,7 +414,7 @@ def save_photo(field, box, fit):
         return None
     name = H.save_image(f, box=box, max_kb=PHOTO_MAX_KB, fit=fit)
     if not name:
-        flash("ആ file ഒരു ഫോട്ടോ അല്ല, അത് ഒഴിവാക്കി.", "warning")
+        flash("That file is not a photo, so it was skipped.", "warning")
     return name
 
 
@@ -695,3 +704,4 @@ host = _Host()
 import cafe_admin  # noqa: E402,F401
 import cafe_pos  # noqa: E402,F401
 import cafe_people  # noqa: E402,F401
+import cafe_import  # noqa: E402,F401

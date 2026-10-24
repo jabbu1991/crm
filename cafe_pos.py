@@ -44,17 +44,17 @@ def next_no(db, table, col, date_col=None, day=None):
 
 def new_order(db, order_type, table_id=None, source="counter", **extra):
     if order_type not in ORDER_TYPES:
-        raise BillError("Order type ശരിയല്ല.")
+        raise BillError("The order type is not valid.")
     if order_type == "dine_in":
         if not table_id:
-            raise BillError("Dine-in-ന് ഒരു table തിരഞ്ഞെടുക്കുക.")
+            raise BillError("Choose a table for dine-in.")
         if not db.execute("SELECT 1 FROM cafe_tables WHERE id = ? AND org_id = ? AND active = 1",
                           (table_id, _org())).fetchone():
-            raise BillError("Table കണ്ടില്ല.")
+            raise BillError("Table not found.")
         busy = db.execute("SELECT id FROM cafe_orders WHERE table_id = ? AND status = 'open' AND org_id = ?",
                           (table_id, _org())).fetchone()
         if busy and source == "counter":
-            raise BillError("ഈ table-ൽ ഇപ്പോൾ തന്നെ ഒരു order ഉണ്ട്. Tables-ൽ നിന്ന് അത് തുറക്കുക.")
+            raise BillError("This table already has an order. Open it from Tables.")
     else:
         table_id = None
     ts, day = H.now(), today()
@@ -71,7 +71,7 @@ def parse_items(raw):
     """[{item_id, qty, note}] -> {(item_id, note): qty} (merged)."""
     out = {}
     if not isinstance(raw, list):
-        raise BillError("Items ശരിയല്ല.")
+        raise BillError("The items are not valid.")
     for r in raw[:MAX_LINES]:
         if not isinstance(r, dict):
             continue
@@ -96,9 +96,9 @@ def set_order_lines(db, order_id, wanted, allow_unavailable=False):
         item = db.execute("SELECT * FROM menu_items WHERE id = ? AND org_id = ? AND active = 1",
                           (key[0], _org())).fetchone()
         if not item:
-            raise BillError("Menu-വിൽ ഇല്ലാത്ത ഒരു item ഉണ്ട്. Page reload ചെയ്യുക.")
+            raise BillError("An item is no longer on the menu. Reload the page.")
         if not item["available"] and not allow_unavailable:
-            raise BillError(f"'{item['name']}' ഇപ്പോൾ ലഭ്യമല്ല (OFF ആണ്).")
+            raise BillError(f"'{item['name']}' is not available now (switched OFF).")
         db.execute("""INSERT INTO cafe_order_items (org_id, order_id, item_id, name, price, gst_rate, qty, note)
                       VALUES (?,?,?,?,?,?,?,?)""", (_org(), order_id, item["id"], item["name"],
                                                      effective_price(item, day), item["gst_rate"], qty, key[1] or None))
@@ -136,7 +136,7 @@ def discount_paise(payload, subtotal):
         return int(round(subtotal * pct / 100))
     v = to_paise(d.get("value"), 0)
     if v is None:
-        raise BillError("Discount തുക ശരിയല്ല.")
+        raise BillError("The discount amount is not valid.")
     return v
 
 
@@ -147,21 +147,21 @@ def settle(db, order, payload):
     lines = [dict(r) for r in db.execute("SELECT * FROM cafe_order_items WHERE order_id = ? AND qty > 0 ORDER BY id",
                                          (order["id"],)).fetchall()]
     if not lines:
-        raise BillError("Bill-ൽ ഒരു item എങ്കിലും വേണം.")
+        raise BillError("A bill needs at least one item.")
     mode = payload.get("payment_mode")
     if mode not in PAYMENT_MODES:
-        raise BillError("Payment രീതി തിരഞ്ഞെടുക്കുക (Cash / UPI / Card).")
+        raise BillError("Choose the payment mode (Cash / UPI / Card).")
     subtotal = sum(l["price"] * l["qty"] for l in lines)
     disc = discount_paise(payload, subtotal)
     if disc and not can("bill_discount"):
-        raise BillError("Discount കൊടുക്കാൻ താങ്കൾക്ക് അനുവാദമില്ല.")
+        raise BillError("You are not allowed to give discounts.")
     t = compute_totals(lines, st["gst_on"], st["gst_inclusive"], disc)
 
     cust = payload.get("customer") or {}
     cid = order["customer_id"]
     phone = cust.get("phone") or order["cust_phone"]
     if phone and not phone10(phone):
-        raise BillError("WhatsApp നമ്പർ 10 അക്കം ആയിരിക്കണം.")
+        raise BillError("The WhatsApp number must have 10 digits.")
     if phone10(phone):
         cid = upsert_customer(db, oid, phone, cust.get("name") or order["cust_name"],
                               cust.get("birthday") or order["birthday"], cust.get("ref") or order["referral_code"],
@@ -171,12 +171,12 @@ def settle(db, order, payload):
     redeem = to_int(payload.get("redeem_points"), 0, 0)
     if redeem:
         if not customer:
-            raise BillError("Points ഉപയോഗിക്കാൻ customer-ന്റെ WhatsApp നമ്പർ വേണം.")
+            raise BillError("Enter the customer's WhatsApp number to use points.")
         if not can("points_redeem"):
-            raise BillError("Points കുറക്കാൻ താങ്കൾക്ക് അനുവാദമില്ല.")
+            raise BillError("You are not allowed to redeem points.")
         cap = max_redeemable(customer["points"], t["gross"], st)
         if redeem > cap:
-            raise BillError(f"ഈ bill-ൽ പരമാവധി {cap} points മാത്രമേ ഉപയോഗിക്കാൻ പറ്റൂ.")
+            raise BillError(f"At most {cap} points can be used on this bill.")
     pv = redeem * point_value(st)
     payable = max(0, t["gross"] - pv)
     total = round_rupee(payable)
@@ -278,40 +278,40 @@ def pos_save():
     try:
         payload = json.loads(request.form.get("payload") or "{}")
     except ValueError:
-        return jsonify(ok=False, error="Data ശരിയല്ല. Page reload ചെയ്യുക."), 400
+        return jsonify(ok=False, error="Invalid data. Reload the page."), 400
     if not isinstance(payload, dict):
-        return jsonify(ok=False, error="Data ശരിയല്ല."), 400
+        return jsonify(ok=False, error="Invalid data."), 400
     action = payload.get("action")
     if action not in ("kot", "save", "bill"):
-        return jsonify(ok=False, error="Action ശരിയല്ല."), 400
+        return jsonify(ok=False, error="Invalid action."), 400
     db = H.get_db()
     try:
         wanted = parse_items(payload.get("items"))
         if not wanted and action != "save":
-            raise BillError("ഒരു item എങ്കിലും ചേർക്കുക.")
+            raise BillError("Add at least one item.")
         cust = payload.get("customer") or {}
         phone = (cust.get("phone") or "").strip()
         if phone and not phone10(phone):
-            raise BillError("WhatsApp നമ്പർ 10 അക്കം ആയിരിക്കണം.")
+            raise BillError("The WhatsApp number must have 10 digits.")
         if payload.get("order_id"):
             order = db.execute("SELECT * FROM cafe_orders WHERE id = ? AND org_id = ?",
                                (to_int(payload["order_id"]), _org())).fetchone()
             if not order or order["status"] != "open":
-                raise BillError("ഈ order ഇതിനകം bill ചെയ്തു / cancel ചെയ്തു. Tables-ൽ നിന്ന് വീണ്ടും തുറക്കുക.")
+                raise BillError("This order was already billed or cancelled. Open it again from Tables.")
             otype = payload.get("order_type") or order["order_type"]
             table_id = to_int(payload.get("table_id"), 0) or None
             if otype not in ORDER_TYPES:
-                raise BillError("Order type ശരിയല്ല.")
+                raise BillError("The order type is not valid.")
             if otype == "dine_in":
                 if not table_id:
-                    raise BillError("Dine-in-ന് table തിരഞ്ഞെടുക്കുക.")
+                    raise BillError("Choose a table for dine-in.")
                 if table_id != order["table_id"]:
                     if not db.execute("SELECT 1 FROM cafe_tables WHERE id = ? AND org_id = ? AND active = 1",
                                       (table_id, _org())).fetchone():
-                        raise BillError("Table കണ്ടില്ല.")
+                        raise BillError("Table not found.")
                     if db.execute("SELECT 1 FROM cafe_orders WHERE table_id = ? AND status = 'open' AND id != ?",
                                   (table_id, order["id"])).fetchone():
-                        raise BillError("ആ table-ൽ വേറെ order ഉണ്ട്.")
+                        raise BillError("That table has another order.")
             else:
                 table_id = None
             db.execute("UPDATE cafe_orders SET order_type = ?, table_id = ?, cust_name = ?, cust_phone = ?, address = ?,"
@@ -332,7 +332,7 @@ def pos_save():
         if action == "kot":
             kot_id = make_kot(db, order_id)
             if not kot_id:
-                raise BillError("Kitchen-ലേക്ക് അയക്കാൻ പുതിയ items ഇല്ല.")
+                raise BillError("No new items to send to the kitchen.")
         elif action == "bill":
             order = db.execute("SELECT * FROM cafe_orders WHERE id = ?", (order_id,)).fetchone()
             bill_id, kot_id = settle(db, order, payload)
@@ -392,7 +392,7 @@ def order_action(order_id, action):
         abort(403)
     if action == "confirm":
         if o["status"] != "pending":
-            flash("ഈ order ഇതിനകം കൈകാര്യം ചെയ്തു.", "warning")
+            flash("This order was already handled.", "warning")
             return redirect(url_for("cafe.orders"))
         if o["order_type"] == "dine_in" and o["table_id"] and db.execute(
                 "SELECT 1 FROM cafe_orders WHERE table_id = ? AND status = 'open' AND id != ?",
@@ -418,7 +418,7 @@ def order_action(order_id, action):
             db.execute("UPDATE cafe_orders SET customer_id = COALESCE(customer_id, ?) WHERE id = ?", (cid, run_id))
         kot = make_kot(db, run_id) if st["kot_on"] else None
         db.commit()
-        flash(f"Order #{o['order_no']} confirm ചെയ്തു." + (" KOT തയ്യാറാണ്." if kot else ""), "success")
+        flash(f"Order #{o['order_no']} confirmed." + (" The KOT is ready." if kot else ""), "success")
         if kot:
             return redirect(url_for("cafe.orders", kot=kot))
         return redirect(url_for("cafe.orders"))
@@ -429,7 +429,7 @@ def order_action(order_id, action):
         db.execute("UPDATE cafe_orders SET status = 'rejected', reject_reason = ?, confirmed_by = ?, updated_at = ?"
                    " WHERE id = ?", (reason, g.user["id"], ts, o["id"]))
         db.commit()
-        flash(f"Order #{o['order_no']} reject ചെയ്തു.", "success")
+        flash(f"Order #{o['order_no']} rejected.", "success")
         return redirect(url_for("cafe.orders"))
     if action == "ready":
         if o["status"] != "open":
@@ -444,12 +444,12 @@ def order_action(order_id, action):
             abort(403)
         reason = (request.form.get("reason") or "").strip()[:200]
         if not reason:
-            flash("Cancel ചെയ്യാനുള്ള കാരണം എഴുതുക.", "error")
+            flash("Enter the reason for cancelling.", "error")
             return redirect(url_for("cafe.orders"))
         db.execute("UPDATE cafe_orders SET status = 'cancelled', reject_reason = ?, updated_at = ? WHERE id = ?",
                    (reason, ts, o["id"]))
         db.commit()
-        flash(f"Order #{o['order_no']} cancel ചെയ്തു.", "success")
+        flash(f"Order #{o['order_no']} cancelled.", "success")
         return redirect(url_for("cafe.orders"))
     if action == "kot":
         if o["status"] != "open":
@@ -457,7 +457,7 @@ def order_action(order_id, action):
         kot = make_kot(db, o["id"])
         db.commit()
         if not kot:
-            flash("പുതിയ items ഇല്ല.", "warning")
+            flash("No new items.", "warning")
             return redirect(url_for("cafe.orders"))
         return redirect(url_for("cafe.kot_print", kid=kot, auto=1))
     abort(404)
@@ -580,11 +580,11 @@ def bill_print(bid):
 def bill_cancel(bid):
     b = get_bill(bid)
     if b["status"] != "paid":
-        flash("ഈ bill ഇതിനകം cancel ചെയ്തു.", "warning")
+        flash("This bill is already cancelled.", "warning")
         return redirect(url_for("cafe.bill_view", bid=bid))
     reason = (request.form.get("reason") or "").strip()[:200]
     if not reason:
-        flash("Cancel ചെയ്യാനുള്ള കാരണം എഴുതുക.", "error")
+        flash("Enter the reason for cancelling.", "error")
         return redirect(url_for("cafe.bill_view", bid=bid))
     db = H.get_db()
     oid, ts = _org(), H.now()
@@ -606,7 +606,7 @@ def bill_cancel(bid):
         db.execute("UPDATE customers SET visits = MAX(0, visits - 1), total_spent = MAX(0, total_spent - ?),"
                    " updated_at = ? WHERE id = ?", (b["total"], ts, cid))
     db.commit()
-    flash(f"Bill {label} cancel ചെയ്തു. Points തിരികെ ക്രമീകരിച്ചു.", "success")
+    flash(f"Bill {label} cancelled. Points were adjusted back.", "success")
     return redirect(url_for("cafe.bill_view", bid=bid))
 
 
@@ -682,47 +682,47 @@ def public_order(code):
     st = get_settings(org["id"])
     types = [k for k in ("dine_in", "takeaway", "delivery") if st["order_" + k]]
     if not st["menu_on"] or not st["online_on"] or not types:
-        return jsonify(ok=False, error="Online order ഇപ്പോൾ ലഭ്യമല്ല."), 400
+        return jsonify(ok=False, error="Online ordering is not available right now."), 400
     ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
     now_ts = time.time()
     hits = [t for t in _order_hits.get(ip, []) if now_ts - t < 3600]
     if len(hits) >= 10:
-        return jsonify(ok=False, error="ഒരുപാട് orders. കുറച്ച് സമയം കഴിഞ്ഞ് ശ്രമിക്കുക."), 429
+        return jsonify(ok=False, error="Too many orders. Please try again later."), 429
     try:
         p = json.loads(request.form.get("payload") or "{}")
         assert isinstance(p, dict)
     except (ValueError, AssertionError):
-        return jsonify(ok=False, error="Data ശരിയല്ല."), 400
+        return jsonify(ok=False, error="Invalid data."), 400
     if p.get("website"):  # honeypot
         return jsonify(ok=True, url=url_for("cafe.public_menu", code=code))
     otype = p.get("type")
     name = (p.get("name") or "").strip()[:80]
     phone = phone10(p.get("phone"))
     if otype not in types:
-        return jsonify(ok=False, error="Order type തിരഞ്ഞെടുക്കുക."), 400
+        return jsonify(ok=False, error="Choose an order type."), 400
     if not name or not phone:
-        return jsonify(ok=False, error="പേരും 10 അക്ക WhatsApp നമ്പറും കൊടുക്കുക."), 400
+        return jsonify(ok=False, error="Enter a name and a 10-digit WhatsApp number."), 400
     address = (p.get("address") or "").strip()[:300]
     if otype == "delivery" and len(address) < 8:
-        return jsonify(ok=False, error="Delivery address കൊടുക്കുക."), 400
+        return jsonify(ok=False, error="Please enter the delivery address."), 400
     oid = org["id"]
     db = H.get_db()
     if db.execute("SELECT COUNT(*) FROM cafe_orders WHERE org_id = ? AND status = 'pending' AND cust_phone = ?",
                   (oid, phone)).fetchone()[0] >= 3:
-        return jsonify(ok=False, error="ഈ നമ്പറിൽ നിന്ന് confirm ആകാത്ത orders ഉണ്ട്. കുറച്ച് കാത്തിരിക്കുക."), 429
+        return jsonify(ok=False, error="There are unconfirmed orders from this number. Please wait a little."), 429
     table_id = None
     if otype == "dine_in":
         table_id = to_int(p.get("table"), 0)
         if not db.execute("SELECT 1 FROM cafe_tables WHERE id = ? AND org_id = ? AND active = 1", (table_id, oid)).fetchone():
-            return jsonify(ok=False, error="Table തിരഞ്ഞെടുക്കുക."), 400
+            return jsonify(ok=False, error="Please choose your table."), 400
     try:
         wanted = parse_items(p.get("items"))
     except BillError as e:
         return jsonify(ok=False, error=str(e)), 400
     if not wanted:
-        return jsonify(ok=False, error="Cart-ൽ items ഇല്ല."), 400
+        return jsonify(ok=False, error="Your cart is empty."), 400
     if sum(wanted.values()) > 100:
-        return jsonify(ok=False, error="ഒരു order-ൽ 100 items വരെ."), 400
+        return jsonify(ok=False, error="Up to 100 items per order."), 400
     _order_hits[ip] = hits + [now_ts]
     # Run as the organization (no logged-in user here).
     saved_org = g.get("org")

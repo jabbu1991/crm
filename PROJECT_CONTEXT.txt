@@ -41,10 +41,10 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py (44 pytest tests, all passing); cafe*.py (cafe module),
+  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py (46 pytest tests, all passing); cafe*.py (cafe module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 8 (v7 = org_list_settings, v8 = cafe module). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 9 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -176,6 +176,12 @@ Digital Catalogue (built 16 Oct 2026)
 - Expenses / other income with categories and bill photo; Analysis: income, expense, profit, daily line chart,
   expense category donut, Cash/UPI/Card, 6-month comparison, top items, staff-wise; CSV exports.
 - Not built yet (ideas): online payment, WhatsApp API auto messages, inventory/stock, offline mode.
+- All cafe screens are in ENGLISH (owner's request, 24 Oct). Owner discusses in Malayalam, software text stays English.
+- Menu items have a serial number (S.No), auto 1, 2, 3... (editable, unique per cafe). Staff only: shown in Menu list,
+  billing tiles, Excel. Billing: type S.No + Enter to add the item. NOT shown on the customer menu or bill.
+- Bulk menu (Menu > Excel upload / photos): download empty template or current menu (.xlsx, openpyxl), upload ->
+  preview (new / update / problem rows) -> Import. Match by S.No, else item name. New categories auto-created.
+  Bulk photos: file name = item name or S.No (e.g. 'Kerala Chai.jpg', '12.jpg'), each cropped square under 50 KB.
 - Demo: demo.bat creates "Chai Corner" (cafe_admin / cafe_cashier, password demo1234), menu at /m/chai.
 
 ======================================================================

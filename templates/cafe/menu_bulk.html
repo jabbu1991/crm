@@ -1,0 +1,40 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Menu upload{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📥 Upload the menu from Excel</h1><a class="btn" href="{{ url_for('cafe.menu') }}">← Menu</a></div>
+<div class="grid-2">
+  <section class="card">
+    <h2>1. Download a sheet</h2>
+    <p><a class="btn btn-big" href="{{ url_for('cafe.menu_template') }}">⬇️ Empty template (Excel)</a></p>
+    <p><a class="btn btn-big" href="{{ url_for('cafe.menu_export') }}">⬇️ Current menu ({{ count }} items, Excel)</a></p>
+    <p class="muted small">Columns: {{ columns|join(', ') }}. <b>Item name</b> and <b>Price</b> are required.
+      To change many prices at once: download the current menu, edit the prices in Excel and upload it again.</p>
+  </section>
+  <section class="card">
+    <h2>2. Upload the filled sheet</h2>
+    {% if not viewing %}
+    <form method="post" action="{{ url_for('cafe.menu_import') }}" enctype="multipart/form-data" class="form">{{ csrf() }}
+      <label>Excel file (.xlsx)<input type="file" name="sheet" accept=".xlsx,.xlsm,.csv" required></label>
+      <button class="btn btn-primary btn-big">Upload and preview</button>
+    </form>
+    {% endif %}
+    <ul class="small muted">
+      <li>You see a preview first. Nothing is saved until you press <b>Import</b>.</li>
+      <li>Rows with the same S.No (or the same item name) update that item. Other rows are added as new items.</li>
+      <li>New categories are created automatically. Items not in the sheet are not changed.</li>
+    </ul>
+  </section>
+</div>
+<section class="card narrow">
+  <h2>3. Upload many photos at once</h2>
+  <p>Name each photo after the item, e.g. <code>Chicken Shawarma.jpg</code>, or after its S.No, e.g. <code>12.jpg</code>. The software matches it to the right item.
+    {% if no_photo %}<b>{{ no_photo }} items have no photo yet.</b>{% endif %}</p>
+  {% if not viewing %}
+  <form method="post" action="{{ url_for('cafe.menu_photos') }}" enctype="multipart/form-data" class="form">{{ csrf() }}
+    <label>Photos <span class="photo-hint">📷 Size: 600 × 600 px (square), under 50 KB</span><input type="file" name="photos" accept="image/*" multiple required></label>
+    <p class="muted small">Big photos are fine: each one is cropped square and shrunk to under 50 KB.</p>
+    <button class="btn btn-primary">Upload photos</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

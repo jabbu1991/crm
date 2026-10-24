@@ -4,7 +4,7 @@ The schema version lives in SQLite's PRAGMA user_version:
   0 = original single-workspace CRM
   1 = multi-tenant organizations, products, follow-ups, password tokens
   2 = audit log (Super Admin access to client workspaces)
-  ... 8 = cafe module (menu, billing, online orders, customers, points, expenses)
+  ... 8 = cafe module (menu, billing, online orders, customers, points, expenses), 9 = menu item serial numbers
 Before migrating a database that already holds data, a full backup is written to
 instance/backups/. Migrations only ADD tables/columns; no existing data is dropped.
 """
@@ -14,7 +14,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -802,8 +802,24 @@ def _migrate_v8(conn):
         conn.execute(stmt)
 
 
+def _migrate_v9(conn):
+    """Menu items get a serial number (S.No) for quick billing and Excel import. Existing items are numbered 1, 2, 3..."""
+    if "serial" not in {r[1] for r in conn.execute("PRAGMA table_info(menu_items)")}:
+        conn.execute("ALTER TABLE menu_items ADD COLUMN serial INTEGER")
+    for (oid,) in conn.execute("SELECT DISTINCT org_id FROM menu_items").fetchall():
+        rows = conn.execute("""SELECT i.id FROM menu_items i LEFT JOIN menu_categories c ON c.id = i.category_id
+                               WHERE i.org_id = ? AND i.active = 1 AND i.serial IS NULL
+                               ORDER BY COALESCE(c.sort, 9999), i.sort, i.name COLLATE NOCASE, i.id""", (oid,)).fetchall()
+        start = conn.execute("SELECT COALESCE(MAX(serial), 0) FROM menu_items WHERE org_id = ? AND active = 1",
+                             (oid,)).fetchone()[0]
+        for n, (iid,) in enumerate(rows, start=start + 1):
+            conn.execute("UPDATE menu_items SET serial = ? WHERE id = ?", (n, iid))
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_menu_items_serial ON menu_items(org_id, serial)"
+                 " WHERE serial IS NOT NULL AND active = 1")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
-              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8)]
+              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9)]
 
 
 def migrate(db_path):

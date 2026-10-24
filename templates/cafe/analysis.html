@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Analysis{% endblock %}
 {% block content %}
-<div class="page-head"><h1>📊 വരുമാനം &amp; ചെലവ്</h1>
+<div class="page-head"><h1>📊 Income &amp; expenses</h1>
   <div class="actions">
     <a class="btn btn-sm" href="{{ url_for('cafe.export', name='daily', p=p, **{'from': a, 'to': b}) }}">⬇️ Daily CSV</a>
     <a class="btn btn-sm" href="{{ url_for('cafe.export', name='items', p=p, **{'from': a, 'to': b}) }}">⬇️ Items CSV</a>
@@ -9,38 +9,38 @@
   </div>
 </div>
 <form class="card filters" method="get">
-  {% for k, v in (('today', 'ഇന്ന്'), ('week', '7 ദിവസം'), ('month', 'ഈ മാസം'), ('last_month', 'കഴിഞ്ഞ മാസം')) %}
+  {% for k, v in (('today', 'Today'), ('week', 'Last 7 days'), ('month', 'This month'), ('last_month', 'Last month')) %}
   <a class="chip {{ 'on' if p == k }}" href="{{ url_for('cafe.analysis', p=k) }}">{{ v }}</a>{% endfor %}
   <input type="hidden" name="p" value="custom">
   <label class="inline-label">From <input type="date" name="from" value="{{ a }}"></label>
   <label class="inline-label">To <input type="date" name="to" value="{{ b }}"></label>
-  <button class="btn btn-sm {{ 'btn-primary' if p == 'custom' }}">കാണിക്കുക</button>
+  <button class="btn btn-sm {{ 'btn-primary' if p == 'custom' }}">Show</button>
 </form>
 
 <div class="stats">
-  <div class="stat stat-income"><b>{{ tot.income|rs0 }}</b><span>വരുമാനം{% if tot.other %} <small>(bills {{ tot.sales|rs0 }} + മറ്റ് {{ tot.other|rs0 }})</small>{% endif %}</span></div>
-  <div class="stat stat-expense"><b>{{ tot.expense|rs0 }}</b><span>ചെലവ്</span></div>
-  <div class="stat {{ 'stat-good' if tot.profit >= 0 else 'stat-hot' }}"><b>{{ tot.profit|rs0 }}</b><span>{{ 'ലാഭം' if tot.profit >= 0 else 'നഷ്ടം' }}</span></div>
-  <div class="stat stat-muted"><b>{{ tot.bills }}</b><span>Bills · ശരാശരി {{ tot.avg|rs0 }}</span></div>
+  <div class="stat stat-income"><b>{{ tot.income|rs0 }}</b><span>Income{% if tot.other %} <small>(bills {{ tot.sales|rs0 }} + other {{ tot.other|rs0 }})</small>{% endif %}</span></div>
+  <div class="stat stat-expense"><b>{{ tot.expense|rs0 }}</b><span>Expenses</span></div>
+  <div class="stat {{ 'stat-good' if tot.profit >= 0 else 'stat-hot' }}"><b>{{ tot.profit|rs0 }}</b><span>{{ 'Profit' if tot.profit >= 0 else 'Loss' }}</span></div>
+  <div class="stat stat-muted"><b>{{ tot.bills }}</b><span>Bills · average {{ tot.avg|rs0 }}</span></div>
 </div>
 
 <section class="card chart-card">
-  <h2>ദിവസവും വരുമാനവും ചെലവും <span class="legend"><i style="background:{{ SERIES[0] }}"></i>വരുമാനം <i style="background:{{ SERIES[1] }}"></i>ചെലവ്</span></h2>
+  <h2>Daily income and expenses <span class="legend"><i style="background:{{ SERIES[0] }}"></i>Income <i style="background:{{ SERIES[1] }}"></i>Expenses</span></h2>
   {{ line }}
-  <details><summary class="small">Table ആയി കാണുക</summary>
-    <table class="table compact"><thead><tr><th>തീയതി</th><th class="num">Bills</th><th class="num">വിൽപ്പന</th><th class="num">മറ്റ് വരുമാനം</th><th class="num">ചെലവ്</th><th class="num">ലാഭം</th></tr></thead>
+  <details><summary class="small">Show as a table</summary>
+    <table class="table compact"><thead><tr><th>Date</th><th class="num">Bills</th><th class="num">Sales</th><th class="num">Other income</th><th class="num">Expenses</th><th class="num">Profit</th></tr></thead>
     <tbody>{% for r in days|reverse %}<tr><td>{{ r.date }}</td><td class="num">{{ r.bills }}</td><td class="num">{{ r.sales|rs }}</td><td class="num">{{ r.other|rs }}</td><td class="num">{{ r.expense|rs }}</td><td class="num {{ 'num-neg' if r.profit < 0 }}">{{ r.profit|rs }}</td></tr>{% endfor %}</tbody></table>
   </details>
 </section>
 
 <div class="grid-2">
   <section class="card chart-card">
-    <h2>ഏത് category-ക്ക് എത്ര ചെലവ്</h2>
+    <h2>Expenses by category</h2>
     {% if donut %}
     <div class="donut-wrap">{{ donut }}
       <ul class="donut-legend">{% for lab, v in parts %}<li><i style="background:{{ SERIES[loop.index0 % SERIES|length] }}"></i>{{ lab }} <b>{{ v|rs0 }}</b> <span class="muted">{{ (v * 100 / tot.expense)|round|int if tot.expense else 0 }}%</span></li>{% endfor %}</ul>
     </div>
-    {% else %}<p class="muted">ഈ ദിവസങ്ങളിൽ ചെലവ് ചേർത്തിട്ടില്ല. <a href="{{ url_for('cafe.expenses') }}">Expenses</a> page-ൽ ചേർക്കാം.</p>{% endif %}
+    {% else %}<p class="muted">No expenses entered for these days. <a href="{{ url_for('cafe.expenses') }}">Expenses</a> page to add them.</p>{% endif %}
   </section>
   <section class="card chart-card">
     <h2>Cash / UPI / Card</h2>
@@ -48,32 +48,32 @@
     <div class="donut-wrap">{{ mode_donut }}
       <ul class="donut-legend">{% for m in modes %}<li><i style="background:{{ SERIES[loop.index0 % SERIES|length] }}"></i>{{ m.k }} <b>{{ m.total|rs0 }}</b> <span class="muted">{{ m.n }} bills</span></li>{% endfor %}</ul>
     </div>
-    {% else %}<p class="muted">Bills ഇല്ല.</p>{% endif %}
+    {% else %}<p class="muted">No bills.</p>{% endif %}
   </section>
 </div>
 
 <section class="card chart-card">
-  <h2>മാസങ്ങൾ തമ്മിൽ <span class="legend"><i style="background:{{ SERIES[0] }}"></i>വരുമാനം <i style="background:{{ SERIES[1] }}"></i>ചെലവ് <i style="background:{{ SERIES[2] }}"></i>ലാഭം</span></h2>
+  <h2>Month by month <span class="legend"><i style="background:{{ SERIES[0] }}"></i>Income <i style="background:{{ SERIES[1] }}"></i>Expenses <i style="background:{{ SERIES[2] }}"></i>Profit</span></h2>
   {{ bars }}
-  <table class="table compact"><thead><tr><th>മാസം</th><th class="num">വരുമാനം</th><th class="num">ചെലവ്</th><th class="num">ലാഭം</th></tr></thead>
+  <table class="table compact"><thead><tr><th>Month</th><th class="num">Income</th><th class="num">Expenses</th><th class="num">Profit</th></tr></thead>
     <tbody>{% for r in month_rows|reverse %}<tr><td>{{ r.label }}</td><td class="num">{{ r.income|rs0 }}</td><td class="num">{{ r.expense|rs0 }}</td><td class="num {{ 'num-neg' if r.profit < 0 }}">{{ r.profit|rs0 }}</td></tr>{% endfor %}</tbody></table>
 </section>
 
 <div class="grid-2">
   <section class="card">
-    <h2>കൂടുതൽ വിറ്റ items</h2>
+    <h2>Top selling items</h2>
     {% set maxq = (top_items|map(attribute='qty')|max) if top_items else 1 %}
     <ul class="bars">{% for t in top_items %}<li><a href="#"><span class="bar-label">{{ t.name }}</span><span class="bar-track"><span class="bar-fill" style="width: {{ (t.qty / maxq * 100)|round }}%"></span></span><span class="bar-count">{{ t.qty }}</span></a></li>
-    {% else %}<li class="muted">Bills ഇല്ല.</li>{% endfor %}</ul>
+    {% else %}<li class="muted">No bills.</li>{% endfor %}</ul>
   </section>
   <section class="card">
-    <h2>മറ്റ് കണക്കുകൾ</h2>
+    <h2>Other figures</h2>
     <dl class="details">
       {% for t in types %}<dt>{{ ORDER_TYPES.get(t.k, t.k) }}</dt><dd>{{ t.total|rs0 }} <span class="muted">({{ t.n }} bills)</span></dd>{% endfor %}
       <dt>Discount</dt><dd>{{ extra.discount|rs0 }}</dd>
-      <dt>Points കൊണ്ട് കുറച്ചത്</dt><dd>{{ extra.points_value|rs0 }}</dd>
+      <dt>Paid with points</dt><dd>{{ extra.points_value|rs0 }}</dd>
       <dt>GST</dt><dd>{{ extra.tax|rs }}</dd>
-      <dt>Cancel ചെയ്ത bills</dt><dd>{{ extra.cancelled }}</dd>
+      <dt>Cancelled bills</dt><dd>{{ extra.cancelled }}</dd>
     </dl>
     {% if staff %}<h2>Staff-wise</h2>
     <dl class="details">{% for s in staff %}<dt>{{ s.name }}</dt><dd>{{ s.total|rs0 }} <span class="muted">({{ s.n }} bills)</span></dd>{% endfor %}</dl>{% endif %}

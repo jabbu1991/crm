@@ -6,11 +6,11 @@
   <div class="actions">{% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
     {% if can('settings_edit') %}<a class="btn" href="{{ url_for('cafe.settings') }}#menu">Online order: {{ 'ON ✅' if st.online_on else 'OFF' }}</a>{% endif %}</div>
 </div>
-{% if request.args.kot %}<div class="flash flash-success">KOT തയ്യാറാണ്. <a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=request.args.kot, auto=1) }}">🖨 KOT print ചെയ്യുക</a></div>{% endif %}
+{% if request.args.kot %}<div class="flash flash-success">The KOT is ready. <a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=request.args.kot, auto=1) }}">🖨 Print KOT</a></div>{% endif %}
 
 {% if can('orders_online') %}
 <section class="card pending-card {{ 'has' if pending }}">
-  <h2>🔔 Online orders: Confirm ചെയ്യാനുള്ളവ ({{ pending|length }})</h2>
+  <h2>🔔 Online orders waiting for confirmation ({{ pending|length }})</h2>
   {% for o in pending %}
   <div class="ord ord-pending">
     <div class="ord-head"><b>#{{ o.order_no }}</b> {{ type_label(o) }} <span class="muted small">{{ o.created_at[11:16] }}</span> <b class="ord-amt">{{ o.amount|rs }}</b></div>
@@ -23,16 +23,16 @@
       <form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='confirm') }}" class="inline">{{ csrf() }}<button class="btn btn-primary">✅ Confirm</button></form>
       <details class="reject"><summary class="btn btn-danger">❌ Reject</summary>
         <form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='reject') }}" class="inline-form">{{ csrf() }}
-          <input name="reason" placeholder="കാരണം (ഉദാ: Item തീർന്നു)" maxlength="200"><button class="btn btn-sm btn-danger">Reject ചെയ്യുക</button></form>
+          <input name="reason" placeholder="Reason (e.g. item finished)" maxlength="200"><button class="btn btn-sm btn-danger">Reject</button></form>
       </details>
     </div>{% endif %}
   </div>
-  {% else %}<p class="muted">പുതിയ online orders ഒന്നുമില്ല. വന്നാൽ ഇവിടെ ശബ്ദത്തോടെ കാണും.</p>{% endfor %}
+  {% else %}<p class="muted">No new online orders. New ones appear here with a sound.</p>{% endfor %}
 </section>
 {% endif %}
 
 <section class="card">
-  <h2>നടക്കുന്ന orders ({{ running|length }})</h2>
+  <h2>Running orders ({{ running|length }})</h2>
   <div class="ord-grid">
   {% for o in running %}
   <div class="ord {{ 'ord-ready' if o.ready_at }}">
@@ -43,24 +43,24 @@
     <div class="small muted">{{ o.created_at[11:16] }}{% if o.created_name %} · {{ o.created_name }}{% endif %}</div>
     {% if not viewing %}
     <div class="actions">
-      <a class="btn btn-primary btn-sm" href="{{ url_for('cafe.pos', order=o.id) }}">🧾 Bill / items ചേർക്കുക</a>
-      {% if st.kot_on %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='kot') }}" class="inline">{{ csrf() }}<button class="btn btn-sm" title="പുതിയ items kitchen-ലേക്ക്">🍳 KOT</button></form>
-      {% if o.last_kot %}<a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=o.last_kot) }}" title="അവസാനത്തെ KOT വീണ്ടും">🖨</a>{% endif %}{% endif %}
+      <a class="btn btn-primary btn-sm" href="{{ url_for('cafe.pos', order=o.id) }}">🧾 Bill / add items</a>
+      {% if st.kot_on %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='kot') }}" class="inline">{{ csrf() }}<button class="btn btn-sm" title="Send new items to the kitchen">🍳 KOT</button></form>
+      {% if o.last_kot %}<a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=o.last_kot) }}" title="Reprint the last KOT">🖨</a>{% endif %}{% endif %}
       {% if not o.ready_at %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='ready') }}" class="inline">{{ csrf() }}<button class="btn btn-sm">✓ Ready</button></form>{% endif %}
-      {% if o.cust_phone and o.ready_at %}<a class="btn btn-sm" target="_blank" rel="noopener" href="https://wa.me/{{ o.cust_phone|wa_number }}?text={{ ('Hi ' ~ (o.cust_name or '') ~ ', your order #' ~ o.order_no ~ ' at ' ~ (st.name or g.org.name) ~ ' is ready! 🍽')|urlencode }}">🟢 Ready എന്ന് അറിയിക്കുക</a>{% endif %}
+      {% if o.cust_phone and o.ready_at %}<a class="btn btn-sm" target="_blank" rel="noopener" href="https://wa.me/{{ o.cust_phone|wa_number }}?text={{ ('Hi ' ~ (o.cust_name or '') ~ ', your order #' ~ o.order_no ~ ' at ' ~ (st.name or g.org.name) ~ ' is ready! 🍽')|urlencode }}">🟢 Tell them it's ready</a>{% endif %}
       {% if can('bill_cancel') %}
       <details class="reject"><summary class="btn btn-sm btn-danger">Cancel</summary>
         <form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='cancel') }}" class="inline-form">{{ csrf() }}
-          <input name="reason" placeholder="കാരണം *" required maxlength="200"><button class="btn btn-sm btn-danger">Cancel ചെയ്യുക</button></form>
+          <input name="reason" placeholder="Reason *" required maxlength="200"><button class="btn btn-sm btn-danger">Cancel order</button></form>
       </details>{% endif %}
     </div>{% endif %}
   </div>
-  {% else %}<p class="muted">ഇപ്പോൾ order ഒന്നുമില്ല.</p>{% endfor %}
+  {% else %}<p class="muted">No orders right now.</p>{% endfor %}
   </div>
 </section>
 
 <section class="card">
-  <h2>ഇന്ന് കഴിഞ്ഞവ</h2>
+  <h2>Done today</h2>
   <table class="table compact">
     <thead><tr><th>#</th><th>Type</th><th>Customer</th><th>Items</th><th class="num">Amount</th><th>Status</th></tr></thead>
     <tbody>
@@ -69,8 +69,8 @@
       <td>{{ o.cust_name or '' }}</td><td class="wrap small">{{ o.summary or '' }}</td><td class="num">{{ o.amount|rs }}</td>
       <td>{% if o.status == 'billed' %}<a class="badge b-done" href="{{ url_for('cafe.bill_view', bid=o.bill_id) if can('bills_view') else '#' }}">Billed</a>
         {% else %}<span class="badge b-lost">{{ 'Rejected' if o.status == 'rejected' else 'Cancelled' }}</span> <span class="small muted">{{ o.reject_reason or '' }}</span>
-        {% if o.status == 'rejected' and o.cust_phone %}<a class="small" target="_blank" rel="noopener" href="https://wa.me/{{ o.cust_phone|wa_number }}?text={{ ('Hi ' ~ (o.cust_name or '') ~ ', sorry, we could not accept your order #' ~ o.order_no ~ ' (' ~ (o.reject_reason or '') ~ '). – ' ~ (st.name or g.org.name))|urlencode }}">🟢 അറിയിക്കുക</a>{% endif %}{% endif %}</td>
-    </tr>{% else %}<tr><td colspan="6" class="muted">ഇന്ന് ഒന്നുമില്ല.</td></tr>{% endfor %}
+        {% if o.status == 'rejected' and o.cust_phone %}<a class="small" target="_blank" rel="noopener" href="https://wa.me/{{ o.cust_phone|wa_number }}?text={{ ('Hi ' ~ (o.cust_name or '') ~ ', sorry, we could not accept your order #' ~ o.order_no ~ ' (' ~ (o.reject_reason or '') ~ '). – ' ~ (st.name or g.org.name))|urlencode }}">🟢 Tell the customer</a>{% endif %}{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="6" class="muted">Nothing yet today.</td></tr>{% endfor %}
     </tbody>
   </table>
 </section>

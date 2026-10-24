@@ -17,13 +17,13 @@
   <div class="row-2">
     <label>Role
       {% if locked %}<input value="{{ ROLE_LABELS[member.role] }}" disabled><input type="hidden" name="role" value="{{ member.role }}">
-      {% else %}<select name="role"><option value="staff" {{ 'selected' if data.role == 'staff' }}>{{ 'Staff: താഴെ tick ചെയ്ത അധികാരങ്ങൾ മാത്രം' if app_type == 'cafe' else 'Staff: sees and edits only their own leads' }}</option>{% if is_admin() %}<option value="org_admin" {{ 'selected' if data.role == 'org_admin' }}>{{ 'Admin: എല്ലാം (billing, reports, settings, staff)' if app_type == 'cafe' else 'Organization Admin: all leads, reports and users' }}</option>{% endif %}</select>{% endif %}
+      {% else %}<select name="role"><option value="staff" {{ 'selected' if data.role == 'staff' }}>{{ 'Staff: only the permissions ticked below' if app_type == 'cafe' else 'Staff: sees and edits only their own leads' }}</option>{% if is_admin() %}<option value="org_admin" {{ 'selected' if data.role == 'org_admin' }}>{{ 'Admin: everything (billing, reports, settings, staff)' if app_type == 'cafe' else 'Organization Admin: all leads, reports and users' }}</option>{% endif %}</select>{% endif %}
     </label>
     <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if data.active }} {{ 'disabled' if locked }}> Account active (can log in)</label>
   </div>
   {% if cafe_perms %}
   <fieldset class="cafe-perms" id="cafe-perms">
-    <legend>☕ Cafe അധികാരങ്ങൾ <small class="muted">(Staff-ന് മാത്രം; Admin-ന് എല്ലാം ഉണ്ട്)</small></legend>
+    <legend>☕ Cafe permissions <small class="muted">(for staff only; admins have everything)</small></legend>
     <label>Role
       <select name="cafe_role" id="cafe-role">
         {% for k, v in cafe_perms.labels.items() %}<option value="{{ k }}" {{ 'selected' if cafe_perms.role == k }}>{{ v }}</option>{% endfor %}
@@ -34,7 +34,7 @@
       <label class="check {{ 'perm-locked' if k not in cafe_perms.allowed }}"><input type="checkbox" name="cafe_perm" value="{{ k }}" {{ 'checked' if k in cafe_perms.have }} {{ 'disabled' if k not in cafe_perms.allowed }}> {{ label }}</label>
       {% endfor %}
     </div>
-    <p class="muted small">Role തിരഞ്ഞെടുത്താൽ ticks തനിയെ വരും. ഏതെങ്കിലും tick മാറ്റിയാൽ Role "Custom" ആകും. Tick ഇല്ലാത്ത menu ആ staff-ന്റെ screen-ൽ കാണില്ല.</p>
+    <p class="muted small">Choosing a role fills in the ticks. Changing any tick makes the role "Custom". Menus that are not ticked are hidden from this staff member.</p>
     <script>
     (function () {
       var presets = {{ cafe_perms.presets|tojson }}, sel = document.getElementById("cafe-role"),

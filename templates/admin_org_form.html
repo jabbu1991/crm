@@ -15,9 +15,9 @@
       <label>Phone<input name="phone" value="{{ data.phone or '' }}"></label>
       <label>Email<input type="email" name="email" value="{{ data.email or '' }}"></label>
     </div>
-    <label>Software type * <small>(ഈ client-ന് എന്താണ് വേണ്ടത്)</small>
+    <label>Software type * <small>(what this client needs)</small>
       <select name="app_type">
-        {% for k, v in APP_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if (data.app_type or 'crm') == k }}>{{ v }}{{ ' — leads, follow-ups' if k == 'crm' else (' — billing, menu, QR, online orders' if k == 'cafe' else ' — രണ്ടും, മുകളിൽ switch') }}</option>{% endfor %}
+        {% for k, v in APP_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if (data.app_type or 'crm') == k }}>{{ v }}{{ ' — leads, follow-ups' if k == 'crm' else (' — billing, menu, QR, online orders' if k == 'cafe' else ' — both, with a switch at the top') }}</option>{% endfor %}
       </select>
     </label>
     <label>Address<textarea name="address" rows="2">{{ data.address or '' }}</textarea></label>

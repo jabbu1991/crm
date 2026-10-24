@@ -3,13 +3,13 @@
 {% block content %}
 <div class="pos" id="pos">
   <section class="pos-menu">
-    <div class="pos-search"><input id="pos-q" placeholder="🔍 Item തിരയുക" autocomplete="off"></div>
+    <div class="pos-search"><input id="pos-q" placeholder="🔍 Search item, or type S.No + Enter" autocomplete="off"></div>
     <div class="pos-cats" id="pos-cats"></div>
     <div class="pos-items" id="pos-items"></div>
   </section>
   <aside class="pos-cart card" id="pos-cart">
     <div class="pc-head">
-      <b id="pc-title">പുതിയ bill</b>
+      <b id="pc-title">New bill</b>
       <button type="button" class="linkbtn dark mobile-only" id="pc-close">✕ Menu</button>
     </div>
     <div class="seg" id="pc-types">
@@ -17,31 +17,31 @@
     </div>
     <select id="pc-table" class="pc-table"></select>
     <div class="pc-cust">
-      <input id="pc-phone" inputmode="tel" placeholder="📱 Customer WhatsApp നമ്പർ" autocomplete="off" maxlength="15">
-      <input id="pc-name" placeholder="പേര്" autocomplete="off" maxlength="80">
+      <input id="pc-phone" inputmode="tel" placeholder="📱 Customer WhatsApp number" autocomplete="off" maxlength="15">
+      <input id="pc-name" placeholder="Name" autocomplete="off" maxlength="80">
     </div>
     <div class="pc-custinfo" id="pc-custinfo" hidden></div>
     <div class="pc-newcust" id="pc-newcust" hidden>
-      {% if cfg.birthday_on %}<label class="small">🎂 ജന്മദിനം <input type="date" id="pc-bday"></label>{% endif %}
-      {% if cfg.referral_on %}<input id="pc-ref" placeholder="Refer ചെയ്ത ആളുടെ code / നമ്പർ (ഉണ്ടെങ്കിൽ)" maxlength="20">{% endif %}
+      {% if cfg.birthday_on %}<label class="small">🎂 Birthday <input type="date" id="pc-bday"></label>{% endif %}
+      {% if cfg.referral_on %}<input id="pc-ref" placeholder="Referred by (code or number, if any)" maxlength="20">{% endif %}
     </div>
     <textarea id="pc-address" rows="2" placeholder="Delivery address" hidden></textarea>
     <div class="pc-lines" id="pc-lines"></div>
-    <input id="pc-note" placeholder="Kitchen-ന് കുറിപ്പ് (ഉദാ: എരിവ് കുറച്ച്)" maxlength="300">
+    <input id="pc-note" placeholder="Note for the kitchen (e.g. less spicy)" maxlength="300">
     <div class="pc-totals" id="pc-totals"></div>
     <div class="pc-adjust">
       {% if cfg.perms.bill_discount %}
       <div class="pc-disc"><span>Discount</span><input id="pc-disc" inputmode="decimal" placeholder="0"><div class="seg seg-sm" id="pc-dmode"><button type="button" data-m="amt" class="on">₹</button><button type="button" data-m="pct">%</button></div></div>
       {% endif %}
       {% if cfg.loyalty and cfg.perms.points_redeem %}
-      <div class="pc-points" id="pc-points" hidden><span>🎁 Points ഉപയോഗിക്കുക</span><input id="pc-redeem" type="number" min="0" placeholder="0"><button type="button" class="btn btn-sm" id="pc-maxpts">Max</button></div>
+      <div class="pc-points" id="pc-points" hidden><span>🎁 Use points</span><input id="pc-redeem" type="number" min="0" placeholder="0"><button type="button" class="btn btn-sm" id="pc-maxpts">Max</button></div>
       {% endif %}
     </div>
     <div class="seg pc-pay" id="pc-pay">{% for m in cfg.modes %}<button type="button" data-mode="{{ m }}" class="{{ 'on' if loop.first }}">{{ {'Cash': '💵', 'UPI': '📲', 'Card': '💳'}[m] }} {{ m }}</button>{% endfor %}</div>
     <div class="pc-msg" id="pc-msg" hidden></div>
     <div class="pc-actions">
-      {% if cfg.kot_on %}<button type="button" class="btn btn-big" data-act="kot" title="Kitchen-ലേക്ക് അയക്കുക, order തുറന്നിരിക്കും">🍳 KOT</button>{% endif %}
-      <button type="button" class="btn btn-big" data-act="save" title="Bill ചെയ്യാതെ order സൂക്ഷിക്കുക">💾 Hold</button>
+      {% if cfg.kot_on %}<button type="button" class="btn btn-big" data-act="kot" title="Send to the kitchen; the order stays open">🍳 KOT</button>{% endif %}
+      <button type="button" class="btn btn-big" data-act="save" title="Keep the order open without billing">💾 Hold</button>
       <button type="button" class="btn btn-primary btn-big pc-bill" data-act="bill">🧾 Bill &amp; Print</button>
     </div>
   </aside>
@@ -73,7 +73,7 @@
   // ---- menu
   function renderCats() {
     var box = $("pos-cats"); box.innerHTML = "";
-    var all = el("button", "chip" + (state.cat === null ? " on" : ""), "എല്ലാം"); all.type = "button";
+    var all = el("button", "chip" + (state.cat === null ? " on" : ""), "All"); all.type = "button";
     all.onclick = function () { state.cat = null; renderCats(); renderItems(); }; box.appendChild(all);
     cfg.cats.forEach(function (c) {
       var b = el("button", "chip" + (state.cat === c.id ? " on" : ""), c.name); b.type = "button";
@@ -83,16 +83,19 @@
   function renderItems() {
     var box = $("pos-items"); box.innerHTML = "";
     var q = state.q.toLowerCase();
-    var list = cfg.items.filter(function (i) { return (state.cat === null || i.cat === state.cat) && (!q || i.name.toLowerCase().indexOf(q) >= 0); });
-    if (!list.length) { box.appendChild(el("p", "muted", cfg.items.length ? "ഒന്നും കണ്ടില്ല." : "Menu-വിൽ items ഇല്ല. Menu page-ൽ ചേർക്കുക.")); return; }
+    var isNum = /^\d+$/.test(q);
+    var list = cfg.items.filter(function (i) { return (state.cat === null || i.cat === state.cat || q) && (!q || i.name.toLowerCase().indexOf(q) >= 0 || (isNum && String(i.sno) === q)); });
+    if (isNum) list.sort(function (a, b) { return (String(b.sno) === q) - (String(a.sno) === q); });
+    if (!list.length) { box.appendChild(el("p", "muted", cfg.items.length ? "Nothing found." : "The menu has no items. Add them on the Menu page.")); return; }
     list.forEach(function (i) {
       var b = el("button", "pi" + (i.available ? "" : " pi-off")); b.type = "button";
       if (i.photo) { var im = el("img"); im.src = i.photo; im.alt = ""; im.loading = "lazy"; b.appendChild(im); }
+      if (i.sno) b.appendChild(el("span", "pi-sno", String(i.sno)));
       var nm = el("span", "pi-name"); if (i.type) nm.appendChild(el("span", "ft ft-" + i.type)); nm.appendChild(document.createTextNode(i.name)); b.appendChild(nm);
       var pr = el("span", "pi-price", rs(i.price)); if (i.mrp) { pr.appendChild(el("s", "muted", " " + rs(i.mrp))); } b.appendChild(pr);
       var q = qtyOf(i.id); if (q) b.appendChild(el("span", "pi-qty", String(q)));
       if (!i.available) b.appendChild(el("span", "pi-na", "OFF"));
-      b.onclick = function () { if (!i.available) { flash("'" + i.name + "' ഇപ്പോൾ ലഭ്യമല്ല (OFF)."); return; } add(i.id, 1); };
+      b.onclick = function () { if (!i.available) { flash("'" + i.name + "' is not available now (OFF)."); return; } add(i.id, 1); };
       box.appendChild(b);
     });
   }
@@ -128,7 +131,7 @@
   // ---- cart
   function renderLines() {
     var box = $("pc-lines"); box.innerHTML = "";
-    if (!state.lines.length) { box.appendChild(el("p", "muted center", "Item തൊട്ട് ചേർക്കുക")); return; }
+    if (!state.lines.length) { box.appendChild(el("p", "muted center", "Tap an item to add it")); return; }
     state.lines.forEach(function (l) {
       var row = el("div", "pl");
       var nm = el("div", "pl-name", l.name); if (l.note) nm.appendChild(el("small", "muted", " · " + l.note));
@@ -148,7 +151,7 @@
     function row(a, b, cls) { var r = el("div", "pt " + (cls || "")); r.appendChild(el("span", "", a)); r.appendChild(el("span", "", b)); box.appendChild(r); }
     row("Subtotal", rs(t.sub));
     if (t.disc) row("Discount", "−" + rs(t.disc));
-    if (cfg.gst_on && t.tax) row(cfg.gst_inclusive ? "GST (ഉൾപ്പെടെ)" : "GST", rs(t.tax));
+    if (cfg.gst_on && t.tax) row(cfg.gst_inclusive ? "GST (included)" : "GST", rs(t.tax));
     if (t.pv) row("Points (" + t.pts + ")", "−" + rs(t.pv));
     if (t.round) row("Round off", rs(t.round), "muted");
     row("Total", rs(t.total), "pt-total");
@@ -159,14 +162,14 @@
     document.querySelectorAll("#pc-types button").forEach(function (b) { b.classList.toggle("on", b.dataset.type === state.type); });
     var ts = $("pc-table"); ts.hidden = state.type !== "dine_in";
     ts.innerHTML = "";
-    var o = el("option", "", cfg.tables.length ? "— Table തിരഞ്ഞെടുക്കുക —" : "Tables ഇല്ല (Tables page-ൽ ചേർക്കുക)"); o.value = ""; ts.appendChild(o);
+    var o = el("option", "", cfg.tables.length ? "— Choose a table —" : "No tables (add them on the Tables page)"); o.value = ""; ts.appendChild(o);
     cfg.tables.forEach(function (t) {
-      var op = el("option", "", t.name + (t.busy && t.busy !== state.order ? " (order ഉണ്ട്)" : "")); op.value = t.id;
+      var op = el("option", "", t.name + (t.busy && t.busy !== state.order ? " (busy)" : "")); op.value = t.id;
       if (t.busy && t.busy !== state.order) op.disabled = true;
       if (t.id === state.table) op.selected = true; ts.appendChild(op);
     });
     $("pc-address").hidden = state.type !== "delivery";
-    $("pc-title").textContent = state.order ? "Order #" + cfg.order.no + (cfg.order.source === "online" ? " (online)" : "") : "പുതിയ bill";
+    $("pc-title").textContent = state.order ? "Order #" + cfg.order.no + (cfg.order.source === "online" ? " (online)" : "") : "New bill";
   }
   function render() { renderItems(); renderLines(); renderTotals(); }
 
@@ -185,7 +188,7 @@
         nc.hidden = true;
         if (pts) pts.hidden = !(cfg.loyalty && d.points > 0);
       } else {
-        info.hidden = false; info.textContent = "പുതിയ customer: പേര് ചേർത്താൽ മതി";
+        info.hidden = false; info.textContent = "New customer: just add the name";
         nc.hidden = !(document.getElementById("pc-bday") || document.getElementById("pc-ref"));
         if (pts) pts.hidden = true;
       }
@@ -195,12 +198,23 @@
   if ($("pc-maxpts")) $("pc-maxpts").onclick = function () {
     var ph = $("pc-phone").value.replace(/\D/g, "").slice(-10);
     fetch(cfg.urls.lookup + "?phone=" + ph + "&payable=" + totals().gross, {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
-      if (d.found) { $("pc-redeem").value = d.max_points || 0; renderTotals(); if (!d.max_points) flash("ഈ bill-ൽ points ഉപയോഗിക്കാൻ പറ്റില്ല" + (d.min_redeem ? " (കുറഞ്ഞത് " + d.min_redeem + " points വേണം)" : "") + "."); }
+      if (d.found) { $("pc-redeem").value = d.max_points || 0; renderTotals(); if (!d.max_points) flash("Points cannot be used on this bill" + (d.min_redeem ? " (at least " + d.min_redeem + " points needed)" : "") + "."); }
     });
   };
 
   // ---- events
-  $("pos-q").addEventListener("input", function () { state.q = this.value; renderItems(); });
+  $("pos-q").addEventListener("input", function () { state.q = this.value.trim(); renderItems(); });
+  $("pos-q").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    var v = this.value.trim(), hit = null;
+    if (/^\d+$/.test(v)) hit = cfg.items.find(function (i) { return String(i.sno) === v; });
+    if (!hit) { var m = cfg.items.filter(function (i) { return i.name.toLowerCase().indexOf(v.toLowerCase()) >= 0; }); if (m.length === 1) hit = m[0]; }
+    if (!hit) { flash(v ? "No item with S.No " + v + "." : "Type an S.No or a name."); return; }
+    if (!hit.available) { flash("'" + hit.name + "' is not available now (OFF)."); return; }
+    add(hit.id, 1); flash("Added: " + hit.name, true);
+    this.value = ""; state.q = ""; renderItems();
+  });
   document.querySelectorAll("#pc-types button").forEach(function (b) { b.onclick = function () { state.type = b.dataset.type; renderType(); }; });
   $("pc-table").onchange = function () { state.table = parseInt(this.value, 10) || null; };
   document.querySelectorAll("#pc-pay button").forEach(function (b) { b.onclick = function () { state.pay = b.dataset.mode; document.querySelectorAll("#pc-pay button").forEach(function (x) { x.classList.toggle("on", x === b); }); }; });
@@ -215,8 +229,8 @@
     b.onclick = function () {
       if (state.busy) return;
       var act = b.dataset.act;
-      if (!state.lines.length && !(act === "save" && state.order)) { flash("ഒരു item എങ്കിലും ചേർക്കുക."); return; }
-      if (state.type === "dine_in" && !state.table) { flash("Table തിരഞ്ഞെടുക്കുക."); return; }
+      if (!state.lines.length && !(act === "save" && state.order)) { flash("Add at least one item."); return; }
+      if (state.type === "dine_in" && !state.table) { flash("Choose a table."); return; }
       var t = totals();
       var payload = {
         action: act, order_id: state.order, order_type: state.type, table_id: state.table,
@@ -231,10 +245,10 @@
       state.busy = true; b.disabled = true;
       fetch(cfg.urls.save, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
         state.busy = false; b.disabled = false;
-        if (!d.ok) { flash(d.error || "Save ആയില്ല."); return; }
+        if (!d.ok) { flash(d.error || "Could not save."); return; }
         if (d.print) { window.location.href = d.print; return; }
         window.location.href = state.type === "dine_in" ? "{{ url_for('cafe.tables') }}" : "{{ url_for('cafe.orders') }}";
-      }).catch(function () { state.busy = false; b.disabled = false; flash("Internet പ്രശ്നം. വീണ്ടും ശ്രമിക്കുക (hotspot?)."); });
+      }).catch(function () { state.busy = false; b.disabled = false; flash("Internet problem. Try again (hotspot?)."); });
     };
   });
 

@@ -1,33 +1,34 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
 {% block title %}{{ 'Edit item' if item else 'New item' }}{% endblock %}
 {% block content %}
-<h1>{{ 'Edit: ' ~ item.name if item else 'Menu-വിൽ പുതിയ item' }}</h1>
+<h1>{{ 'Edit: ' ~ item.name if item else 'New menu item' }}</h1>
 <form method="post" enctype="multipart/form-data" class="card form narrow">
   {{ csrf() }}
-  <div class="row-2">
-    <label>Item-ന്റെ പേര് *<input name="name" required maxlength="80" value="{{ data.name or '' }}" autofocus placeholder="e.g. Chicken Shawarma"></label>
-    <label>Category
-      <select name="category_id"><option value="">— Other —</option>
-        {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if data.category_id == c.id }}>{{ c.name }}</option>{% endfor %}</select>
-      <input name="new_category" placeholder="അല്ലെങ്കിൽ പുതിയ category-യുടെ പേര്" maxlength="60">
-    </label>
+  <div class="row-sno">
+    <label>S.No <small>(serial number)</small><input type="number" name="serial" min="1" max="99999" value="{{ data.serial or '' }}"></label>
+    <label>Item name *<input name="name" required maxlength="80" value="{{ data.name or '' }}" autofocus placeholder="e.g. Chicken Shawarma"></label>
   </div>
-  <label>ചെറിയ വിവരണം <small>(menu-വിൽ കാണിക്കും)</small><textarea name="description" rows="2" maxlength="300">{{ data.description or '' }}</textarea></label>
+  <label>Category
+    <select name="category_id"><option value="">— Other —</option>
+      {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if data.category_id == c.id }}>{{ c.name }}</option>{% endfor %}</select>
+    <input name="new_category" placeholder="or type a new category name" maxlength="60">
+  </label>
+  <label>Short description <small>(shown on the menu)</small><textarea name="description" rows="2" maxlength="300">{{ data.description or '' }}</textarea></label>
   <div class="row-3">
-    <label>വില (₹) *<input name="price" required inputmode="decimal" value="{{ paise_str(data.price) if data.price is not none else '' }}" placeholder="120"></label>
-    <label>Offer വില (₹) <small>(വേണമെങ്കിൽ മാത്രം)</small><input name="offer_price" inputmode="decimal" value="{{ paise_str(data.offer_price) if data.offer_price else '' }}" placeholder="99"></label>
+    <label>Price (₹) *<input name="price" required inputmode="decimal" value="{{ paise_str(data.price) if data.price is not none else '' }}" placeholder="120"></label>
+    <label>Offer price (₹) <small>(optional)</small><input name="offer_price" inputmode="decimal" value="{{ paise_str(data.offer_price) if data.offer_price else '' }}" placeholder="99"></label>
     {% if st.gst_on %}<label>GST %<select name="gst_rate">{% for r in GST_RATES %}<option value="{{ r }}" {{ 'selected' if (data.gst_rate or 0)|float == r }}>{{ r }}%</option>{% endfor %}</select></label>
     {% else %}<input type="hidden" name="gst_rate" value="{{ data.gst_rate if data.gst_rate is not none else st.default_gst }}">{% endif %}
   </div>
   <div class="row-2 offer-dates">
-    <label>Offer തുടങ്ങുന്നത് <small>(ഒഴിച്ചിട്ടാൽ ഇപ്പോൾ മുതൽ)</small><input type="date" name="offer_from" value="{{ data.offer_from or '' }}"></label>
-    <label>Offer തീരുന്നത് <small>(ഒഴിച്ചിട്ടാൽ എപ്പോഴും)</small><input type="date" name="offer_to" value="{{ data.offer_to or '' }}"></label>
+    <label>Offer starts <small>(empty = from now)</small><input type="date" name="offer_from" value="{{ data.offer_from or '' }}"></label>
+    <label>Offer ends <small>(empty = no end)</small><input type="date" name="offer_to" value="{{ data.offer_to or '' }}"></label>
   </div>
-  <p class="muted small">Offer വില കൊടുത്താൽ: menu-വിൽ പഴയ വില വെട്ടി പുതിയ വില, "% OFF" tag, offer banner-ലും വരും; billing-ലും offer വില തനിയെ എടുക്കും. കൊടുത്തില്ലെങ്കിൽ സാധാരണ വില മാത്രം.</p>
+  <p class="muted small">With an offer price: the menu shows the old price struck out, the new price and a "% OFF" tag; the item also appears in the offer banner, and billing uses the offer price. Without one, only the normal price is shown.</p>
   <div class="row-2">
     <fieldset><legend>Veg / Non-veg</legend>
       <div class="checks">
-        <label class="check"><input type="radio" name="food_type" value="" {{ 'checked' if not data.food_type }}> കാണിക്കേണ്ട</label>
+        <label class="check"><input type="radio" name="food_type" value="" {{ 'checked' if not data.food_type }}> Don't show</label>
         {% for k, v in FOOD_TYPES.items() %}<label class="check"><input type="radio" name="food_type" value="{{ k }}" {{ 'checked' if data.food_type == k }}> {{ v }}</label>{% endfor %}
       </div>
     </fieldset>
@@ -35,22 +36,22 @@
       <div class="checks">{% for k, v in ITEM_TAGS.items() %}<label class="check"><input type="checkbox" name="tags" value="{{ k }}" {{ 'checked' if k in (data.tags or '').split(',') }}> {{ v }}</label>{% endfor %}</div>
     </fieldset>
   </div>
-  <label>ഫോട്ടോ<input type="file" name="photo" accept="image/*"><span class="photo-hint">📷 {{ hint }}</span>
-    <small class="muted">വലിയ ഫോട്ടോ ഇട്ടാലും software തനിയെ square ആക്കി 50 KB-ൽ താഴെയാക്കും.</small></label>
+  <label>Photo<input type="file" name="photo" accept="image/*"><span class="photo-hint">📷 {{ hint }}</span>
+    <small class="muted">Any photo works: it is cropped square and shrunk to under 50 KB automatically.</small></label>
   {% if item and item.photo %}<div class="thumbs"><figure><img src="{{ url_for('media', name=item.photo) }}" alt=""></figure></div>
-  <label class="check"><input type="checkbox" name="remove_photo" value="1"> ഫോട്ടോ മാറ്റുക</label>{% endif %}
+  <label class="check"><input type="checkbox" name="remove_photo" value="1"> Remove photo</label>{% endif %}
   <div class="row-2">
-    <label class="check"><input type="checkbox" name="available" value="1" {{ 'checked' if data.available }}> ലഭ്യമാണ് (ON)</label>
-    <label>ക്രമം <small>(ചെറിയ നമ്പർ മുകളിൽ)</small><input type="number" name="sort" min="0" value="{{ data.sort or 0 }}"></label>
+    <label class="check"><input type="checkbox" name="available" value="1" {{ 'checked' if data.available }}> Available (ON)</label>
+    <label>Order within category <small>(smaller first)</small><input type="number" name="sort" min="0" value="{{ data.sort or 0 }}"></label>
   </div>
   <div class="actions">
     <button class="btn btn-primary">💾 Save</button>
-    {% if not item %}<button class="btn" name="another" value="1">Save &amp; അടുത്തത് ചേർക്കുക</button>{% endif %}
+    {% if not item %}<button class="btn" name="another" value="1">Save &amp; add another</button>{% endif %}
     <a class="btn" href="{{ url_for('cafe.menu') }}">Cancel</a>
   </div>
 </form>
 {% if item and not viewing %}
-<form method="post" action="{{ url_for('cafe.item_action', iid=item.id, action='delete') }}" onsubmit="return confirm('{{ item.name }} menu-വിൽ നിന്ന് മാറ്റട്ടെ?')" class="narrow">{{ csrf() }}
-  <button class="btn btn-danger">🗑 Menu-വിൽ നിന്ന് മാറ്റുക</button></form>
+<form method="post" action="{{ url_for('cafe.item_action', iid=item.id, action='delete') }}" onsubmit="return confirm('Remove {{ item.name }} from the menu?')" class="narrow">{{ csrf() }}
+  <button class="btn btn-danger">🗑 Remove from menu</button></form>
 {% endif %}
 {% endblock %}

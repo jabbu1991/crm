@@ -12,11 +12,11 @@
     <a class="btn btn-big" href="{{ url_for('cafe.bill_print', bid=b.id) }}">🖨 Print</a>
     <a class="btn btn-big" href="{{ url_for('cafe.bill_print', bid=b.id, paper='A4') }}">⬇️ Save (PDF)</a>
     {% if b.cust_phone %}<a class="btn btn-big btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ b.cust_phone|wa_number }}?text={{ wa_text|urlencode }}">🟢 WhatsApp bill</a>
-    {% else %}<a class="btn btn-big btn-wa" target="_blank" rel="noopener" href="https://wa.me/?text={{ wa_text|urlencode }}">🟢 WhatsApp-ൽ share</a>{% endif %}
+    {% else %}<a class="btn btn-big btn-wa" target="_blank" rel="noopener" href="https://wa.me/?text={{ wa_text|urlencode }}">🟢 Share on WhatsApp</a>{% endif %}
   </div>
-  <p class="muted small">Customer-ന് കിട്ടുന്ന link: <a href="{{ link }}" target="_blank" rel="noopener">{{ link }}</a></p>
+  <p class="muted small">Link for the customer: <a href="{{ link }}" target="_blank" rel="noopener">{{ link }}</a></p>
   <dl class="details">
-    <dt>തീയതി</dt><dd>{{ b.bill_date }} {{ b.created_at[11:16] }}</dd>
+    <dt>Date</dt><dd>{{ b.bill_date }} {{ b.created_at[11:16] }}</dd>
     <dt>Type</dt><dd>{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</dd>
     <dt>Payment</dt><dd>{{ b.payment_mode }}</dd>
     <dt>Customer</dt><dd>{% if cust and can('customers_view') %}<a href="{{ url_for('cafe.customer_view', cid=cust.id) }}">{{ cust.name }}</a> · {{ cust.whatsapp }} · 🎁 {{ cust.points }} points{% else %}{{ b.cust_name or '—' }}{% endif %}</dd>
@@ -40,9 +40,9 @@
     {% if b.points_earned %}<dt>Points earned</dt><dd>🎁 {{ b.points_earned }}</dd>{% endif %}
   </dl>
   {% if b.status == 'paid' and can('bill_cancel') and not viewing %}
-  <details class="reject"><summary class="btn btn-danger btn-sm">Bill cancel ചെയ്യുക</summary>
-    <form method="post" action="{{ url_for('cafe.bill_cancel', bid=b.id) }}" class="inline-form" onsubmit="return confirm('Bill cancel ചെയ്യട്ടെ? Points തിരികെ ക്രമീകരിക്കും.')">{{ csrf() }}
-      <input name="reason" required maxlength="200" placeholder="കാരണം *"><button class="btn btn-sm btn-danger">Cancel ചെയ്യുക</button></form>
+  <details class="reject"><summary class="btn btn-danger btn-sm">Cancel bill</summary>
+    <form method="post" action="{{ url_for('cafe.bill_cancel', bid=b.id) }}" class="inline-form" onsubmit="return confirm('Cancel this bill? Points will be adjusted back.')">{{ csrf() }}
+      <input name="reason" required maxlength="200" placeholder="Reason *"><button class="btn btn-sm btn-danger">Cancel bill</button></form>
   </details>{% endif %}
 </section>
 </div>

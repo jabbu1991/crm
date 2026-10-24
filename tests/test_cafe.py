@@ -81,7 +81,7 @@ def add_item(b, name, price, **extra):
     data = {"name": name, "price": price, "available": "1"}
     data.update(extra)
     r = b.post("/cafe/menu/item/new", data)
-    assert f"&#39;{name}&#39; menu" in r.text, re.findall(r'flash-\w+">([^<]*)', r.text)
+    assert f"&#39;{name}&#39; added to the menu" in r.text, re.findall(r'flash-\w+">([^<]*)', r.text)
 
 
 def item_id(w, name, code="CHAI"):
@@ -101,7 +101,7 @@ def settings(b, **kw):
     data.update(kw)
     data = {k: v for k, v in data.items() if v is not None}
     r = b.post("/cafe/settings", data)
-    assert "Settings save" in r.text, r.text[:1500]
+    assert "Settings saved" in r.text, r.text[:1500]
 
 
 # ------------------------------------------------------------------ org types & navigation
@@ -145,7 +145,7 @@ def test_menu_items_photos_under_50kb_and_offers(cw):
     r = b.post("/cafe/menu/item/new", {"name": "Mango Juice", "price": "80", "offer_price": "60", "category_id": cat,
                                        "available": "1", "food_type": "veg", "tags": ["bestseller"],
                                        "photo": (png(), "big.png")}, content_type="multipart/form-data")
-    assert "&#39;Mango Juice&#39; menu" in r.text
+    assert "&#39;Mango Juice&#39; added to the menu" in r.text
     it = w["db"]().execute("SELECT * FROM menu_items WHERE name = 'Mango Juice'").fetchone()
     assert it["price"] == 8000 and it["offer_price"] == 6000 and it["photo"]
     import os
@@ -157,7 +157,7 @@ def test_menu_items_photos_under_50kb_and_offers(cw):
     assert "600 × 600" in b.get("/cafe/menu/item/new").text
     # offer price must be lower than the price
     r = b.post("/cafe/menu/item/new", {"name": "Bad", "price": "50", "offer_price": "60", "available": "1"})
-    assert "കുറവായിരിക്കണം" in r.text
+    assert "must be lower than the price" in r.text
     # without an offer price no offer is shown
     add_item(b, "Plain Tea", "15")
     settings(b)
@@ -178,7 +178,7 @@ def test_menu_items_photos_under_50kb_and_offers(cw):
     # banner with a wide photo
     r = b.post("/cafe/banners/save", {"title": "Weekend ₹99", "active": "1", "photo": (png((2000, 800)), "b.png")},
                content_type="multipart/form-data")
-    assert "Banner ചേർത്തു" in r.text and "1200 × 500" in r.text
+    assert "Banner added" in r.text and "1200 × 500" in r.text
     ph = w["db"]().execute("SELECT photo FROM menu_banners").fetchone()[0]
     assert os.path.getsize(os.path.join(crm.media_dir(), ph)) <= 50 * 1024
     assert Image.open(os.path.join(crm.media_dir(), ph)).size == (1200, 500)
@@ -281,9 +281,9 @@ def test_dine_in_table_kot_flow_and_cancel(cw):
     cashier = make_staff(b, "cash1")
     assert cashier.post(f"/cafe/bills/{bill['id']}/cancel", {"reason": "x"}, follow=False).status_code == 403
     r = b.post(f"/cafe/bills/{bill['id']}/cancel", {"reason": ""})
-    assert "കാരണം" in r.text
+    assert "reason for cancelling" in r.text
     r = b.post(f"/cafe/bills/{bill['id']}/cancel", {"reason": "Wrong table"})
-    assert "cancel ചെയ്തു" in r.text
+    assert "cancelled. Points" in r.text
     assert w["db"]().execute("SELECT status FROM cafe_bills").fetchone()[0] == "cancelled"
 
 
@@ -322,7 +322,7 @@ def test_staff_permissions_and_hidden_menus(cw):
     add_item(b, "Tea", "15")
     code, d = pos(cashier, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
                             "items": [{"item_id": item_id(w, "Tea"), "qty": 1}], "discount": {"mode": "amt", "value": "5"}})
-    assert code == 400 and "Discount" in d["error"]
+    assert code == 400 and "discount" in d["error"]
 
 
 # ------------------------------------------------------------------ online orders
@@ -345,7 +345,7 @@ def test_online_order_pending_confirm_and_status(cw):
         return r.status_code, r.get_json()
 
     code, d = order({"type": "dine_in", "table": t9, "name": "Anu", "phone": "9876543210", "items": [{"item_id": cake, "qty": 1}]})
-    assert code == 400 and "ലഭ്യമല്ല" in d["error"]
+    assert code == 400 and "not available" in d["error"]
     code, d = order({"type": "dine_in", "table": t9, "name": "Anu", "phone": "123", "items": [{"item_id": tea, "qty": 1}]})
     assert code == 400
     code, d = order({"type": "dine_in", "table": t9, "name": "Anu", "phone": "+91 98765 43210", "items": [{"item_id": tea, "qty": 2}]})
@@ -359,7 +359,7 @@ def test_online_order_pending_confirm_and_status(cw):
     assert "Anu" in b.get("/cafe/orders").text
     oid_ = w["db"]().execute("SELECT id FROM cafe_orders WHERE status = 'pending'").fetchone()[0]
     r = b.post(f"/cafe/orders/{oid_}/confirm")
-    assert "confirm ചെയ്തു" in r.text
+    assert "confirmed" in r.text
     assert guest.get(d["url"] + ".json").get_json()["status"] == "confirmed"
     o = w["db"]().execute("SELECT * FROM cafe_orders WHERE id = ?", (oid_,)).fetchone()
     assert o["status"] == "open" and o["customer_id"]
@@ -434,7 +434,7 @@ def test_points_earn_redeem_cancel_referral_and_expiry(cw):
     assert db.execute("SELECT points FROM customers WHERE id = ?", (riya["id"],)).fetchone()[0] == 90  # only once
     # manual adjust needs a reason; cashier cannot
     r = b.post(f"/cafe/customers/{riya['id']}/points", {"points": "10", "direction": "add", "reason": ""})
-    assert "നിർബന്ധമാണ്" in r.text
+    assert "Points and a reason are required" in r.text
     b.post(f"/cafe/customers/{riya['id']}/points", {"points": "10", "direction": "sub", "reason": "Gift"})
     assert db.execute("SELECT points FROM customers WHERE id = ?", (riya["id"],)).fetchone()[0] == 80
     cashier = make_staff(b, "cashier2")
@@ -465,7 +465,7 @@ def test_expenses_and_analysis(cw):
     b.post("/cafe/expenses/save", {"kind": "expense", "amount": "30.50", "category": "Raw materials", "payment_mode": "UPI"})
     b.post("/cafe/expenses/save", {"kind": "income", "amount": "100", "category": "Catering", "payment_mode": "Cash"})
     r = b.post("/cafe/expenses/save", {"kind": "expense", "amount": "-5", "category": "Gas"})
-    assert "ശരിയായി" in r.text
+    assert "valid amount" in r.text
     page = b.get("/cafe/analysis?p=today").text
     assert "₹300" in page  # income 200 + 100
     assert "₹80" in page  # expense 80.50 shown rounded
@@ -531,7 +531,97 @@ def test_migration_from_v7_keeps_crm_data(tmp_path, monkeypatch):
     backup = crm_db.migrate(db_path)
     assert backup and "pre-v8" in backup
     conn = sqlite3.connect(db_path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION
     assert conn.execute("SELECT customer_name FROM leads").fetchone()[0] == "Old Lead"
     assert conn.execute("SELECT app_type FROM organizations").fetchone()[0] == "crm"
     assert sqlite3.connect(backup).execute("SELECT COUNT(*) FROM leads").fetchone()[0] == 1
+
+
+# ------------------------------------------------------------------ serial numbers and Excel upload
+
+def xlsx(rows):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Menu"
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def test_serial_numbers(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    add_item(b, "Coffee", "20")
+    rows = {r["name"]: r["serial"] for r in w["db"]().execute("SELECT name, serial FROM menu_items")}
+    assert rows == {"Tea": 1, "Coffee": 2}
+    r = b.post("/cafe/menu/item/new", {"name": "Juice", "price": "40", "serial": "1", "available": "1"})
+    assert "S.No 1 is already used by" in r.text
+    add_item(b, "Juice", "40", serial="101")
+    assert w["db"]().execute("SELECT serial FROM menu_items WHERE name = 'Juice'").fetchone()[0] == 101
+    # staff see S.No in billing; customers do not
+    assert '"sno": 101' in b.get("/cafe/pos").text
+    assert '"sno"' not in Browser().get("/m/chai").text
+    assert "Search item or S.No" in b.get("/cafe/menu").text
+    page = b.get("/cafe/menu?q=101").text
+    assert ">Juice<" in page and ">Coffee<" not in page
+
+
+def test_excel_template_export_import_and_photos(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    from openpyxl import load_workbook
+    t = b.get("/cafe/menu/template.xlsx")
+    assert t.status_code == 200 and "spreadsheetml" in t.headers["Content-Type"]
+    ws = load_workbook(io.BytesIO(t.data))["Menu"]
+    assert [c.value for c in ws[1]][:4] == ["S.No", "Category", "Item name", "Price"]
+    e = load_workbook(io.BytesIO(b.get("/cafe/menu/export.xlsx").data))["Menu"]
+    assert e.cell(2, 3).value == "Tea" and e.cell(2, 4).value == 15 and e.cell(2, 1).value == 1
+    sheet = xlsx([["S.No", "Category", "Item name", "Price", "Offer price", "Veg / Non-veg", "GST %", "Description", "Available"],
+                  [1, "Hot drinks", "Tea", 18, None, "Veg", 5, "Masala tea", "Yes"],          # update by S.No
+                  [None, "Juices", "Mango Shake", 80, 65, "Veg", 5, "", "Yes"],               # new, auto S.No
+                  [50, "Snacks", "Chicken Puffs", "25", None, "Non-veg", None, "", "No"],     # new with S.No 50
+                  [None, "Snacks", "", 30, None, "", None, "", ""],                           # error: no name
+                  [None, "Snacks", "Bad Price", "abc", None, "", None, "", ""],               # error: price
+                  [None, "Snacks", "Cheap", 10, 20, "", None, "", ""]])                       # error: offer >= price
+    r = b.post("/cafe/menu/import", {"sheet": (sheet, "menu.xlsx")}, content_type="multipart/form-data")
+    assert "Import preview" in r.text and "item name is empty" in r.text and "price is missing" in r.text
+    assert "offer price must be lower" in r.text
+    assert w["db"]().execute("SELECT COUNT(*) FROM menu_items").fetchone()[0] == 1  # nothing saved yet
+    tok = re.search(r'name="tok" value="([0-9a-f]+)"', r.text).group(1)
+    # another cafe cannot use this preview
+    assert w["cafe2"].post("/cafe/menu/import/confirm", {"tok": tok}, follow=False).status_code == 404
+    r = b.post("/cafe/menu/import/confirm", {"tok": tok})
+    assert "2 new items added, 1 items updated" in r.text
+    db = w["db"]()
+    items = {r["name"]: r for r in db.execute("SELECT * FROM menu_items WHERE active = 1")}
+    assert items["Tea"]["price"] == 1800 and items["Tea"]["description"] == "Masala tea" and items["Tea"]["serial"] == 1
+    assert items["Mango Shake"]["offer_price"] == 6500 and items["Mango Shake"]["serial"] == 2
+    assert items["Chicken Puffs"]["serial"] == 50 and items["Chicken Puffs"]["available"] == 0
+    assert items["Chicken Puffs"]["food_type"] == "nonveg"
+    cats = {r[0] for r in db.execute("SELECT name FROM menu_categories")}
+    assert {"Hot drinks", "Juices", "Snacks"} <= cats
+    # the preview can be used once only
+    r = b.post("/cafe/menu/import/confirm", {"tok": tok})
+    assert "expired" in r.text
+    # wrong file type
+    r = b.post("/cafe/menu/import", {"sheet": (io.BytesIO(b"hello"), "menu.pdf")}, content_type="multipart/form-data")
+    assert "Upload the Excel file" in r.text
+    # photos matched by item name and by S.No
+    r = b.post("/cafe/menu/photos", {"photos": [(png(), "Mango Shake.JPG"), (png(), "50.png"), (png(), "Unknown.jpg")]},
+               content_type="multipart/form-data")
+    assert "2 photos added" in r.text and "Unknown.jpg" in r.text
+    import os
+    for name in ("Mango Shake", "Chicken Puffs"):
+        ph = db.execute("SELECT photo FROM menu_items WHERE name = ?", (name,)).fetchone()[0]
+        assert ph and os.path.getsize(os.path.join(crm.media_dir(), ph)) <= 50 * 1024
+    # cashier cannot import
+    cashier = make_staff(b, "cash9")
+    assert cashier.get("/cafe/menu/bulk").status_code == 403

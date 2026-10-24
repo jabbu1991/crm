@@ -108,7 +108,7 @@
         beep();
         var box = document.getElementById("new-order-toast");
         if (!box) { box = document.createElement("a"); box.id = "new-order-toast"; box.href = "{{ url_for('cafe.orders') }}"; document.body.appendChild(box); }
-        box.textContent = "🔔 പുതിയ online order! (" + d.count + " pending) — തുറക്കാൻ തൊടുക"; box.hidden = false;
+        box.textContent = "🔔 New online order! (" + d.count + " waiting) — tap to open"; box.hidden = false;
       }
       last = d.latest;
     }).catch(function () {});

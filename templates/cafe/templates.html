@@ -2,23 +2,23 @@
 {% block title %}WhatsApp Templates{% endblock %}
 {% block content %}
 <h1>🟢 WhatsApp marketing templates</h1>
-<p class="muted">Customers page-ൽ ഒരു template തിരഞ്ഞെടുത്ത് ഓരോരുത്തർക്കും അയക്കാം. ഉപയോഗിക്കാവുന്നവ:
+<p class="muted">Choose a template on the Customers page and send it to each customer. You can use:
   <span class="tags"><code>{name}</code> <code>{points}</code> <code>{menu_link}</code> <code>{referral_link}</code> <code>{cafe_name}</code></span></p>
 {% for t in rows %}
 <div class="tpl">
   <form method="post" class="form">{{ csrf() }}<input type="hidden" name="id" value="{{ t.id }}">
     <div class="tpl-row"><input name="title" value="{{ t.title }}" maxlength="60" class="tpl-title" required>
       {% if not viewing %}<button class="btn btn-sm btn-primary">Save</button>
-      <button class="btn btn-sm btn-danger" name="action" value="delete" onclick="return confirm('Template മാറ്റട്ടെ?')" formnovalidate>🗑</button>{% endif %}</div>
+      <button class="btn btn-sm btn-danger" name="action" value="delete" onclick="return confirm('Delete this template?')" formnovalidate>🗑</button>{% endif %}</div>
     <textarea name="body" rows="4" maxlength="1000" required>{{ t.body }}</textarea>
   </form>
 </div>
 {% endfor %}
 {% if not viewing %}
-<section class="card narrow"><h2>പുതിയ template</h2>
+<section class="card narrow"><h2>New template</h2>
   <form method="post" class="form">{{ csrf() }}
-    <label>പേര്<input name="title" maxlength="60" required placeholder="e.g. Friday offer"></label>
+    <label>Name<input name="title" maxlength="60" required placeholder="e.g. Friday offer"></label>
     <label>Message<textarea name="body" rows="4" maxlength="1000" required placeholder="Hi {name} 👋 …"></textarea></label>
-    <button class="btn btn-primary">+ ചേർക്കുക</button></form>
+    <button class="btn btn-primary">+ Add</button></form>
 </section>{% endif %}
 {% endblock %}

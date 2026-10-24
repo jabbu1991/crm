@@ -6,61 +6,61 @@
   <div class="actions">
     {% if can('bill_create') and not viewing %}<a class="btn btn-primary btn-big" href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>
     <a class="btn btn-big" href="{{ url_for('cafe.tables') }}">🍽 Tables</a>{% endif %}
-    {% if pending and can('orders_online') %}<a class="btn btn-big btn-alert" href="{{ url_for('cafe.orders') }}">🔔 {{ pending }} online order{{ 's' if pending > 1 }} pending</a>{% endif %}
+    {% if pending and can('orders_online') %}<a class="btn btn-big btn-alert" href="{{ url_for('cafe.orders') }}">🔔 {{ pending }} online order{{ 's' if pending > 1 }} waiting</a>{% endif %}
   </div>
 </div>
 
 {% if setup_missing and can('menu_edit') %}
 <div class="card setup-card">
-  <h2>തുടങ്ങാൻ 3 കാര്യങ്ങൾ</h2>
+  <h2>Get started in 3 steps</h2>
   <ol class="setup-steps">
-    {% if can('settings_edit') %}<li><a href="{{ url_for('cafe.settings') }}">Settings</a>: cafe പേര്, logo, GST, printer size</li>{% endif %}
-    <li><a href="{{ url_for('cafe.menu') }}">Menu</a>: categories-ഉം items-ഉം (ഫോട്ടോ, വില) ചേർക്കുക</li>
-    <li><a href="{{ url_for('cafe.tables') }}">Tables</a> ചേർക്കുക, എന്നിട്ട് <b>New Bill</b> തുടങ്ങാം</li>
+    {% if can('settings_edit') %}<li><a href="{{ url_for('cafe.settings') }}">Settings</a>: cafe name, logo, GST, printer size</li>{% endif %}
+    <li><a href="{{ url_for('cafe.menu') }}">Menu</a>: add categories and items (photo, price), or <a href="{{ url_for('cafe.menu_bulk') }}">upload the whole menu from Excel</a></li>
+    <li>Add <a href="{{ url_for('cafe.tables') }}">Tables</a>, then start with <b>New Bill</b></li>
   </ol>
 </div>
 {% endif %}
 
 <div class="stats">
   {% if can('reports_view') or can('bills_view') %}
-  <a class="stat stat-good" href="{{ url_for('cafe.bills') if can('bills_view') else '#' }}"><b>{{ sales.total|rs0 }}</b><span>ഇന്നത്തെ വിൽപ്പന</span></a>
-  <a class="stat" href="{{ url_for('cafe.bills') if can('bills_view') else '#' }}"><b>{{ sales.n }}</b><span>ഇന്നത്തെ bills</span></a>
+  <a class="stat stat-good" href="{{ url_for('cafe.bills') if can('bills_view') else '#' }}"><b>{{ sales.total|rs0 }}</b><span>Today's sales</span></a>
+  <a class="stat" href="{{ url_for('cafe.bills') if can('bills_view') else '#' }}"><b>{{ sales.n }}</b><span>Bills today</span></a>
   {% for m in by_mode %}<div class="stat stat-muted"><b>{{ m.total|rs0 }}</b><span>{{ m.payment_mode }}</span></div>{% endfor %}
   {% endif %}
-  {% if can('expense_view') %}<a class="stat stat-hot" href="{{ url_for('cafe.expenses') }}"><b>{{ expense|rs0 }}</b><span>ഇന്നത്തെ ചെലവ്</span></a>{% endif %}
-  {% if can('bill_create') %}<a class="stat stat-warn" href="{{ url_for('cafe.orders') }}"><b>{{ open_orders|length }}</b><span>നടക്കുന്ന orders</span></a>{% endif %}
+  {% if can('expense_view') %}<a class="stat stat-hot" href="{{ url_for('cafe.expenses') }}"><b>{{ expense|rs0 }}</b><span>Today's expenses</span></a>{% endif %}
+  {% if can('bill_create') %}<a class="stat stat-warn" href="{{ url_for('cafe.orders') }}"><b>{{ open_orders|length }}</b><span>Running orders</span></a>{% endif %}
 </div>
 
 <div class="grid-2">
   {% if can('bill_create') %}
   <section class="card">
-    <h2>നടക്കുന്ന orders <a class="small" href="{{ url_for('cafe.orders') }}">എല്ലാം</a></h2>
+    <h2>Running orders <a class="small" href="{{ url_for('cafe.orders') }}">See all</a></h2>
     {% for o in open_orders %}
       <a class="run-row" href="{{ url_for('cafe.pos', order=o.id) }}">
         <span class="run-tag t-{{ o.order_type }}">{{ o.table_name or ('Takeaway' if o.order_type == 'takeaway' else 'Delivery') }}</span>
         <span class="run-main">#{{ o.order_no }}{% if o.cust_name %} · {{ o.cust_name }}{% endif %}{% if o.source == 'online' %} <span class="badge b-new">online</span>{% endif %}{% if o.ready_at %} <span class="badge b-done">ready</span>{% endif %}</span>
         <b>{{ o.amount|rs }}</b>
       </a>
-    {% else %}<p class="muted">ഇപ്പോൾ order ഒന്നുമില്ല.</p>{% endfor %}
+    {% else %}<p class="muted">No orders right now.</p>{% endfor %}
   </section>
   {% endif %}
   <section class="card">
     {% if birthdays %}
-    <h2>🎂 ഈ ആഴ്ചയിലെ ജന്മദിനങ്ങൾ</h2>
+    <h2>🎂 Birthdays this week</h2>
     <ul class="plain-list">
       {% for c in birthdays %}<li><a href="{{ url_for('cafe.customer_view', cid=c.id) }}">{{ c.name }}</a>
-        <span class="{{ 'due-today' if c.birthday == mmdd else 'muted' }}">{{ 'ഇന്ന്!' if c.birthday == mmdd else c.birthday[3:] ~ '/' ~ c.birthday[:2] }}</span>
+        <span class="{{ 'due-today' if c.birthday == mmdd else 'muted' }}">{{ 'Today!' if c.birthday == mmdd else c.birthday[3:] ~ '/' ~ c.birthday[:2] }}</span>
         {% if can('marketing') %}<a class="btn btn-sm" href="{{ url_for('cafe.customer_view', cid=c.id) }}#wa">🟢 WhatsApp</a>{% endif %}</li>{% endfor %}
     </ul>
     {% endif %}
     {% if top_items %}
-    <h2>ഇന്ന് കൂടുതൽ വിറ്റത്</h2>
+    <h2>Top sellers today</h2>
     <ul class="plain-list">{% for t in top_items %}<li>{{ t.name }} <b>{{ t.q }}</b></li>{% endfor %}</ul>
     {% elif not birthdays %}
     <h2>Digital menu</h2>
     {% endif %}
     {% if st.menu_on %}
-    <p class="muted small">Customers-ന് menu: <a href="{{ url_for('cafe.public_menu', code=g.org.code.lower()) }}" target="_blank" rel="noopener">{{ url_for('cafe.public_menu', code=g.org.code.lower(), _external=True) }}</a>
+    <p class="muted small">Menu for customers: <a href="{{ url_for('cafe.public_menu', code=g.org.code.lower()) }}" target="_blank" rel="noopener">{{ url_for('cafe.public_menu', code=g.org.code.lower(), _external=True) }}</a>
     · <a href="{{ url_for('cafe.qr_poster') }}">QR code</a></p>
     {% endif %}
   </section>

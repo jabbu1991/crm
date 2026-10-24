@@ -2283,7 +2283,7 @@ def manageable_user(uid):
 
 
 def staff_manager_required(view):
-    """Organization admins, or (in a cafe) staff given the 'Staff-നെ ചേർക്കുക / മാറ്റുക' permission."""
+    """Organization admins, or (in a cafe) staff given the 'Add / edit staff' permission."""
     @wraps(view)
     @login_required
     def wrapped(*args, **kwargs):
