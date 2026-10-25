@@ -31,6 +31,9 @@ def init(host):
     host.app.jinja_env.filters["rs"] = rupees
     host.app.jinja_env.filters["rs0"] = lambda v: rupees(v, decimals=False)
     host.app.jinja_env.filters["pstr"] = paise_str
+    host.app.jinja_env.filters["meas"] = fmt_measure
+    host.app.jinja_env.globals["line_qty"] = line_amount_text
+    host.app.jinja_env.globals["UNIT_PER"] = UNIT_PER
 
 
 # ---------------------------------------------------------------- constants
@@ -40,6 +43,8 @@ ORDER_TYPES = {"dine_in": "Dine-in", "takeaway": "Takeaway", "delivery": "Delive
 PAYMENT_MODES = ["Cash", "UPI", "Card"]
 PAPER_SIZES = {"58": "58 mm thermal", "80": "80 mm thermal", "A4": "A4 / normal printer"}
 GST_RATES = [0, 5, 12, 18, 28]
+UNITS = {"pc": "Piece", "kg": "Kg", "l": "Litre"}
+UNIT_PER = {"pc": "", "kg": "/ kg", "l": "/ litre"}
 FOOD_TYPES = {"veg": "🟢 Veg", "nonveg": "🔴 Non-veg", "egg": "🟡 Egg"}
 ITEM_TAGS = {"bestseller": "⭐ Bestseller", "new": "🆕 New", "spicy": "🌶 Spicy", "chef": "👨‍🍳 Chef's special"}
 DEFAULT_EXPENSE_CATEGORIES = ["Raw materials", "Gas", "Salary", "Rent", "Electricity", "Water", "Maintenance",
@@ -56,6 +61,7 @@ PERMS = [
     ("bill_cancel", "Cancel bills"),
     ("bills_view", "View old bills / reprint"),
     ("orders_online", "Handle online orders"),
+    ("price_edit", "Change item prices on open orders"),
     ("menu_edit", "Edit menu / prices / offers / tables"),
     ("expense_add", "Add expenses"),
     ("expense_view", "View / edit expenses"),
@@ -100,6 +106,8 @@ DEFAULT_SETTINGS = {
                 "point_value": 100, "min_bill": 0, "min_redeem": 0, "max_redeem_pct": 50, "expiry_days": 0},
     "referral": {"on": False, "referrer_points": 50, "new_points": 25},
     "birthday_on": False,
+    "sort_pos": "popular", "sort_menu": "popular",   # most sold first, or the menu order
+    "bt_print": False, "bt_auto": False,             # phone Bluetooth printing through the RawBT app
 }
 
 def _now():
@@ -151,6 +159,24 @@ def paise_str(paise):
         return ""
     r, p = divmod(int(paise), 100)
     return f"{r}.{p:02d}" if p else str(r)
+
+
+def fmt_measure(measure, unit="kg"):
+    """0.25 kg -> '250 g', 1.5 kg -> '1.5 kg', 0.5 l -> '500 ml'."""
+    if measure is None or unit not in ("kg", "l"):
+        return ""
+    m = float(measure)
+    small, big = ("g", "kg") if unit == "kg" else ("ml", "L")
+    if m < 1:
+        return f"{round(m * 1000):g} {small}"
+    return f"{round(m, 3):g} {big}"
+
+
+def line_amount_text(qty, measure, unit):
+    """What a bill line shows for quantity: '2' for pieces, '250 g' or '2 × 250 g' for weighed items."""
+    if unit in ("kg", "l") and measure:
+        return (f"{qty} × " if qty and qty != 1 else "") + fmt_measure(measure, unit)
+    return str(qty)
 
 
 def to_int(value, default=0, lo=None, hi=None):
@@ -376,11 +402,21 @@ def item_dict(r, day=None):
         "off": round((r["price"] - r["offer_price"]) * 100 / r["price"]) if on and r["price"] else 0,
         "photo": url_for("media", name=r["photo"]) if r["photo"] else "",
         "type": r["food_type"] or "", "tags": tags, "available": bool(r["available"]), "gst": r["gst_rate"],
-        "sno": r["serial"],
+        "sno": r["serial"], "unit": r["unit"] or "pc", "barcode": r["barcode"] or "", "pin": bool(r["pinned"]),
     }
 
 
-def menu_data(oid, for_public=False):
+def popularity(oid, days=30):
+    """{item_id: how much sold in the last `days` days} (pieces, or packs for weighed items)."""
+    since = (today_date() - timedelta(days=days)).isoformat()
+    rows = H.query("""SELECT bi.item_id, SUM(bi.qty) n FROM cafe_bill_items bi JOIN cafe_bills b ON b.id = bi.bill_id
+                      WHERE b.org_id = ? AND b.status = 'paid' AND b.bill_date >= ? AND bi.item_id IS NOT NULL
+                      GROUP BY bi.item_id""", (oid, since))
+    return {r["item_id"]: r["n"] for r in rows}
+
+
+def menu_data(oid, for_public=False, sort=None):
+    """(categories, items). sort='popular': pinned items first, then the most sold in the last 30 days."""
     cats = H.query("SELECT * FROM menu_categories WHERE org_id = ? AND active = 1 ORDER BY sort, name COLLATE NOCASE",
                    (oid,))
     items = H.query("""SELECT i.* FROM menu_items i LEFT JOIN menu_categories c ON c.id = i.category_id
@@ -388,9 +424,17 @@ def menu_data(oid, for_public=False):
                        i.name COLLATE NOCASE""", (oid,))
     day = today()
     out = [item_dict(i, day) for i in items]
-    if for_public:  # serial numbers are for staff only
+    if sort == "popular":
+        pop = popularity(oid)
+        order = {it["id"]: n for n, it in enumerate(out)}
+        out.sort(key=lambda it: (not it["pin"], -pop.get(it["id"], 0), order[it["id"]]))
+    elif sort == "menu":
+        order = {it["id"]: n for n, it in enumerate(out)}
+        out.sort(key=lambda it: (not it["pin"], order[it["id"]]))
+    if for_public:  # serial numbers and barcodes are for staff only
         for i in out:
             i.pop("sno", None)
+            i.pop("barcode", None)
     return ([{"id": c["id"], "name": c["name"]} for c in cats], out)
 
 
@@ -683,7 +727,8 @@ def home():
     birthdays = H.query(f"""SELECT * FROM customers WHERE org_id = ? AND birthday IN ({','.join('?' * 7)})
                             ORDER BY CASE WHEN birthday = ? THEN 0 ELSE 1 END, birthday""",
                         [oid] + week + [mmdd]) if st["birthday_on"] and can("customers_view") else []
-    top_items = H.query("""SELECT bi.name, SUM(bi.qty) q FROM cafe_bill_items bi JOIN cafe_bills b ON b.id = bi.bill_id
+    top_items = H.query("""SELECT bi.name, SUM(bi.qty) q, MAX(bi.unit) unit, SUM(COALESCE(bi.measure, 0) * bi.qty) meas
+                           FROM cafe_bill_items bi JOIN cafe_bills b ON b.id = bi.bill_id
                            WHERE b.org_id = ? AND b.bill_date = ? AND b.status = 'paid' GROUP BY bi.name
                            ORDER BY q DESC LIMIT 5""", (oid, day))
     setup_missing = not H.scalar("SELECT 1 FROM menu_items WHERE org_id = ? AND active = 1", (oid,))

@@ -13,9 +13,13 @@
       {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if data.category_id == c.id }}>{{ c.name }}</option>{% endfor %}</select>
     <input name="new_category" placeholder="or type a new category name" maxlength="60">
   </label>
+  <fieldset><legend>Sold by</legend>
+    <div class="seg unit-seg">{% for k, v in UNITS.items() %}<label><input type="radio" name="unit" value="{{ k }}" {{ 'checked' if (data.unit or 'pc') == k }}> {{ v }}</label>{% endfor %}</div>
+    <small class="muted">Kg / Litre: the price below is for 1 kg / 1 litre. In billing you type the weight (e.g. 0.250) or the amount (₹100).</small>
+  </fieldset>
   <label>Short description <small>(shown on the menu)</small><textarea name="description" rows="2" maxlength="300">{{ data.description or '' }}</textarea></label>
   <div class="row-3">
-    <label>Price (₹) *<input name="price" required inputmode="decimal" value="{{ paise_str(data.price) if data.price is not none else '' }}" placeholder="120"></label>
+    <label>Price (₹) <span id="per-unit">{{ UNIT_PER[data.unit or 'pc'] }}</span> *<input name="price" required inputmode="decimal" value="{{ paise_str(data.price) if data.price is not none else '' }}" placeholder="120"></label>
     <label>Offer price (₹) <small>(optional)</small><input name="offer_price" inputmode="decimal" value="{{ paise_str(data.offer_price) if data.offer_price else '' }}" placeholder="99"></label>
     {% if st.gst_on %}<label>GST %<select name="gst_rate">{% for r in GST_RATES %}<option value="{{ r }}" {{ 'selected' if (data.gst_rate or 0)|float == r }}>{{ r }}%</option>{% endfor %}</select></label>
     {% else %}<input type="hidden" name="gst_rate" value="{{ data.gst_rate if data.gst_rate is not none else st.default_gst }}">{% endif %}
@@ -36,6 +40,10 @@
       <div class="checks">{% for k, v in ITEM_TAGS.items() %}<label class="check"><input type="checkbox" name="tags" value="{{ k }}" {{ 'checked' if k in (data.tags or '').split(',') }}> {{ v }}</label>{% endfor %}</div>
     </fieldset>
   </div>
+  <div class="row-2">
+    <label>Barcode <small>(optional: click here and scan the packet)</small><input name="barcode" value="{{ data.barcode or '' }}" maxlength="40" autocomplete="off" inputmode="numeric" onkeydown="if (event.key === 'Enter') event.preventDefault()"></label>
+    <label class="check pin-check"><input type="checkbox" name="pinned" value="1" {{ 'checked' if data.pinned }}> 📌 Pin to top (always first in billing and on the menu)</label>
+  </div>
   <label>Photo<input type="file" name="photo" accept="image/*"><span class="photo-hint">📷 {{ hint }}</span>
     <small class="muted">Any photo works: it is cropped square and shrunk to under 50 KB automatically.</small></label>
   {% if item and item.photo %}<div class="thumbs"><figure><img src="{{ url_for('media', name=item.photo) }}" alt=""></figure></div>
@@ -50,6 +58,11 @@
     <a class="btn" href="{{ url_for('cafe.menu') }}">Cancel</a>
   </div>
 </form>
+<script>
+document.querySelectorAll("input[name=unit]").forEach(function (r) { r.addEventListener("change", function () {
+  document.getElementById("per-unit").textContent = {pc: "", kg: "/ kg", l: "/ litre"}[r.value];
+}); });
+</script>
 {% if item and not viewing %}
 <form method="post" action="{{ url_for('cafe.item_action', iid=item.id, action='delete') }}" onsubmit="return confirm('Remove {{ item.name }} from the menu?')" class="narrow">{{ csrf() }}
   <button class="btn btn-danger">🗑 Remove from menu</button></form>

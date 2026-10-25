@@ -11,7 +11,7 @@
   body { font-family: "Noto Sans", "Noto Sans Malayalam", Arial, sans-serif; font-size: {{ '11px' if paper == '58' else ('12.5px' if paper == '80' else '14px') }}; }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: #111827; justify-content: center; position: sticky; top: 0; }
   .tools a, .tools button { background: #374151; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font: 600 14px system-ui, sans-serif; text-decoration: none; cursor: pointer; }
-  .tools .primary { background: #4f46e5; } .tools .wa { background: #16a34a; }
+  .tools .primary { background: #4f46e5; } .tools .bt { background: #0e7490; } .tools .wa { background: #16a34a; }
   .tools .papers { display: flex; gap: 4px; } .tools .papers a { padding: 10px 9px; background: #1f2937; } .tools .papers a.on { background: #6b7280; }
   .hint { width: 100%; text-align: center; color: #cbd5e1; font: 12px system-ui, sans-serif; }
   .sheet { width: {{ w }}; margin: 14px auto; background: #fff; padding: {{ '2mm' if paper != 'A4' else '10mm' }}; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
@@ -22,7 +22,7 @@
   hr { border: 0; border-top: 1px dashed #000; margin: 5px 0; }
   table { width: 100%; border-collapse: collapse; }
   td, th { padding: 2px 0; vertical-align: top; } th { text-align: left; font-weight: 700; border-bottom: 1px solid #000; }
-  td.q, th.q { width: 12%; text-align: center; } td.a, th.a { width: 26%; text-align: right; } td.p, th.p { width: 20%; text-align: right; }
+  td.q, th.q { width: 12%; text-align: center; white-space: nowrap; } td.a, th.a { width: 26%; text-align: right; } td.p, th.p { width: 20%; text-align: right; }
   .tot td { padding: 1px 0; } .grand td { font-size: 1.3em; font-weight: 800; border-top: 1px solid #000; padding-top: 4px; }
   .cancelled { border: 2px solid #000; text-align: center; font-weight: 800; padding: 3px; margin: 4px 0; font-size: 1.2em; }
   .kot { page-break-before: always; break-before: page; }
@@ -39,7 +39,8 @@
 </head>
 <body>
 <div class="tools">
-  <button class="primary" onclick="window.print()">🖨 Print</button>
+  {% if bt_link %}<a class="primary bt" href="{{ bt_link }}" id="bt-print">🖨 Bluetooth Print</a>{% endif %}
+  <button class="{{ '' if bt_link else 'primary' }}" onclick="window.print()">🖨 Print</button>
   {% if bill %}<button onclick="savePdf()">⬇️ Save (PDF)</button>
   {% if not public and bill.cust_phone %}<a class="wa" href="{{ url_for('cafe.bill_view', bid=bill.id) }}#share">🟢 WhatsApp</a>{% endif %}{% endif %}
   <span class="papers">{% for p, l in (('58', '58mm'), ('80', '80mm'), ('A4', 'A4')) %}<a class="{{ 'on' if paper == p }}" href="?{{ 'kot=' ~ request.args.kot ~ '&' if request.args.kot }}paper={{ p }}">{{ l }}</a>{% endfor %}</span>
@@ -66,7 +67,7 @@
   <table>
     <thead><tr><th>Item</th><th class="q">Qty</th>{% if paper != '58' %}<th class="p">Rate</th>{% endif %}<th class="a">Amount</th></tr></thead>
     <tbody>
-    {% for i in items %}<tr><td>{{ i.name }}</td><td class="q">{{ i.qty }}</td>{% if paper != '58' %}<td class="p">{{ i.price|rs }}</td>{% endif %}<td class="a">{{ i.amount|rs }}</td></tr>{% endfor %}
+    {% for i in items %}<tr><td>{{ i.name }}</td><td class="q">{{ line_qty(i.qty, i.measure, i.unit) }}</td>{% if paper != '58' %}<td class="p">{% if i.unit in ('kg', 'l') and i.unit_price and not i.price_by %}{{ i.unit_price|rs }}{{ '/kg' if i.unit == 'kg' else '/L' }}{% else %}{{ i.price|rs }}{% endif %}</td>{% endif %}<td class="a">{{ i.amount|rs }}</td></tr>{% endfor %}
     </tbody>
   </table>
   <hr>
@@ -97,7 +98,7 @@
   {% if o.cust_name %}<div>{{ o.cust_name }}</div>{% endif %}
   <hr>
   <table>
-    {% for l in lines %}<tr class="{{ 'cancel' if l.qty < 0 }}"><td class="q">{{ l.qty if l.qty > 0 else '✕' ~ (-l.qty) }}</td><td>{{ l.name }}{% if l.qty < 0 %} (CANCEL){% endif %}{% if l.note %}<div class="small">→ {{ l.note }}</div>{% endif %}</td></tr>{% endfor %}
+    {% for l in lines %}<tr class="{{ 'cancel' if l.qty < 0 }}"><td class="q">{{ l.qty if l.qty > 0 else '✕' ~ (-l.qty) }}</td><td>{{ l.name }}{% if l.measure %} ({{ l.measure }}){% endif %}{% if l.qty < 0 %} (CANCEL){% endif %}{% if l.note %}<div class="small">→ {{ l.note }}</div>{% endif %}</td></tr>{% endfor %}
   </table>
   {% if o.note %}<hr><div class="b">📝 {{ o.note }}</div>{% endif %}
 </div>
@@ -106,7 +107,9 @@
 {% if public and menu_link %}<p class="menu-link"><a href="{{ menu_link }}">📱 See the {{ name }} menu</a></p>{% endif %}
 <script>
 function savePdf() { document.getElementById("pdf-hint").hidden = false; setTimeout(function () { window.print(); }, 150); }
-{% if auto %}window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });{% endif %}
+{% if auto %}window.addEventListener("load", function () { setTimeout(function () {
+  {% if bt_link and st.bt_auto %}window.location.href = document.getElementById("bt-print").href;{% else %}window.print();{% endif %}
+}, 300); });{% endif %}
 </script>
 </body>
 </html>

@@ -6,7 +6,7 @@ import re
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from cafe import (BANNER_PHOTO_HINT, DEFAULT_SETTINGS, FONTS, FOOD_TYPES, GST_RATES, ITEM_PHOTO_HINT, ITEM_TAGS,
-                  LAYOUTS, PAPER_SIZES, SHAPES, THEMES, bp, cafe_name, cafe_view, get_category, get_item,
+                  UNITS, LAYOUTS, PAPER_SIZES, SHAPES, THEMES, bp, cafe_name, cafe_view, get_category, get_item,
                   get_settings, host as H, menu_url, next_serial, paise_str, save_photo, save_settings, to_float, to_int,
                   to_paise, valid_birthday)
 
@@ -33,8 +33,10 @@ def settings():
             st[k] = clean(f.get(k), n)
         st["map_url"] = H.web_link(f.get("map_url"))
         st["paper"] = f.get("paper") if f.get("paper") in PAPER_SIZES else "80"
+        st["sort_pos"] = "popular" if f.get("sort_pos") == "popular" else "menu"
+        st["sort_menu"] = "popular" if f.get("sort_menu") == "popular" else "menu"
         for k in ("kot_on", "kot_with_bill", "gst_on", "gst_inclusive", "menu_on", "online_on", "order_dine_in",
-                  "order_takeaway", "order_delivery", "birthday_on"):
+                  "order_takeaway", "order_delivery", "birthday_on", "bt_print", "bt_auto"):
             st[k] = checked(k)
         st["default_gst"] = to_float(f.get("default_gst"), 5, 0, 28)
         lo = st["loyalty"]
@@ -181,12 +183,12 @@ def menu():
                     (oid,))
     q = (request.args.get("q") or "").strip().lower()
     if q:
-        items = [i for i in items if q in i["name"].lower() or q == str(i["serial"])]
+        items = [i for i in items if q in i["name"].lower() or q == str(i["serial"]) or q == (i["barcode"] or "").lower()]
     by_cat = {}
     for i in items:
         by_cat.setdefault(i["category_id"], []).append(i)
     return render_template("cafe/menu.html", cats=cats, by_cat=by_cat, st=get_settings(), q=q,
-                           total=len(items), FOOD_TYPES=FOOD_TYPES, ITEM_TAGS=ITEM_TAGS)
+                           total=len(items), FOOD_TYPES=FOOD_TYPES, ITEM_TAGS=ITEM_TAGS, UNITS=UNITS)
 
 
 @bp.route("/cafe/menu/category", methods=["POST"])
@@ -244,7 +246,15 @@ def item_form_data(item=None):
     data["available"] = 1 if f.get("available") else 0
     data["sort"] = to_int(f.get("sort"), 0, 0, 9999)
     data["serial"] = to_int(f.get("serial"), 0, 0, 99999) or None
+    data["unit"] = f.get("unit") if f.get("unit") in UNITS else "pc"
+    data["barcode"] = re.sub(r"\s+", "", f.get("barcode") or "")[:40] or None
+    data["pinned"] = 1 if f.get("pinned") else 0
     errors = []
+    if data["barcode"]:
+        other = H.scalar("SELECT name FROM menu_items WHERE org_id = ? AND active = 1 AND barcode = ? AND id != ?",
+                         (H.org_id(), data["barcode"], item["id"] if item is not None else 0))
+        if other:
+            errors.append(f"Barcode {data['barcode']} is already used by '{other}'.")
     if data["serial"] is None:
         data["serial"] = item["serial"] if item is not None and item["serial"] else next_serial()
     elif H.scalar("SELECT name FROM menu_items WHERE org_id = ? AND active = 1 AND serial = ? AND id != ?",
@@ -279,7 +289,7 @@ def _item_form(item, data, errors):
         flash(e, "error")
     return render_template("cafe/item_form.html", item=item, data=data, cats=cats, st=get_settings(),
                            FOOD_TYPES=FOOD_TYPES, ITEM_TAGS=ITEM_TAGS, GST_RATES=GST_RATES, hint=ITEM_PHOTO_HINT,
-                           paise_str=paise_str)
+                           paise_str=paise_str, UNITS=UNITS)
 
 
 def _apply_new_category(data, new_cat):
@@ -296,14 +306,14 @@ def _apply_new_category(data, new_cat):
 
 
 ITEM_COLS = ("name", "description", "category_id", "price", "offer_price", "offer_from", "offer_to", "food_type",
-             "tags", "gst_rate", "available", "sort", "serial")
+             "tags", "gst_rate", "available", "sort", "serial", "unit", "barcode", "pinned")
 
 
 @bp.route("/cafe/menu/item/new", methods=["GET", "POST"])
 @cafe_view("menu_edit")
 def item_new():
     data = {"available": 1, "gst_rate": get_settings()["default_gst"], "category_id": request.args.get("cat", type=int),
-            "price": None, "offer_price": None, "serial": next_serial()}
+            "price": None, "offer_price": None, "serial": next_serial(), "unit": "pc"}
     if request.method == "POST":
         data, errors, new_cat = item_form_data()
         if errors:

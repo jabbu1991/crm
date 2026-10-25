@@ -12,8 +12,11 @@ from flask import Response, abort, flash, g, redirect, render_template, request,
 from cafe import (FOOD_TYPES, PHOTO_MAX_KB, bp, cafe_name, cafe_view, get_settings, host as H, next_serial, paise_str,
                   to_float, to_paise)
 
-COLUMNS = ["S.No", "Category", "Item name", "Price", "Offer price", "Veg / Non-veg", "GST %", "Description",
-           "Available"]
+COLUMNS = ["S.No", "Category", "Item name", "Price", "Offer price", "Unit", "Veg / Non-veg", "GST %", "Description",
+           "Available", "Barcode"]
+UNIT_IN = {"piece": "pc", "pc": "pc", "pcs": "pc", "nos": "pc", "no": "pc", "kg": "kg", "kgs": "kg", "kilo": "kg",
+           "litre": "l", "liter": "l", "ltr": "l", "l": "l", "lit": "l"}
+UNIT_OUT = {"pc": "Piece", "kg": "Kg", "l": "Litre"}
 FOOD_IN = {"veg": "veg", "v": "veg", "non-veg": "nonveg", "nonveg": "nonveg", "non veg": "nonveg", "nv": "nonveg",
            "egg": "egg"}
 FOOD_OUT = {"veg": "Veg", "nonveg": "Non-veg", "egg": "Egg"}
@@ -44,16 +47,21 @@ def _workbook(rows):
         c.alignment = Alignment(vertical="center")
     for r in rows:
         ws.append(r)
-    for col, width in zip("ABCDEFGHI", (8, 20, 30, 10, 12, 14, 8, 40, 11)):
+    for col, width in zip("ABCDEFGHIJK", (8, 20, 30, 10, 12, 9, 14, 8, 40, 11, 18)):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
     last = max(MAX_ROWS, len(rows) + 200)
+    uv = DataValidation(type="list", formula1='"Piece,Kg,Litre"', allow_blank=True)
+    uv.add(f"F2:F{last}")
     dv = DataValidation(type="list", formula1='"Veg,Non-veg,Egg"', allow_blank=True)
-    dv.add(f"F2:F{last}")
+    dv.add(f"G2:G{last}")
     av = DataValidation(type="list", formula1='"Yes,No"', allow_blank=True)
-    av.add(f"I2:I{last}")
-    ws.add_data_validation(dv)
-    ws.add_data_validation(av)
+    av.add(f"J2:J{last}")
+    for v in (uv, dv, av):
+        ws.add_data_validation(v)
+    for row in ws.iter_rows(min_row=2, min_col=11, max_col=11):
+        for c in row:
+            c.number_format = "@"  # barcodes stay as text (no 8.9E+12)
     help_ws = wb.create_sheet("How to fill")
     for line in [
         ["How to fill the Menu sheet"],
@@ -62,6 +70,8 @@ def _workbook(rows):
         ["S.No: the item's serial number. Leave empty and it is given automatically."],
         ["Category: e.g. Juices. A new category is created if it does not exist."],
         ["Price / Offer price: numbers only, e.g. 120 or 99.50. Offer price must be lower than Price."],
+        ["Unit: Piece, Kg or Litre. Empty = Piece. For Kg / Litre items the price is for 1 kg / 1 litre."],
+        ["Barcode: the number printed under the barcode on the packet (optional). Format the column as Text."],
         ["Veg / Non-veg: Veg, Non-veg, Egg or empty."],
         ["GST %: 0, 5, 12, 18 or 28. Empty = the cafe's default GST %."],
         ["Available: Yes or No. Empty = Yes."],
@@ -101,9 +111,10 @@ def menu_bulk():
 def menu_template():
     st = get_settings()
     gst = st["default_gst"]
-    sample = [[1, "Tea & Coffee", "Kerala Chai", 15, None, "Veg", gst, "Fresh milk tea", "Yes"],
-              [2, "Snacks", "Chicken Puffs", 25, None, "Non-veg", gst, "", "Yes"],
-              [3, "Juices", "Mango Shake", 80, 65, "Veg", gst, "Seasonal mangoes", "Yes"]]
+    sample = [[1, "Tea & Coffee", "Kerala Chai", 15, None, "Piece", "Veg", gst, "Fresh milk tea", "Yes", None],
+              [2, "Snacks", "Chicken Puffs", 25, None, "Piece", "Non-veg", gst, "", "Yes", None],
+              [3, "Bakery", "Mixture", 480, None, "Kg", "Veg", gst, "Price per kg", "Yes", None],
+              [4, "Packets", "Choco Brownie", 30, None, "Piece", "Veg", gst, "", "Yes", "8901234567890"]]
     return _xlsx_response(_workbook(sample), "menu-template.xlsx")
 
 
@@ -116,8 +127,8 @@ def menu_export():
     def num(p):
         return None if p is None else (p // 100 if p % 100 == 0 else p / 100)
     data = [[r["serial"], r["cat"] or "", r["name"], num(r["price"]), num(r["offer_price"]),
-             FOOD_OUT.get(r["food_type"] or "", ""), r["gst_rate"], r["description"] or "",
-             "Yes" if r["available"] else "No"] for r in rows]
+             UNIT_OUT.get(r["unit"] or "pc", "Piece"), FOOD_OUT.get(r["food_type"] or "", ""), r["gst_rate"],
+             r["description"] or "", "Yes" if r["available"] else "No", r["barcode"] or None] for r in rows]
     return _xlsx_response(_workbook(data), f"{_slug()}-menu.xlsx")
 
 
@@ -176,13 +187,16 @@ def parse_sheet(rows):
     idx = {"sno": col("s.no", "sno", "s no", "serial", "serial no"), "cat": col("category"),
            "name": col("item name", "item", "name"), "price": col("price", "rate"),
            "offer": col("offer price", "offer"), "food": col("veg / non-veg", "veg/non-veg", "veg", "type"),
-           "gst": col("gst %", "gst", "gst%"), "desc": col("description"), "avail": col("available")}
+           "gst": col("gst %", "gst", "gst%"), "desc": col("description"), "avail": col("available"),
+           "unit": col("unit", "sold by"), "barcode": col("barcode", "bar code", "ean")}
     if idx["name"] is None or idx["price"] is None:
         raise ValueError("The first row must have the column names. 'Item name' and 'Price' are required "
                          "(use the template).")
     oid = _org()
     st = get_settings()
-    existing = H.query("SELECT id, name, serial FROM menu_items WHERE org_id = ? AND active = 1", (oid,))
+    existing = H.query("SELECT id, name, serial, barcode FROM menu_items WHERE org_id = ? AND active = 1", (oid,))
+    by_barcode = {r["barcode"]: r for r in existing if r["barcode"]}
+    seen_barcode = set()
     by_serial = {r["serial"]: r for r in existing if r["serial"]}
     by_name = {r["name"].strip().lower(): r for r in existing}
     lines, errors, seen_serial, seen_name = [], [], set(), set()
@@ -216,6 +230,13 @@ def parse_sheet(rows):
         gst = to_float(gst_txt, None, 0, 28) if gst_txt else st["default_gst"]
         if gst is None:
             problems.append("GST % is not a number")
+        unit_txt = _cell(row, idx["unit"]).lower().strip(". ")
+        unit = UNIT_IN.get(unit_txt, "pc") if unit_txt else "pc"
+        if unit_txt and unit_txt not in UNIT_IN:
+            problems.append("Unit must be Piece, Kg or Litre")
+        barcode = re.sub(r"\s+", "", _cell(row, idx["barcode"]))[:40] or None
+        if barcode and barcode in seen_barcode:
+            problems.append(f"barcode {barcode} appears twice in the sheet")
         avail_txt = _cell(row, idx["avail"]).lower()
         available = 0 if avail_txt in ("no", "n", "0", "off", "false") else 1
         key = name.lower()
@@ -230,15 +251,20 @@ def parse_sheet(rows):
             target = by_serial[sno]
         if sno and target is not None and sno in by_serial and by_serial[sno]["id"] != target["id"]:
             problems.append(f"S.No {sno} already belongs to '{by_serial[sno]['name']}'")
+        if barcode and barcode in by_barcode and (target is None or by_barcode[barcode]["id"] != target["id"]):
+            problems.append(f"barcode {barcode} already belongs to '{by_barcode[barcode]['name']}'")
         if problems:
             errors.append({"row": n, "name": name, "problems": problems})
             continue
+        if barcode:
+            seen_barcode.add(barcode)
         seen_serial.add(sno)
         seen_name.add(key)
         lines.append({"row": n, "action": "update" if target else "new", "id": target["id"] if target else None,
                       "serial": sno, "category": _cell(row, idx["cat"])[:60], "name": name, "price": price,
                       "offer_price": offer, "food_type": food, "gst_rate": gst,
-                      "description": _cell(row, idx["desc"])[:300], "available": available})
+                      "description": _cell(row, idx["desc"])[:300], "available": available, "unit": unit,
+                      "barcode": barcode})
     return lines, errors
 
 
@@ -301,7 +327,7 @@ def menu_import_confirm():
                     cats[l["category"].lower()] = cid
                     next_sort += 1
             vals = (l["name"], l["description"] or None, cid, l["price"], l["offer_price"], l["food_type"] or None,
-                    l["gst_rate"], l["available"])
+                    l["gst_rate"], l["available"], l.get("unit") or "pc", l.get("barcode"))
             if l["action"] == "update":
                 row = db.execute("SELECT id, serial FROM menu_items WHERE id = ? AND org_id = ? AND active = 1",
                                  (l["id"], oid)).fetchone()
@@ -309,7 +335,8 @@ def menu_import_confirm():
                     continue
                 sno = l["serial"] or row["serial"]
                 db.execute("""UPDATE menu_items SET name=?, description=?, category_id=?, price=?, offer_price=?,
-                              food_type=?, gst_rate=?, available=?, serial=?, updated_at=? WHERE id=?""",
+                              food_type=?, gst_rate=?, available=?, unit=?, barcode=?, serial=?, updated_at=?
+                              WHERE id=?""",
                            vals + (sno, ts, row["id"]))
                 updated += 1
             else:
@@ -320,8 +347,8 @@ def menu_import_confirm():
                     sno = serial
                 taken.add(sno)
                 db.execute("""INSERT INTO menu_items (org_id, name, description, category_id, price, offer_price,
-                              food_type, gst_rate, available, serial, created_by, created_at, updated_at)
-                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (oid,) + vals + (sno, g.user["id"], ts, ts))
+                              food_type, gst_rate, available, unit, barcode, serial, created_by, created_at, updated_at)
+                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (oid,) + vals + (sno, g.user["id"], ts, ts))
                 added += 1
         db.commit()
     except Exception:

@@ -3,7 +3,10 @@
 {% block content %}
 <div class="pos" id="pos">
   <section class="pos-menu">
-    <div class="pos-search"><input id="pos-q" placeholder="🔍 Search item, or type S.No + Enter" autocomplete="off"></div>
+    <div class="pos-search">
+      <input id="pos-q" placeholder="🔍 Search, S.No or barcode + Enter" autocomplete="off">
+      <button type="button" class="btn" id="cam-btn" title="Scan a barcode with the camera">📷</button>
+    </div>
     <div class="pos-cats" id="pos-cats"></div>
     <div class="pos-items" id="pos-items"></div>
   </section>
@@ -47,12 +50,45 @@
   </aside>
   <button type="button" class="pos-cartbar mobile-only" id="pos-cartbar">🛒 <span id="cb-count">0 items</span><b id="cb-total">₹0</b><span>Bill →</span></button>
 </div>
+
+<div class="pos-modal" id="m-measure" hidden>
+  <div class="card pm-box">
+    <h2 id="mm-title">Weight</h2>
+    <p class="muted small" id="mm-rate"></p>
+    <div class="pm-row"><label>Weight<input id="mm-qty" inputmode="decimal" autocomplete="off"></label>
+      <div class="seg seg-sm" id="mm-u"><button type="button" data-u="small" class="on">g</button><button type="button" data-u="big">kg</button></div></div>
+    <div class="pm-quick" id="mm-quick"></div>
+    <div class="pm-row"><label>or amount (₹)<input id="mm-amt" inputmode="decimal" autocomplete="off"></label></div>
+    <p class="pm-result" id="mm-result"></p>
+    <div class="actions"><button type="button" class="btn btn-primary btn-big" id="mm-ok">Add to bill</button><button type="button" class="btn" data-close>Cancel</button></div>
+  </div>
+</div>
+<div class="pos-modal" id="m-price" hidden>
+  <div class="card pm-box">
+    <h2>Change price</h2>
+    <p class="muted small" id="mp-info"></p>
+    <div class="pm-row"><label>New price (₹)<input id="mp-val" inputmode="decimal" autocomplete="off"></label></div>
+    <p class="muted small">Only this bill changes. The menu price stays the same.</p>
+    <div class="actions"><button type="button" class="btn btn-primary btn-big" id="mp-ok">Save price</button><button type="button" class="btn" id="mp-reset">Menu price</button><button type="button" class="btn" data-close>Cancel</button></div>
+  </div>
+</div>
+<div class="pos-modal" id="m-cam" hidden>
+  <div class="card pm-box cam-box">
+    <h2>Scan barcode</h2>
+    <video id="cam-video" playsinline muted></video>
+    <p class="muted small">Hold the barcode inside the frame.</p>
+    <div class="actions"><button type="button" class="btn" data-close>Close</button></div>
+  </div>
+</div>
+
 <script id="pos-cfg" type="application/json">{{ cfg|tojson }}</script>
 <script>
 (function () {
   var cfg = JSON.parse(document.getElementById("pos-cfg").textContent);
   var csrf = "{{ csrf_token() }}";
-  var byId = {}; cfg.items.forEach(function (i) { byId[i.id] = i; });
+  var byId = {}, byCode = {}, bySno = {};
+  cfg.items.forEach(function (i) { byId[i.id] = i; if (i.barcode) byCode[i.barcode] = i; if (i.sno) bySno[String(i.sno)] = i; });
+  var WEIGHED = {kg: 1, l: 1};
   var state = {
     order: cfg.order ? cfg.order.id : null,
     type: cfg.order ? cfg.order.type : (cfg.start_type || "takeaway"),
@@ -60,7 +96,10 @@
     lines: [], cat: null, q: "", pay: cfg.modes[0], dmode: "amt", cust: null, busy: false
   };
   if (cfg.order) {
-    cfg.order.items.forEach(function (l) { state.lines.push({item_id: l.item_id, name: l.name, price: l.price, qty: l.qty, sent: l.sent, note: l.note}); });
+    cfg.order.items.forEach(function (l) {
+      state.lines.push({line_id: l.line_id, item_id: l.item_id, name: l.name, price: l.price, qty: l.qty, sent: l.sent,
+                        note: l.note, unit: l.unit, measure: l.measure, unit_price: l.unit_price, edited: l.edited, changed: false});
+    });
   }
   var $ = function (id) { return document.getElementById(id); };
   function rs(p) {
@@ -69,6 +108,18 @@
     return (neg ? "-" : "") + "₹" + s + (ps ? "." + (ps < 10 ? "0" : "") + ps : "");
   }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function meas(m, unit) {
+    if (!m) return "";
+    var small = unit === "kg" ? "g" : "ml", big = unit === "kg" ? "kg" : "L";
+    return m < 1 ? Math.round(m * 1000) + " " + small : (Math.round(m * 1000) / 1000) + " " + big;
+  }
+  function per(unit) { return unit === "kg" ? "/kg" : unit === "l" ? "/L" : ""; }
+  function flash(t, ok) { var m = $("pc-msg"); m.hidden = false; m.className = "pc-msg " + (ok ? "ok" : "err"); m.textContent = t; clearTimeout(m._t); m._t = setTimeout(function () { m.hidden = true; }, 6000); }
+  function openModal(id) { $(id).hidden = false; }
+  function closeModals() { document.querySelectorAll(".pos-modal").forEach(function (m) { m.hidden = true; }); stopCam(); }
+  document.querySelectorAll(".pos-modal").forEach(function (m) {
+    m.addEventListener("click", function (e) { if (e.target === m || e.target.hasAttribute("data-close")) closeModals(); });
+  });
 
   // ---- menu
   function renderCats() {
@@ -82,31 +133,112 @@
   }
   function renderItems() {
     var box = $("pos-items"); box.innerHTML = "";
-    var q = state.q.toLowerCase();
-    var isNum = /^\d+$/.test(q);
-    var list = cfg.items.filter(function (i) { return (state.cat === null || i.cat === state.cat || q) && (!q || i.name.toLowerCase().indexOf(q) >= 0 || (isNum && String(i.sno) === q)); });
-    if (isNum) list.sort(function (a, b) { return (String(b.sno) === q) - (String(a.sno) === q); });
+    var q = state.q.toLowerCase(), isNum = /^\d+$/.test(q);
+    var list = cfg.items.filter(function (i) {
+      return (state.cat === null || i.cat === state.cat || q) &&
+        (!q || i.name.toLowerCase().indexOf(q) >= 0 || (isNum && (String(i.sno) === q || i.barcode === q)));
+    });
+    if (isNum) list.sort(function (a, b) { return ((String(b.sno) === q || b.barcode === q) ? 1 : 0) - ((String(a.sno) === q || a.barcode === q) ? 1 : 0); });
     if (!list.length) { box.appendChild(el("p", "muted", cfg.items.length ? "Nothing found." : "The menu has no items. Add them on the Menu page.")); return; }
     list.forEach(function (i) {
       var b = el("button", "pi" + (i.available ? "" : " pi-off")); b.type = "button";
       if (i.photo) { var im = el("img"); im.src = i.photo; im.alt = ""; im.loading = "lazy"; b.appendChild(im); }
       if (i.sno) b.appendChild(el("span", "pi-sno", String(i.sno)));
-      var nm = el("span", "pi-name"); if (i.type) nm.appendChild(el("span", "ft ft-" + i.type)); nm.appendChild(document.createTextNode(i.name)); b.appendChild(nm);
-      var pr = el("span", "pi-price", rs(i.price)); if (i.mrp) { pr.appendChild(el("s", "muted", " " + rs(i.mrp))); } b.appendChild(pr);
-      var q = qtyOf(i.id); if (q) b.appendChild(el("span", "pi-qty", String(q)));
+      var nm = el("span", "pi-name"); if (i.pin) nm.appendChild(el("span", "", "📌 ")); if (i.type) nm.appendChild(el("span", "ft ft-" + i.type));
+      nm.appendChild(document.createTextNode(i.name)); b.appendChild(nm);
+      var pr = el("span", "pi-price", rs(i.price) + per(i.unit)); if (i.mrp) { pr.appendChild(el("s", "muted", " " + rs(i.mrp))); } b.appendChild(pr);
+      var q2 = qtyOf(i.id); if (q2) b.appendChild(el("span", "pi-qty", String(q2)));
       if (!i.available) b.appendChild(el("span", "pi-na", "OFF"));
-      b.onclick = function () { if (!i.available) { flash("'" + i.name + "' is not available now (OFF)."); return; } add(i.id, 1); };
+      b.onclick = function () { pick(i); };
       box.appendChild(b);
     });
   }
   function qtyOf(id) { var n = 0; state.lines.forEach(function (l) { if (l.item_id === id) n += l.qty; }); return n; }
-  function add(id, d) {
-    var line = state.lines.find(function (l) { return l.item_id === id && !l.note; });
-    if (!line) { var it = byId[id]; if (!it) return; line = {item_id: id, name: it.name, price: it.price, qty: 0, sent: 0, note: ""}; state.lines.push(line); }
-    line.qty += d;
-    if (line.qty <= 0) state.lines.splice(state.lines.indexOf(line), 1);
+  function pick(i) {
+    if (!i.available) { flash("'" + i.name + "' is not available now (OFF)."); return; }
+    if (WEIGHED[i.unit]) { askMeasure(i); return; }
+    var line = state.lines.find(function (l) { return l.item_id === i.id && !l.note && !l.edited && !l.measure; });
+    if (!line) { line = {item_id: i.id, name: i.name, price: i.price, qty: 0, sent: 0, note: "", unit: "pc", measure: null, edited: false, changed: false}; state.lines.push(line); }
+    line.qty += 1; line.changed = true;
     render();
   }
+
+  // ---- weight / volume dialog
+  var mm = {item: null, unit: "small"};
+  function mmMeasure() {
+    var v = parseFloat(($("mm-qty").value || "").replace(",", "."));
+    if (!(v > 0)) return 0;
+    return mm.unit === "small" ? v / 1000 : v;
+  }
+  function mmUpdate(from) {
+    var i = mm.item, m;
+    if (from === "amt") {
+      var a = parseFloat($("mm-amt").value);
+      m = a > 0 ? a * 100 / i.price : 0;
+      $("mm-qty").value = m ? (mm.unit === "small" ? Math.round(m * 1000) : Math.round(m * 1000) / 1000) : "";
+    } else {
+      m = mmMeasure();
+      if (from === "qty") $("mm-amt").value = "";
+    }
+    $("mm-result").textContent = m ? meas(m, i.unit) + " = " + rs(Math.round(i.price * m)) : "";
+  }
+  function askMeasure(i) {
+    mm.item = i; mm.unit = "small";
+    $("mm-title").textContent = i.name;
+    $("mm-rate").textContent = rs(i.price) + " per " + (i.unit === "kg" ? "kg" : "litre");
+    var seg = $("mm-u").querySelectorAll("button");
+    seg[0].textContent = i.unit === "kg" ? "g" : "ml"; seg[1].textContent = i.unit === "kg" ? "kg" : "L";
+    seg.forEach(function (b) { b.classList.toggle("on", b.dataset.u === "small"); });
+    $("mm-qty").previousSibling.textContent = i.unit === "kg" ? "Weight" : "Quantity";
+    $("mm-qty").value = ""; $("mm-amt").value = ""; $("mm-result").textContent = "";
+    var quick = $("mm-quick"); quick.innerHTML = "";
+    [0.1, 0.25, 0.5, 1].forEach(function (q) {
+      var b = el("button", "chip", meas(q, i.unit)); b.type = "button";
+      b.onclick = function () { mm.unit = q < 1 ? "small" : "big"; seg.forEach(function (x) { x.classList.toggle("on", x.dataset.u === mm.unit); });
+        $("mm-qty").value = q < 1 ? Math.round(q * 1000) : q; mmUpdate("qty"); };
+      quick.appendChild(b);
+    });
+    openModal("m-measure"); setTimeout(function () { $("mm-qty").focus(); }, 50);
+  }
+  $("mm-u").querySelectorAll("button").forEach(function (b) { b.onclick = function () {
+    var m = mmMeasure(); mm.unit = b.dataset.u;
+    $("mm-u").querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+    if (m) $("mm-qty").value = mm.unit === "small" ? Math.round(m * 1000) : Math.round(m * 1000) / 1000;
+    mmUpdate("qty");
+  }; });
+  $("mm-qty").addEventListener("input", function () { mmUpdate("qty"); });
+  $("mm-amt").addEventListener("input", function () { mmUpdate("amt"); });
+  function mmOk() {
+    var i = mm.item, m = Math.round(mmMeasure() * 1000) / 1000;
+    if (!(m > 0)) { $("mm-result").textContent = "Enter the weight or the amount."; return; }
+    state.lines.push({item_id: i.id, name: i.name, price: Math.round(i.price * m), qty: 1, sent: 0, note: "", unit: i.unit,
+                      measure: m, unit_price: i.price, edited: false, changed: true});
+    closeModals(); render();
+  }
+  $("mm-ok").onclick = mmOk;
+  ["mm-qty", "mm-amt"].forEach(function (id) { $(id).addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); mmOk(); } }); });
+
+  // ---- change a price on the bill (permission)
+  var mpLine = null;
+  function askPrice(l) {
+    mpLine = l;
+    $("mp-info").textContent = l.name + (l.measure ? " (" + meas(l.measure, l.unit) + ")" : "") + " · now " + rs(l.price) + (l.measure ? "" : " each");
+    $("mp-val").value = (l.price / 100).toFixed(2).replace(/\.00$/, "");
+    openModal("m-price"); setTimeout(function () { $("mp-val").select(); }, 50);
+  }
+  function mpSave() {
+    var v = parseFloat($("mp-val").value);
+    if (!(v >= 0)) { flash("Enter a valid price."); return; }
+    mpLine.price = Math.round(v * 100); mpLine.edited = true; mpLine.changed = true; mpLine.priceSet = true;
+    closeModals(); render();
+  }
+  $("mp-ok").onclick = mpSave;
+  $("mp-val").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); mpSave(); } });
+  $("mp-reset").onclick = function () {
+    var i = byId[mpLine.item_id];
+    if (i) { mpLine.price = mpLine.measure ? Math.round((mpLine.unit_price || i.price) * mpLine.measure) : i.price; }
+    mpLine.edited = false; mpLine.changed = true; mpLine.priceSet = true; closeModals(); render();
+  };
 
   // ---- totals (the server recalculates; this is the preview)
   function totals() {
@@ -131,18 +263,22 @@
   // ---- cart
   function renderLines() {
     var box = $("pc-lines"); box.innerHTML = "";
-    if (!state.lines.length) { box.appendChild(el("p", "muted center", "Tap an item to add it")); return; }
+    if (!state.lines.length) { box.appendChild(el("p", "muted center", "Tap an item, type its S.No or scan its barcode")); return; }
     state.lines.forEach(function (l) {
       var row = el("div", "pl");
-      var nm = el("div", "pl-name", l.name); if (l.note) nm.appendChild(el("small", "muted", " · " + l.note));
+      var nm = el("div", "pl-name", l.name);
+      if (l.measure) nm.appendChild(el("small", "pl-meas", " " + meas(l.measure, l.unit)));
+      if (l.note) nm.appendChild(el("small", "muted", " · " + l.note));
       if (l.sent) nm.appendChild(el("small", "pl-sent", l.sent >= l.qty ? " ✓ kitchen" : " ✓ " + l.sent + " kitchen"));
       row.appendChild(nm);
       var q = el("div", "pl-qty");
-      var m = el("button", "", "−"); m.type = "button"; m.onclick = function () { l.qty -= 1; if (l.qty <= 0) state.lines.splice(state.lines.indexOf(l), 1); render(); };
-      var n = el("input"); n.value = l.qty; n.inputMode = "numeric"; n.onchange = function () { var v = parseInt(n.value, 10) || 0; l.qty = Math.max(0, Math.min(500, v)); if (!l.qty) state.lines.splice(state.lines.indexOf(l), 1); render(); };
-      var p = el("button", "", "+"); p.type = "button"; p.onclick = function () { l.qty += 1; render(); };
+      var m = el("button", "", "−"); m.type = "button"; m.onclick = function () { l.qty -= 1; l.changed = true; if (l.qty <= 0) state.lines.splice(state.lines.indexOf(l), 1); render(); };
+      var n = el("input"); n.value = l.qty; n.inputMode = "numeric"; n.onchange = function () { var v = parseInt(n.value, 10) || 0; l.qty = Math.max(0, Math.min(500, v)); l.changed = true; if (!l.qty) state.lines.splice(state.lines.indexOf(l), 1); render(); };
+      var p = el("button", "", "+"); p.type = "button"; p.onclick = function () { l.qty += 1; l.changed = true; render(); };
       q.appendChild(m); q.appendChild(n); q.appendChild(p); row.appendChild(q);
-      row.appendChild(el("div", "pl-amt", rs(l.price * l.qty)));
+      var amt = el(cfg.perms.price_edit ? "button" : "div", "pl-amt" + (l.edited ? " edited" : ""), rs(l.price * l.qty) + (l.edited ? " ✏️" : ""));
+      if (cfg.perms.price_edit) { amt.type = "button"; amt.title = "Change price"; amt.onclick = function () { askPrice(l); }; }
+      row.appendChild(amt);
       box.appendChild(row);
     });
   }
@@ -172,6 +308,56 @@
     $("pc-title").textContent = state.order ? "Order #" + cfg.order.no + (cfg.order.source === "online" ? " (online)" : "") : "New bill";
   }
   function render() { renderItems(); renderLines(); renderTotals(); }
+
+  // ---- S.No / barcode / name from the search box, a USB scanner, or the camera
+  function findCode(v) {
+    v = (v || "").trim();
+    if (!v) return null;
+    if (byCode[v]) return byCode[v];
+    if (/^\d+$/.test(v) && bySno[v]) return bySno[v];
+    var m = cfg.items.filter(function (i) { return i.name.toLowerCase().indexOf(v.toLowerCase()) >= 0; });
+    return m.length === 1 ? m[0] : null;
+  }
+  function addCode(v, fromScanner) {
+    var hit = findCode(v);
+    if (!hit) { flash(v ? (fromScanner ? "No item has barcode " + v + ". Add it in Menu → Edit item." : "No item with S.No / barcode " + v + ".") : "Type an S.No, a barcode or a name."); return false; }
+    pick(hit);
+    if (!WEIGHED[hit.unit]) flash("Added: " + hit.name, true);
+    return true;
+  }
+  $("pos-q").addEventListener("input", function () { state.q = this.value.trim(); renderItems(); });
+  $("pos-q").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (addCode(this.value, false)) { this.value = ""; state.q = ""; renderItems(); }
+  });
+  // A USB / Bluetooth scanner types the code very fast and ends with Enter. Catch it anywhere on this page.
+  var scan = {buf: "", last: 0};
+  document.addEventListener("keydown", function (e) {
+    var t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+    if (typing || !$("m-measure").hidden || !$("m-price").hidden) return;
+    var now = Date.now();
+    if (now - scan.last > 80) scan.buf = "";
+    scan.last = now;
+    if (e.key === "Enter") { if (scan.buf.length >= 4) { e.preventDefault(); addCode(scan.buf, true); } scan.buf = ""; return; }
+    if (e.key.length === 1) scan.buf += e.key;
+  });
+  // Camera scanning (Chrome on Android has a built-in barcode reader).
+  var cam = {stream: null, timer: null};
+  function stopCam() { if (cam.timer) clearInterval(cam.timer); cam.timer = null; if (cam.stream) cam.stream.getTracks().forEach(function (t) { t.stop(); }); cam.stream = null; }
+  $("cam-btn").onclick = function () {
+    if (!("BarcodeDetector" in window) || !navigator.mediaDevices) { flash("Camera scanning works in Chrome on Android. On a computer, use a USB barcode scanner."); return; }
+    var det = new window.BarcodeDetector({formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"]});
+    openModal("m-cam");
+    navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}}).then(function (s) {
+      cam.stream = s; var v = $("cam-video"); v.srcObject = s; v.play();
+      cam.timer = setInterval(function () {
+        det.detect(v).then(function (codes) {
+          if (codes.length) { var c = codes[0].rawValue; closeModals(); addCode(c, true); }
+        }).catch(function () {});
+      }, 300);
+    }).catch(function () { closeModals(); flash("Could not open the camera. Allow camera access for this site."); });
+  };
 
   // ---- customer lookup
   var lookT = null;
@@ -203,18 +389,6 @@
   };
 
   // ---- events
-  $("pos-q").addEventListener("input", function () { state.q = this.value.trim(); renderItems(); });
-  $("pos-q").addEventListener("keydown", function (e) {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    var v = this.value.trim(), hit = null;
-    if (/^\d+$/.test(v)) hit = cfg.items.find(function (i) { return String(i.sno) === v; });
-    if (!hit) { var m = cfg.items.filter(function (i) { return i.name.toLowerCase().indexOf(v.toLowerCase()) >= 0; }); if (m.length === 1) hit = m[0]; }
-    if (!hit) { flash(v ? "No item with S.No " + v + "." : "Type an S.No or a name."); return; }
-    if (!hit.available) { flash("'" + hit.name + "' is not available now (OFF)."); return; }
-    add(hit.id, 1); flash("Added: " + hit.name, true);
-    this.value = ""; state.q = ""; renderItems();
-  });
   document.querySelectorAll("#pc-types button").forEach(function (b) { b.onclick = function () { state.type = b.dataset.type; renderType(); }; });
   $("pc-table").onchange = function () { state.table = parseInt(this.value, 10) || null; };
   document.querySelectorAll("#pc-pay button").forEach(function (b) { b.onclick = function () { state.pay = b.dataset.mode; document.querySelectorAll("#pc-pay button").forEach(function (x) { x.classList.toggle("on", x === b); }); }; });
@@ -222,8 +396,6 @@
   ["pc-disc", "pc-redeem"].forEach(function (id) { if ($(id)) $(id).addEventListener("input", renderTotals); });
   $("pos-cartbar").onclick = function () { document.body.classList.add("cart-open"); };
   $("pc-close").onclick = function () { document.body.classList.remove("cart-open"); };
-
-  function flash(t, ok) { var m = $("pc-msg"); m.hidden = false; m.className = "pc-msg " + (ok ? "ok" : "err"); m.textContent = t; clearTimeout(m._t); m._t = setTimeout(function () { m.hidden = true; }, 6000); }
 
   document.querySelectorAll(".pc-actions button").forEach(function (b) {
     b.onclick = function () {
@@ -234,7 +406,11 @@
       var t = totals();
       var payload = {
         action: act, order_id: state.order, order_type: state.type, table_id: state.table,
-        items: state.lines.map(function (l) { return {item_id: l.item_id, qty: l.qty, note: l.note}; }),
+        items: state.lines.map(function (l) {
+          var o = {line_id: l.line_id || null, item_id: l.item_id, qty: l.qty, note: l.note, measure: l.measure || null};
+          if (l.priceSet) o.price = (l.price / 100).toFixed(2);
+          return o;
+        }),
         customer: {phone: $("pc-phone").value, name: $("pc-name").value,
                    birthday: $("pc-bday") ? $("pc-bday").value : "", ref: $("pc-ref") ? $("pc-ref").value : ""},
         address: $("pc-address").value, note: $("pc-note").value,

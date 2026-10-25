@@ -63,7 +63,7 @@
   <section class="card">
     <h2>Top selling items</h2>
     {% set maxq = (top_items|map(attribute='qty')|max) if top_items else 1 %}
-    <ul class="bars">{% for t in top_items %}<li><a href="#"><span class="bar-label">{{ t.name }}</span><span class="bar-track"><span class="bar-fill" style="width: {{ (t.qty / maxq * 100)|round }}%"></span></span><span class="bar-count">{{ t.qty }}</span></a></li>
+    <ul class="bars">{% for t in top_items %}<li><a href="#"><span class="bar-label">{{ t.name }}</span><span class="bar-track"><span class="bar-fill" style="width: {{ (t.qty / maxq * 100)|round }}%"></span></span><span class="bar-count">{{ t.meas|meas(t.unit) if t.unit in ("kg", "l") else t.qty }}</span></a></li>
     {% else %}<li class="muted">No bills.</li>{% endfor %}</ul>
   </section>
   <section class="card">

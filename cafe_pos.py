@@ -1,11 +1,13 @@
 """Billing screen, orders (counter + online), KOT, bills, and the public digital menu with online ordering."""
 import json
 import time
+
+import cafe_escpos
 from datetime import timedelta
 
 from flask import abort, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
 
-from cafe import (ORDER_TYPES, PAYMENT_MODES, add_points, bp, cafe_name, cafe_view, can, compute_totals,
+from cafe import (ORDER_TYPES, PAYMENT_MODES, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals,
                   customer_by_phone, expire_points, get_settings, has_cafe, host as H, live_banners, max_redeemable,
                   menu_data, menu_url, offer_active, effective_price, phone10, point_value, points_for_amount,
                   round_rupee, rupees, take_points, theme_css, to_int, to_paise, to_float, today, today_date, token,
@@ -68,46 +70,101 @@ def new_order(db, order_type, table_id=None, source="counter", **extra):
 
 
 def parse_items(raw):
-    """[{item_id, qty, note}] -> {(item_id, note): qty} (merged)."""
-    out = {}
+    """[{line_id?, item_id, qty, note, measure?, price?}] -> clean list of dicts.
+
+    line_id: an existing line of the order. measure: kg / litre for items sold by weight or volume.
+    price: a price changed on the bill (paise per piece / pack); needs the price-change permission."""
     if not isinstance(raw, list):
         raise BillError("The items are not valid.")
+    out = []
     for r in raw[:MAX_LINES]:
         if not isinstance(r, dict):
             continue
         iid = to_int(r.get("item_id"), 0)
         qty = to_int(r.get("qty"), 0, 0, MAX_QTY)
-        note = str(r.get("note") or "").strip()[:80]
-        if iid and qty:
-            out[(iid, note)] = min(MAX_QTY, out.get((iid, note), 0) + qty)
+        if not iid or not qty:
+            continue
+        measure = to_float(r.get("measure"), 0, 0, 1000) or None
+        if measure is not None:
+            measure = round(measure, 3)
+            if measure < 0.001:
+                measure = None
+        price = r.get("price")
+        price = to_paise(price) if price not in (None, "") else None
+        if price is not None and (price < 0 or price > 10000000):
+            raise BillError("A price is not valid.")
+        out.append({"line_id": to_int(r.get("line_id"), 0) or None, "item_id": iid, "qty": qty,
+                    "note": str(r.get("note") or "").strip()[:80], "measure": measure, "price": price})
     return out
 
 
-def set_order_lines(db, order_id, wanted, allow_unavailable=False):
-    """Make the order's lines match wanted. Existing lines keep their price; new lines take today's price."""
-    existing = {(r["item_id"], r["note"] or ""): r for r in
-                db.execute("SELECT * FROM cafe_order_items WHERE order_id = ?", (order_id,)).fetchall()}
+def _price_change_ok(public):
+    if public or not can("price_edit"):
+        raise BillError("You are not allowed to change item prices.")
+
+
+def set_order_lines(db, order_id, wanted, allow_unavailable=False, public=False):
+    """Make the order's lines match `wanted`. Existing lines keep their price unless it is changed (permission);
+    new lines take today's menu price (per kg / litre x measure for weighed items)."""
+    existing = {r["id"]: r for r in db.execute("SELECT * FROM cafe_order_items WHERE order_id = ?", (order_id,))}
     day = today()
-    for key, qty in wanted.items():
-        if key in existing:
-            if existing[key]["qty"] != qty:
-                db.execute("UPDATE cafe_order_items SET qty = ? WHERE id = ?", (qty, existing[key]["id"]))
+    uid = g.user["id"] if g.get("user") else None
+    keep = set()
+    # Lines sent without line_id (older pages, the customer menu) match an existing line with the same item, note
+    # and weight, so a repeat save never cancels and re-sends what the kitchen already has.
+    claimed = {w["line_id"] for w in wanted if w["line_id"] in existing}
+    for w in wanted:
+        if w["line_id"] not in existing:
+            w["line_id"] = None
+            for rid, r in existing.items():
+                if (rid not in claimed and r["item_id"] == w["item_id"] and (r["note"] or "") == w["note"]
+                        and (r["measure"] or None) == w["measure"] and not r["price_by"]):
+                    w["line_id"] = rid
+                    claimed.add(rid)
+                    break
+    for w in wanted:
+        row = existing.get(w["line_id"]) if w["line_id"] else None
+        if row is not None:
+            keep.add(row["id"])
+            price, price_by = row["price"], row["price_by"]
+            measure = row["measure"]
+            if row["unit"] in ("kg", "l") and w["measure"] and w["measure"] != row["measure"]:
+                measure = w["measure"]
+                price = int(round((row["unit_price"] or row["price"]) * measure))
+            if w["price"] is not None and w["price"] != price:
+                _price_change_ok(public)
+                price, price_by = w["price"], uid
+            if (row["qty"], row["price"], row["measure"]) != (w["qty"], price, measure):
+                db.execute("UPDATE cafe_order_items SET qty = ?, price = ?, measure = ?, price_by = ? WHERE id = ?",
+                           (w["qty"], price, measure, price_by, row["id"]))
             continue
         item = db.execute("SELECT * FROM menu_items WHERE id = ? AND org_id = ? AND active = 1",
-                          (key[0], _org())).fetchone()
+                          (w["item_id"], _org())).fetchone()
         if not item:
             raise BillError("An item is no longer on the menu. Reload the page.")
         if not item["available"] and not allow_unavailable:
             raise BillError(f"'{item['name']}' is not available now (switched OFF).")
-        db.execute("""INSERT INTO cafe_order_items (org_id, order_id, item_id, name, price, gst_rate, qty, note)
-                      VALUES (?,?,?,?,?,?,?,?)""", (_org(), order_id, item["id"], item["name"],
-                                                     effective_price(item, day), item["gst_rate"], qty, key[1] or None))
-    for key, r in existing.items():
-        if key not in wanted:
+        unit = item["unit"] or "pc"
+        unit_price = effective_price(item, day)
+        if unit in ("kg", "l"):
+            measure = w["measure"] or 1.0
+            price = int(round(unit_price * measure))
+        else:
+            measure, price = None, unit_price
+        price_by = None
+        if w["price"] is not None and w["price"] != price:
+            _price_change_ok(public)
+            price, price_by = w["price"], uid
+        db.execute("""INSERT INTO cafe_order_items (org_id, order_id, item_id, name, price, gst_rate, qty, note, unit,
+                      measure, unit_price, price_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   (_org(), order_id, item["id"], item["name"], price, item["gst_rate"], w["qty"], w["note"] or None,
+                    unit, measure, unit_price if unit in ("kg", "l") else None, price_by))
+    for rid, r in existing.items():
+        if rid not in keep:
             if r["kot_qty"]:
-                db.execute("UPDATE cafe_order_items SET qty = 0 WHERE id = ?", (r["id"],))  # KOT shows the cancel
+                db.execute("UPDATE cafe_order_items SET qty = 0 WHERE id = ?", (rid,))  # the KOT shows the cancel
             else:
-                db.execute("DELETE FROM cafe_order_items WHERE id = ?", (r["id"],))
+                db.execute("DELETE FROM cafe_order_items WHERE id = ?", (rid,))
 
 
 def make_kot(db, order_id):
@@ -116,7 +173,12 @@ def make_kot(db, order_id):
                       (order_id,)).fetchall()
     if not rows:
         return None
-    lines = [{"name": r["name"], "qty": r["qty"] - r["kot_qty"], "note": r["note"] or ""} for r in rows]
+    lines = []
+    for r in rows:
+        ln = {"name": r["name"], "qty": r["qty"] - r["kot_qty"], "note": r["note"] or ""}
+        if r["measure"]:
+            ln["measure"] = fmt_measure(r["measure"], r["unit"])
+        lines.append(ln)
     day = today()
     cur = db.execute("INSERT INTO cafe_kots (org_id, order_id, kot_no, kot_date, lines, created_by, created_at)"
                      " VALUES (?,?,?,?,?,?,?)", (_org(), order_id, next_no(db, "cafe_kots", "kot_no", "kot_date", day),
@@ -199,10 +261,11 @@ def settle(db, order, payload):
                       1 if st["gst_on"] else 0, 1 if st["gst_inclusive"] else 0, st["gstin"] if st["gst_on"] else None,
                       token(), g.user["id"], ts))
     bill_id = cur.lastrowid
-    db.executemany("""INSERT INTO cafe_bill_items (org_id, bill_id, item_id, name, qty, price, gst_rate, amount)
-                      VALUES (?,?,?,?,?,?,?,?)""",
+    db.executemany("""INSERT INTO cafe_bill_items (org_id, bill_id, item_id, name, qty, price, gst_rate, amount, unit,
+                      measure, unit_price, price_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                    [(oid, bill_id, l["item_id"], l["name"], l["qty"], l["price"], l["gst_rate"] if st["gst_on"] else 0,
-                     l["price"] * l["qty"]) for l in lines])
+                     l["price"] * l["qty"], l["unit"] or "pc", l["measure"], l["unit_price"], l["price_by"])
+                    for l in lines])
     if customer:
         if redeem:
             take_points(db, oid, cid, redeem, "redeem", f"Bill {bill_label(st, None, db=db, bill_id=bill_id)}",
@@ -240,7 +303,7 @@ def pos():
     oid = _org()
     expire_points(oid)
     st = get_settings()
-    cats, items = menu_data(oid)
+    cats, items = menu_data(oid, sort=st["sort_pos"])
     tables = H.query("""SELECT t.id, t.name, (SELECT o.id FROM cafe_orders o WHERE o.table_id = t.id AND o.status = 'open'
                           LIMIT 1) busy FROM cafe_tables t WHERE t.org_id = ? AND t.active = 1 ORDER BY t.sort, t.id""",
                      (oid,))
@@ -252,8 +315,10 @@ def pos():
                  "source": o["source"], "note": o["note"] or "", "address": o["address"] or "",
                  "customer": {"phone": (cust["whatsapp"] if cust else o["cust_phone"]) or "",
                               "name": (cust["name"] if cust else o["cust_name"]) or ""},
-                 "items": [{"item_id": r["item_id"], "name": r["name"], "price": r["price"], "qty": r["qty"],
-                            "sent": r["kot_qty"], "note": r["note"] or ""} for r in order_lines(o["id"]) if r["qty"]]}
+                 "items": [{"line_id": r["id"], "item_id": r["item_id"], "name": r["name"], "price": r["price"],
+                            "qty": r["qty"], "sent": r["kot_qty"], "note": r["note"] or "", "unit": r["unit"] or "pc",
+                            "measure": r["measure"], "unit_price": r["unit_price"], "edited": bool(r["price_by"])}
+                           for r in order_lines(o["id"]) if r["qty"]]}
     elif request.args.get("table", type=int):
         t = request.args.get("table", type=int)
         busy = H.scalar("SELECT id FROM cafe_orders WHERE table_id = ? AND org_id = ? AND status = 'open'", (t, oid))
@@ -266,7 +331,7 @@ def pos():
         "gst_on": st["gst_on"], "gst_inclusive": st["gst_inclusive"], "kot_on": st["kot_on"],
         "loyalty": st["loyalty"]["on"], "point_value": point_value(st), "birthday_on": st["birthday_on"],
         "referral_on": st["referral"]["on"], "modes": PAYMENT_MODES,
-        "perms": {p: can(p) for p in ("bill_discount", "points_redeem", "customers_view")},
+        "perms": {p: can(p) for p in ("bill_discount", "points_redeem", "customers_view", "price_edit")},
         "urls": {"save": url_for("cafe.pos_save"), "lookup": url_for("cafe.customer_lookup")},
     }
     return render_template("cafe/pos.html", cfg=cfg, st=st)
@@ -357,7 +422,7 @@ def orders():
     oid = _org()
     base = """SELECT o.*, t.name table_name, u.name created_name,
                 (SELECT COALESCE(SUM(price * qty), 0) FROM cafe_order_items i WHERE i.order_id = o.id) amount,
-                (SELECT GROUP_CONCAT(qty || ' × ' || name, ', ') FROM cafe_order_items i WHERE i.order_id = o.id
+                (SELECT GROUP_CONCAT(qty || ' × ' || name || CASE WHEN measure IS NOT NULL THEN ' ' || measure || ' ' || unit ELSE '' END, ', ') FROM cafe_order_items i WHERE i.order_id = o.id
                    AND i.qty > 0) summary,
                 (SELECT MAX(id) FROM cafe_kots k WHERE k.order_id = o.id) last_kot
               FROM cafe_orders o LEFT JOIN cafe_tables t ON t.id = o.table_id LEFT JOIN users u ON u.id = o.created_by
@@ -401,9 +466,10 @@ def order_action(order_id, action):
             target = db.execute("SELECT * FROM cafe_orders WHERE table_id = ? AND status = 'open' AND id != ?",
                                 (o["table_id"], o["id"])).fetchone()
             for r in db.execute("SELECT * FROM cafe_order_items WHERE order_id = ?", (o["id"],)).fetchall():
-                db.execute("""INSERT INTO cafe_order_items (org_id, order_id, item_id, name, price, gst_rate, qty, note)
-                              VALUES (?,?,?,?,?,?,?,?)""", (r["org_id"], target["id"], r["item_id"], r["name"],
-                                                             r["price"], r["gst_rate"], r["qty"], r["note"]))
+                db.execute("""INSERT INTO cafe_order_items (org_id, order_id, item_id, name, price, gst_rate, qty, note,
+                              unit, measure, unit_price) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                           (r["org_id"], target["id"], r["item_id"], r["name"], r["price"], r["gst_rate"], r["qty"],
+                            r["note"], r["unit"], r["measure"], r["unit_price"]))
             db.execute("UPDATE cafe_orders SET status = 'confirmed_merged', bill_id = NULL, reject_reason = ?,"
                        " confirmed_by = ?, updated_at = ? WHERE id = ?",
                        (f"Added to order #{target['order_no']}", g.user["id"], ts, o["id"]))
@@ -470,9 +536,12 @@ def kot_print(kid):
     o = H.query("""SELECT o.*, t.name table_name FROM cafe_orders o LEFT JOIN cafe_tables t ON t.id = o.table_id
                    WHERE o.id = ?""", (k["order_id"],), one=True)
     st = get_settings()
-    return render_template("cafe/print.html", st=st, kots=[(k, json.loads(k["lines"]), o)], bill=None, items=[],
+    paper = request.args.get("paper") or st["paper"]
+    kots = [(k, json.loads(k["lines"]), o)]
+    bt = cafe_escpos.build(st, cafe_name(st), paper, kots=kots, order_types=ORDER_TYPES) if st["bt_print"] else None
+    return render_template("cafe/print.html", st=st, kots=kots, bill=None, items=[], bt_link=bt,
                            auto=request.args.get("auto"), name=cafe_name(st), ORDER_TYPES=ORDER_TYPES,
-                           paper=request.args.get("paper") or st["paper"], back=url_for("cafe.orders"))
+                           paper=paper, back=url_for("cafe.orders"))
 
 
 # ---------------------------------------------------------------- bills
@@ -487,7 +556,8 @@ def bill_whatsapp_text(st, b, items, link, balance=None):
     lines = [f"🧾 *{cafe_name(st)}*", f"Bill No: {st['bill_prefix']}{b['bill_no']} · {b['bill_date'][8:10]}-"
              f"{b['bill_date'][5:7]}-{b['bill_date'][:4]}", ""]
     for i in items:
-        lines.append(f"{i['qty']} × {i['name']}  {rupees(i['amount'])}")
+        lines.append(f"{line_amount_text(i['qty'], i['measure'], i['unit'])} × {i['name']}  {rupees(i['amount'])}"
+                     if i["unit"] in ("kg", "l") else f"{i['qty']} × {i['name']}  {rupees(i['amount'])}")
     lines.append("")
     if b["discount"]:
         lines.append(f"Discount: -{rupees(b['discount'])}")
@@ -524,7 +594,7 @@ def bills():
     w = " AND ".join(where)
     page = max(1, request.args.get("page", 1, type=int))
     total_rows = H.scalar(f"SELECT COUNT(*) FROM cafe_bills b WHERE {w}", args)
-    rows = H.query(f"""SELECT b.*, u.name created_name, (SELECT GROUP_CONCAT(qty || ' × ' || name, ', ')
+    rows = H.query(f"""SELECT b.*, u.name created_name, (SELECT GROUP_CONCAT(qty || ' × ' || name || CASE WHEN measure IS NOT NULL THEN ' ' || measure || ' ' || unit ELSE '' END, ', ')
                          FROM cafe_bill_items i WHERE i.bill_id = b.id) summary
                        FROM cafe_bills b LEFT JOIN users u ON u.id = b.created_by WHERE {w}
                        ORDER BY b.id DESC LIMIT 50 OFFSET ?""", args + [(page - 1) * 50])
@@ -550,7 +620,9 @@ def bill_view(bid):
     link = url_for("cafe.public_bill", tok=b["token"], _external=True)
     wa_text = bill_whatsapp_text(st, b, items, link, cust["points"] if cust else None)
     kots = H.query("SELECT * FROM cafe_kots WHERE order_id = ? ORDER BY id", (b["order_id"],)) if b["order_id"] else []
-    return render_template("cafe/bill_view.html", b=b, items=items, cust=cust, st=st, link=link, wa_text=wa_text,
+    bt = cafe_escpos.build(st, cafe_name(st), st["paper"], bill=b, items=items, balance=cust["points"] if cust else None,
+                           order_types=ORDER_TYPES) if st["bt_print"] else None
+    return render_template("cafe/bill_view.html", b=b, items=items, cust=cust, st=st, link=link, wa_text=wa_text, bt_link=bt,
                            kots=kots, ORDER_TYPES=ORDER_TYPES, new=request.args.get("new"))
 
 
@@ -569,8 +641,11 @@ def bill_print(bid):
                            WHERE o.id = ?""", (k["order_id"],), one=True)
             kots = [(k, json.loads(k["lines"]), o)]
     cust = H.query("SELECT points FROM customers WHERE id = ?", (b["customer_id"],), one=True) if b["customer_id"] else None
+    paper = request.args.get("paper") or st["paper"]
+    bt = cafe_escpos.build(st, cafe_name(st), paper, bill=b, items=items, kots=kots,
+                           balance=cust["points"] if cust else None, order_types=ORDER_TYPES) if st["bt_print"] else None
     return render_template("cafe/print.html", st=st, bill=b, items=items, kots=kots, auto=request.args.get("auto"),
-                           name=cafe_name(st), ORDER_TYPES=ORDER_TYPES, paper=request.args.get("paper") or st["paper"],
+                           name=cafe_name(st), ORDER_TYPES=ORDER_TYPES, paper=paper, bt_link=bt, line_qty=line_amount_text,
                            balance=cust["points"] if cust else None, back=url_for("cafe.bill_view", bid=bid, new=1)
                            if request.args.get("auto") else url_for("cafe.bill_view", bid=bid))
 
@@ -632,6 +707,7 @@ def public_bill(tok):
     st = get_settings(org["id"])
     items = H.query("SELECT * FROM cafe_bill_items WHERE bill_id = ? ORDER BY id", (b["id"],))
     resp = make_response(render_template("cafe/print.html", st=st, bill=b, items=items, kots=[], auto=None,
+                                         line_qty=line_amount_text,
                                          name=st["name"] or org["name"], ORDER_TYPES=ORDER_TYPES,
                                          paper=request.args.get("paper") or "80", balance=None, public=True,
                                          menu_link=url_for("cafe.public_menu", code=org["code"].lower())
@@ -647,7 +723,7 @@ def public_menu(code):
     preview = request.args.get("preview") and member_preview(org)
     if not st["menu_on"] and not preview:
         abort(404)
-    data = menu_data(org["id"], for_public=True)
+    data = menu_data(org["id"], for_public=True, sort=st["sort_menu"])
     banners = live_banners(org["id"], data)
     colors, layout, font, shape = theme_css(st["theme"])
     table = None
@@ -721,7 +797,9 @@ def public_order(code):
         return jsonify(ok=False, error=str(e)), 400
     if not wanted:
         return jsonify(ok=False, error="Your cart is empty."), 400
-    if sum(wanted.values()) > 100:
+    if any(w["price"] is not None or w["line_id"] for w in wanted):
+        return jsonify(ok=False, error="Invalid data."), 400
+    if sum(w["qty"] for w in wanted) > 100:
         return jsonify(ok=False, error="Up to 100 items per order."), 400
     _order_hits[ip] = hits + [now_ts]
     # Run as the organization (no logged-in user here).
@@ -732,7 +810,7 @@ def public_order(code):
                              address=address or None, note=(p.get("note") or "").strip()[:300] or None,
                              birthday=valid_birthday(p.get("birthday")) or None if st["birthday_on"] else None,
                              referral_code=(p.get("ref") or "").strip()[:20] or None)
-        set_order_lines(db, order_id, wanted)
+        set_order_lines(db, order_id, wanted, public=True)
         db.commit()
     except BillError as e:
         db.rollback()

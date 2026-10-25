@@ -97,7 +97,8 @@ def settings(b, **kw):
     """Save cafe settings with sensible defaults (checkboxes need to be sent every time)."""
     data = {"name": "Chai Point", "paper": "80", "kot_on": "1", "kot_with_bill": "1", "menu_on": "1",
             "gst_inclusive": "1", "default_gst": "5", "order_takeaway": "1", "order_dine_in": "1",
-            "loyalty_mode": "percent", "loyalty_percent": "5", "loyalty_point_value": "1", "loyalty_max_redeem_pct": "50"}
+            "loyalty_mode": "percent", "loyalty_percent": "5", "loyalty_point_value": "1", "loyalty_max_redeem_pct": "50",
+            "sort_pos": "popular", "sort_menu": "popular"}
     data.update(kw)
     data = {k: v for k, v in data.items() if v is not None}
     r = b.post("/cafe/settings", data)
@@ -625,3 +626,164 @@ def test_excel_template_export_import_and_photos(cw):
     # cashier cannot import
     cashier = make_staff(b, "cash9")
     assert cashier.get("/cafe/menu/bulk").status_code == 403
+
+
+# ------------------------------------------------------------------ round 3: units, price change, barcode, order, BT
+
+def test_weighed_items_kg_litre_bill_kot_and_reports(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Mixture", "480", unit="kg")
+    add_item(b, "Milk", "60", unit="l")
+    add_item(b, "Puffs", "20")
+    mx, mk, pf = item_id(w, "Mixture"), item_id(w, "Milk"), item_id(w, "Puffs")
+    assert w["db"]().execute("SELECT unit FROM menu_items WHERE id = ?", (mx,)).fetchone()[0] == "kg"
+    code, d = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
+                      "items": [{"item_id": mx, "qty": 1, "measure": 0.25}, {"item_id": mx, "qty": 2, "measure": 0.5},
+                                {"item_id": mk, "qty": 1, "measure": 1.5}, {"item_id": pf, "qty": 3}]})
+    assert code == 200 and d["ok"], d
+    db = w["db"]()
+    lines = db.execute("SELECT name, qty, price, unit, measure, unit_price FROM cafe_bill_items ORDER BY id").fetchall()
+    assert [tuple(r) for r in lines] == [("Mixture", 1, 12000, "kg", 0.25, 48000), ("Mixture", 2, 24000, "kg", 0.5, 48000),
+                                         ("Milk", 1, 9000, "l", 1.5, 6000), ("Puffs", 3, 2000, "pc", None, None)]
+    # 120 + 480 + 90 + 60 = 750
+    assert db.execute("SELECT total FROM cafe_bills").fetchone()[0] == 75000
+    page = b.get(d["print"]).text
+    assert "250 g" in page and "1.5 L" in page and "₹480/kg" in page
+    assert "₹480 / kg" in b.get("/cafe/menu").text or "/ kg" in b.get("/cafe/menu").text
+    # analysis shows kg sold
+    assert "1.25 kg" in b.get("/cafe/analysis").text
+    # a weighed item without a weight counts as 1 kg; KOT shows the weight
+    code, d = pos(b, {"action": "kot", "order_type": "takeaway", "items": [{"item_id": mx, "qty": 1, "measure": 0.75}]})
+    kot = json.loads(w["db"]().execute("SELECT lines FROM cafe_kots ORDER BY id DESC").fetchone()[0])
+    assert kot == [{"name": "Mixture", "qty": 1, "note": "", "measure": "750 g"}]
+
+
+def test_price_change_needs_permission_and_open_order(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Cake", "100")
+    cake = item_id(w, "Cake")
+    cashier = make_staff(b, "cash1")                                    # cashier preset: no price change
+    code, d = pos(cashier, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
+                            "items": [{"item_id": cake, "qty": 1, "price": "80"}]})
+    assert code == 400 and "not allowed to change item prices" in d["error"]
+    assert '"price_edit": false' in cashier.get("/cafe/pos").text
+    # hold an order, then change its price (decrease and increase) with permission
+    code, d = pos(b, {"action": "save", "order_type": "takeaway", "items": [{"item_id": cake, "qty": 2}]})
+    assert d["ok"], d
+    db = w["db"]()
+    order = db.execute("SELECT id FROM cafe_orders WHERE status = 'open'").fetchone()[0]
+    line = db.execute("SELECT id FROM cafe_order_items WHERE order_id = ?", (order,)).fetchone()[0]
+    # cashier cannot change the held order's price either
+    code, d = pos(cashier, {"action": "save", "order_id": order, "order_type": "takeaway",
+                            "items": [{"line_id": line, "item_id": cake, "qty": 2, "price": "90"}]})
+    assert code == 400
+    code, d = pos(b, {"action": "save", "order_id": order, "order_type": "takeaway",
+                      "items": [{"line_id": line, "item_id": cake, "qty": 2, "price": "120"}]})
+    assert d["ok"], d
+    row = w["db"]().execute("SELECT price, price_by FROM cafe_order_items WHERE id = ?", (line,)).fetchone()
+    assert row["price"] == 12000 and row["price_by"]
+    # the cashier can still bill it (price unchanged by them)
+    code, d = pos(cashier, {"action": "bill", "order_id": order, "order_type": "takeaway", "payment_mode": "Cash",
+                            "items": [{"line_id": line, "item_id": cake, "qty": 2}]})
+    assert d["ok"], d
+    db = w["db"]()
+    assert db.execute("SELECT total FROM cafe_bills").fetchone()[0] == 24000
+    assert db.execute("SELECT price_by FROM cafe_bill_items").fetchone()[0]
+    assert db.execute("SELECT price FROM menu_items WHERE id = ?", (cake,)).fetchone()[0] == 10000  # menu unchanged
+    assert "✏️" in b.get(d["view"]).text
+    # a custom staff member with the tick can change prices
+    mgr = make_staff(b, "mgr1", role="custom", perms=["bill_create", "price_edit"])
+    code, d = pos(mgr, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
+                        "items": [{"item_id": cake, "qty": 1, "price": "75.50"}]})
+    assert d["ok"], d
+    # customers can never send a price
+    settings(b, online_on="1")
+    r = Browser().post("/m/chai/order", {"payload": json.dumps({"type": "takeaway", "name": "A", "phone": "9876543210",
+                       "items": [{"item_id": cake, "qty": 1, "price": "1"}]})}, follow=False)
+    assert r.status_code == 400
+
+
+def test_barcode_unique_and_in_excel(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Biscuit", "10", barcode="8901234567890")
+    r = b.post("/cafe/menu/item/new", {"name": "Other", "price": "5", "available": "1", "barcode": "8901234567890"})
+    assert "already" in r.text and w["db"]().execute("SELECT COUNT(*) FROM menu_items").fetchone()[0] == 1
+    assert '"barcode": "8901234567890"' in b.get("/cafe/pos").text
+    assert "8901234567890" not in Browser().get("/m/chai").text            # not on the customer menu
+    from openpyxl import load_workbook
+    ws = load_workbook(io.BytesIO(b.get("/cafe/menu/export.xlsx").data))["Menu"]
+    head = [c.value for c in ws[1]]
+    assert "Barcode" in head and "Unit" in head
+    assert ws.cell(2, head.index("Barcode") + 1).value == "8901234567890"
+    sheet = xlsx([["S.No", "Category", "Item name", "Price", "Unit", "Barcode"],
+                  [None, "Bakery", "Halwa", 400, "Kg", "123456"],
+                  [None, "Bakery", "Rusk", 40, "Piece", "8901234567890"]])      # duplicate barcode -> error
+    r = b.post("/cafe/menu/import", {"sheet": (sheet, "m.xlsx")}, content_type="multipart/form-data")
+    assert "Import preview" in r.text
+    tok = re.search(r'name="tok" value="([0-9a-f]+)"', r.text).group(1)
+    b.post("/cafe/menu/import/confirm", {"tok": tok})
+    db = w["db"]()
+    halwa = db.execute("SELECT unit, barcode FROM menu_items WHERE name = 'Halwa'").fetchone()
+    assert tuple(halwa) == ("kg", "123456")
+    assert db.execute("SELECT COUNT(*) FROM menu_items WHERE name = 'Rusk'").fetchone()[0] == 0
+
+
+def test_most_sold_first_and_pin(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    for n in ("Aaa", "Bbb", "Ccc"):
+        add_item(b, n, "10")
+    a, bb, c = (item_id(w, n) for n in ("Aaa", "Bbb", "Ccc"))
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [{"item_id": c, "qty": 5}, {"item_id": bb, "qty": 2}]})
+
+    def order(page):
+        names = re.findall(r'"name": "(Aaa|Bbb|Ccc)"', page)
+        return names
+    assert order(b.get("/cafe/pos").text) == ["Ccc", "Bbb", "Aaa"]
+    assert order(Browser().get("/m/chai").text) == ["Ccc", "Bbb", "Aaa"]
+    # pin Aaa to the top
+    b.post(f"/cafe/menu/item/{a}/edit", {"name": "Aaa", "price": "10", "available": "1", "pinned": "1", "unit": "pc"})
+    assert order(b.get("/cafe/pos").text) == ["Aaa", "Ccc", "Bbb"]
+    # menu order setting for billing only
+    settings(b, sort_pos="menu", sort_menu="popular")
+    assert order(b.get("/cafe/pos").text)[0] == "Aaa"
+    assert order(b.get("/cafe/pos").text)[1:] == ["Bbb", "Ccc"]
+    assert order(Browser().get("/m/chai").text) == ["Aaa", "Ccc", "Bbb"]
+
+
+def test_bluetooth_print_link(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    code, d = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [{"item_id": item_id(w, "Tea"), "qty": 2}]})
+    assert "intent:base64," not in b.get(d["print"]).text
+    settings(b, bt_print="1")
+    page = b.get(d["print"]).text
+    m = re.search(r'intent:base64,([A-Za-z0-9+/=]+)#Intent;scheme=rawbt', page)
+    assert m
+    import base64
+    raw = base64.b64decode(m.group(1))
+    assert raw.startswith(b"\x1b@") and b"Tea" in raw and b"Rs.30" in raw.replace(b" ", b"")
+    assert "intent:base64," in b.get(d["view"]).text
+
+
+def test_public_order_with_weight(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b, online_on="1")
+    add_item(b, "Mixture", "480", unit="kg")
+    mx = item_id(w, "Mixture")
+    assert '"unit": "kg"' in Browser().get("/m/chai").text
+    r = Browser().post("/m/chai/order", {"payload": json.dumps({"type": "takeaway", "name": "Anu", "phone": "9876543210",
+                       "items": [{"item_id": mx, "qty": 1, "measure": 0.5}]})}, follow=False)
+    assert r.status_code == 200 and r.get_json()["ok"]
+    row = w["db"]().execute("SELECT price, measure FROM cafe_order_items").fetchone()
+    assert tuple(row) == (24000, 0.5)

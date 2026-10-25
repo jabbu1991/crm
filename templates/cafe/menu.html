@@ -5,11 +5,12 @@
   <span class="mi-sno" title="S.No">{{ i.serial or '–' }}</span>
   {% if i.photo %}<img src="{{ url_for('media', name=i.photo) }}" alt="" loading="lazy">{% else %}<span class="mi-noimg">{{ i.name[:1]|upper }}</span>{% endif %}
   <div class="mi-body">
-    <a href="{{ url_for('cafe.item_edit', iid=i.id) }}" class="mi-name">{% if i.food_type %}<span class="ft ft-{{ i.food_type }}" title="{{ FOOD_TYPES[i.food_type] }}"></span>{% endif %}{{ i.name }}</a>
+    <a href="{{ url_for('cafe.item_edit', iid=i.id) }}" class="mi-name">{% if i.pinned %}<span title="Pinned to top">📌</span>{% endif %}{% if i.food_type %}<span class="ft ft-{{ i.food_type }}" title="{{ FOOD_TYPES[i.food_type] }}"></span>{% endif %}{{ i.name }}</a>
     <div class="mi-meta">
       {% set on = i.offer_price is not none and i.offer_price < i.price and (not i.offer_from or i.offer_from <= today) and (not i.offer_to or i.offer_to >= today) %}
       {% if on %}<s class="muted">{{ i.price|rs }}</s> <b class="offer-price">{{ i.offer_price|rs }}</b> <span class="badge b-high">OFFER</span>
-      {% else %}<b>{{ i.price|rs }}</b>{% if i.offer_price %} <span class="small muted">(offer {{ i.offer_price|rs }}: {{ 'not started' if i.offer_from and i.offer_from > today else 'ended' }})</span>{% endif %}{% endif %}
+      {% else %}<b>{{ i.price|rs }}</b>{% if i.unit in ('kg', 'l') %}<span class="small muted">{{ UNIT_PER[i.unit] }}</span>{% endif %}{% if i.offer_price %} <span class="small muted">(offer {{ i.offer_price|rs }}: {{ 'not started' if i.offer_from and i.offer_from > today else 'ended' }})</span>{% endif %}{% endif %}
+      {% if i.barcode %}<span class="small muted" title="Barcode">▥ {{ i.barcode }}</span>{% endif %}
       {% if st.gst_on %}<span class="small muted">GST {{ i.gst_rate|round(1)|string|replace('.0', '') }}%</span>{% endif %}
       {% for t in (i.tags or '').split(',') if t in ITEM_TAGS %}<span class="badge">{{ ITEM_TAGS[t] }}</span>{% endfor %}
     </div>

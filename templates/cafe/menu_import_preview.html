@@ -21,13 +21,14 @@
 </form>
 <div class="card table-wrap">
 <table class="table compact">
-  <thead><tr><th>Row</th><th></th><th>S.No</th><th>Category</th><th>Item</th><th class="num">Price</th><th class="num">Offer</th><th>Type</th><th class="num">GST</th><th>Available</th></tr></thead>
+  <thead><tr><th>Row</th><th></th><th>S.No</th><th>Category</th><th>Item</th><th class="num">Price</th><th class="num">Offer</th><th>Unit</th><th>Type</th><th class="num">GST</th><th>Available</th><th>Barcode</th></tr></thead>
   <tbody>
   {% for l in lines %}<tr>
     <td>{{ l.row }}</td><td><span class="badge {{ 'b-converted' if l.action == 'new' else 'b-new' }}">{{ 'New' if l.action == 'new' else 'Update' }}</span></td>
     <td>{{ l.serial or 'auto' }}</td><td>{{ l.category or 'Other' }}</td><td><b>{{ l.name }}</b>{% if l.description %}<div class="small muted">{{ l.description }}</div>{% endif %}</td>
     <td class="num">₹{{ paise_str(l.price) }}</td><td class="num">{{ '₹' ~ paise_str(l.offer_price) if l.offer_price else '' }}</td>
-    <td>{{ FOOD_OUT.get(l.food_type, '') }}</td><td class="num">{{ l.gst_rate|round(1)|string|replace('.0', '') }}%</td><td>{{ 'Yes' if l.available else 'No' }}</td>
+    <td>{{ {'pc': 'Piece', 'kg': 'Kg', 'l': 'Litre'}[l.unit or 'pc'] }}</td>
+    <td>{{ FOOD_OUT.get(l.food_type, '') }}</td><td class="num">{{ l.gst_rate|round(1)|string|replace('.0', '') }}%</td><td>{{ 'Yes' if l.available else 'No' }}</td><td class="small">{{ l.barcode or '' }}</td>
   </tr>{% endfor %}
   </tbody>
 </table>

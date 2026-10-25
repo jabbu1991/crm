@@ -200,3 +200,25 @@ tr.sent { opacity: .45; }
 .pi-na { top: 26px; }
 .mi-sno { flex: none; min-width: 34px; text-align: center; font-weight: 800; color: #6b7280; background: #f3f4f6; border-radius: 6px; padding: 2px 4px; font-size: 13px; }
 .row-sno { display: grid; grid-template-columns: 120px 1fr; gap: 12px; }
+.bars li a:has(.bar-count) { grid-template-columns: 150px 1fr auto; }
+.unit-seg { max-width: 360px; }
+.pin-check { align-self: end; }
+/* billing: search + camera, weight and price dialogs */
+.pos-search { display: flex; gap: 6px; }
+.pos-search input { flex: 1; }
+.pos-modal { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, .5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pos-modal[hidden] { display: none; }
+.pm-box { width: 100%; max-width: 400px; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.pm-box h2 { margin: 0; font-size: 18px; }
+.pm-box label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; flex: 1; }
+.pm-box input { font-size: 22px; font-weight: 700; padding: 10px 12px; }
+.pm-row { display: flex; gap: 8px; align-items: flex-end; }
+.pm-row .seg { flex: none; }
+.pm-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+.pm-quick .chip { cursor: pointer; font: inherit; font-size: 14px; padding: 6px 14px; }
+.pm-result { font-size: 20px; font-weight: 800; color: #15803d; min-height: 28px; margin: 0; }
+.pl-meas { color: #0e7490; font-weight: 700; }
+button.pl-amt { border: 1px dashed transparent; background: none; font: inherit; font-weight: 700; cursor: pointer; padding: 2px 4px; border-radius: 6px; text-align: right; }
+button.pl-amt:hover { border-color: #fb923c; }
+.pl-amt.edited { color: #c2410c; }
+.cam-box video { width: 100%; border-radius: 10px; background: #000; aspect-ratio: 4 / 3; object-fit: cover; }

@@ -149,15 +149,19 @@ def seed_cafe(sup):
         "Shawarma & Meals": [("Chicken Shawarma", "110", "99", "nonveg", (190, 90, 40)),
                              ("Beef Fry & Porotta", "150", "", "nonveg", (130, 50, 30)),
                              ("Veg Fried Rice", "120", "", "veg", (200, 160, 60))],
+        "Bakery": [("Kerala Mixture", "480", "", "veg", (200, 140, 50), {"unit": "kg"}),
+                   ("Halwa", "400", "", "veg", (170, 40, 40), {"unit": "kg"}),
+                   ("Marie Biscuit Pack", "30", "", "veg", (210, 170, 110), {"barcode": "8901063010017"})],
     }
     for cat in menu:
         admin.post("/cafe/menu/category", {"action": "add", "name": cat})
     with sqlite3.connect(DB) as conn:
         cats = {n: i for i, n in conn.execute("SELECT id, name FROM menu_categories")}
     for cat, items in menu.items():
-        for name, price, offer, ftype, hue in items:
+        for name, price, offer, ftype, hue, *extra in items:
             data = {"name": name, "price": price, "offer_price": offer, "food_type": ftype, "available": "1",
                     "category_id": cats[cat], "gst_rate": "5", "photo": (demo_photo(name, hue), "p.png")}
+            data.update(extra[0] if extra else {})
             if name in ("Chicken Shawarma", "Kerala Chai"):
                 data["tags"] = ["bestseller"]
             with admin.c.session_transaction() as sess:
@@ -166,12 +170,15 @@ def seed_cafe(sup):
     admin.post("/cafe/tables/save", {"action": "bulk", "count": "8", "seats": "4"})
     with sqlite3.connect(DB) as conn:
         items = [r for r in conn.execute("SELECT id, name FROM menu_items")]
+        weighed = {r[0] for r in conn.execute("SELECT id FROM menu_items WHERE unit != 'pc'")}
     people = [("Riya", "9847100001"), ("Sameer", "9847100002"), ("Fathima", "9847100003"), ("Arjun", "9847100004"),
               ("Nimmi", "9847100005"), ("Basil", "9847100006"), ("Hisham", "9847100007"), ("Divya", "9847100008")]
     today_ = date.today()
     for day in range(30, -1, -1):
         for n in range(random.randint(14, 26)):
-            lines = [{"item_id": i, "qty": random.randint(1, 3)} for i, _ in random.sample(items, random.randint(1, 4))]
+            lines = [{"item_id": i, "qty": random.randint(1, 3)} if i not in weighed else
+                     {"item_id": i, "qty": 1, "measure": random.choice([0.1, 0.25, 0.5, 1])}
+                     for i, _ in random.sample(items, random.randint(1, 4))]
             who = random.choice(people + [("", "")] * 3)
             admin.post("/cafe/pos/save", {"payload": json.dumps({
                 "action": "bill", "order_type": random.choice(["takeaway", "takeaway", "dine_in", "delivery"]),

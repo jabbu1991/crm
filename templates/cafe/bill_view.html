@@ -9,6 +9,7 @@
 <div class="grid-2">
 <section class="card">
   <div class="share-row" id="share">
+    {% if bt_link %}<a class="btn btn-big btn-primary" href="{{ bt_link }}">🖨 Bluetooth Print</a>{% endif %}
     <a class="btn btn-big" href="{{ url_for('cafe.bill_print', bid=b.id) }}">🖨 Print</a>
     <a class="btn btn-big" href="{{ url_for('cafe.bill_print', bid=b.id, paper='A4') }}">⬇️ Save (PDF)</a>
     {% if b.cust_phone %}<a class="btn btn-big btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ b.cust_phone|wa_number }}?text={{ wa_text|urlencode }}">🟢 WhatsApp bill</a>
@@ -28,7 +29,7 @@
 <section class="card">
   <table class="table compact">
     <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
-    <tbody>{% for i in items %}<tr><td>{{ i.name }}</td><td class="num">{{ i.qty }}</td><td class="num">{{ i.price|rs }}</td><td class="num">{{ i.amount|rs }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for i in items %}<tr><td>{{ i.name }}{% if i.price_by %} <span title="Price changed on the bill">✏️</span>{% endif %}</td><td class="num">{{ line_qty(i.qty, i.measure, i.unit) }}</td><td class="num">{% if i.unit in ('kg', 'l') and i.unit_price and not i.price_by %}{{ i.unit_price|rs }}{{ UNIT_PER[i.unit] }}{% else %}{{ i.price|rs }}{% endif %}</td><td class="num">{{ i.amount|rs }}</td></tr>{% endfor %}</tbody>
   </table>
   <dl class="details totals-dl">
     <dt>Subtotal</dt><dd>{{ b.subtotal|rs }}</dd>

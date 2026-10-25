@@ -153,7 +153,8 @@ def customer_view(cid):
     ledger = H.query("""SELECT p.*, u.name by_name, b.bill_no FROM points_ledger p LEFT JOIN users u ON u.id = p.created_by
                         LEFT JOIN cafe_bills b ON b.id = p.bill_id WHERE p.customer_id = ? ORDER BY p.id DESC LIMIT 100""",
                      (cid,))
-    bills_ = H.query("""SELECT b.*, (SELECT GROUP_CONCAT(qty || ' × ' || name, ', ') FROM cafe_bill_items i
+    bills_ = H.query("""SELECT b.*, (SELECT GROUP_CONCAT(qty || ' × ' || name || CASE WHEN measure IS NOT NULL THEN ' ' || measure || ' ' || unit
+                          ELSE '' END, ', ') FROM cafe_bill_items i
                           WHERE i.bill_id = b.id) summary FROM cafe_bills b WHERE b.customer_id = ? AND b.org_id = ?
                         ORDER BY b.id DESC LIMIT 50""", (cid, oid))
     referrer = H.query("SELECT id, name FROM customers WHERE id = ?", (c["referred_by"],), one=True) \
@@ -413,7 +414,8 @@ def analysis():
     exp_cats = H.query("""SELECT category, SUM(amount) total FROM cafe_ledger WHERE org_id = ? AND kind = 'expense'
                           AND deleted_at IS NULL AND entry_date BETWEEN ? AND ? GROUP BY category ORDER BY total DESC""",
                        (oid, A, B))
-    top_items = H.query("""SELECT bi.name, SUM(bi.qty) qty, SUM(bi.amount) amount FROM cafe_bill_items bi
+    top_items = H.query("""SELECT bi.name, SUM(bi.qty) qty, SUM(bi.amount) amount, MAX(bi.unit) unit,
+                             SUM(COALESCE(bi.measure, 0) * bi.qty) meas FROM cafe_bill_items bi
                            JOIN cafe_bills b ON b.id = bi.bill_id WHERE b.org_id = ? AND b.status = 'paid'
                            AND b.bill_date BETWEEN ? AND ? GROUP BY bi.name ORDER BY qty DESC LIMIT 10""", (oid, A, B))
     modes = H.query("""SELECT payment_mode k, COUNT(*) n, SUM(total) total FROM cafe_bills WHERE org_id = ?
@@ -514,10 +516,13 @@ def export(name):
     if name == "items":
         if not can("reports_view"):
             abort(403)
-        rows = H.query("""SELECT bi.name, SUM(bi.qty) qty, SUM(bi.amount) amount FROM cafe_bill_items bi
+        rows = H.query("""SELECT bi.name, SUM(bi.qty) qty, SUM(bi.amount) amount, MAX(bi.unit) unit,
+                            SUM(COALESCE(bi.measure, 0) * bi.qty) meas FROM cafe_bill_items bi
                           JOIN cafe_bills b ON b.id = bi.bill_id WHERE b.org_id = ? AND b.status = 'paid'
                           AND b.bill_date BETWEEN ? AND ? GROUP BY bi.name ORDER BY qty DESC""", (oid, A, B))
-        return _csv("item-sales", ["Item", "Qty", "Amount"], [(r["name"], r["qty"], _r(r["amount"])) for r in rows])
+        return _csv("item-sales", ["Item", "Qty / packs", "Unit", "Total kg / litre", "Amount"],
+                    [(r["name"], r["qty"], {"kg": "Kg", "l": "Litre"}.get(r["unit"], "Piece"),
+                      round(r["meas"], 3) if r["unit"] in ("kg", "l") else "", _r(r["amount"])) for r in rows])
     if name == "expenses":
         if not can("expense_view"):
             abort(403)

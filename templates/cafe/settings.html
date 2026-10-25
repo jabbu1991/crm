@@ -48,6 +48,10 @@
     </div>
     <label class="check"><input type="checkbox" name="kot_on" value="1" {{ 'checked' if st.kot_on }}> Use KOT (kitchen order ticket) printing</label>
     <label class="check"><input type="checkbox" name="kot_with_bill" value="1" {{ 'checked' if st.kot_with_bill }}> When billing takeaway, print the KOT together with the bill (items not yet sent to the kitchen)</label>
+    <h2 style="margin-top:16px">📱 Phone + Bluetooth printer</h2>
+    <label class="check"><input type="checkbox" name="bt_print" value="1" {{ 'checked' if st.bt_print }}> Show the <b>🖨 Bluetooth Print</b> button (prints straight to the printer through the RawBT app, no print window)</label>
+    <label class="check"><input type="checkbox" name="bt_auto" value="1" {{ 'checked' if st.bt_auto }}> Print by Bluetooth automatically after <b>Bill &amp; Print</b> / <b>KOT</b></label>
+    <p class="muted small">One-time setup on the phone: install "RawBT" from the Play Store, choose Bluetooth and your printer, protocol "ESC/POS general", and the paper width. The first time, Android may ask which app to open: choose RawBT and "Always". RawBT's free version adds a line at the bottom of each receipt; buying its licence removes it.</p>
     <details class="help-box"><summary>🖨 How to set up the printer</summary>
       <ul>
         <li><b>Computer + USB/WiFi printer:</b> install the printer's driver. In the print window choose that printer, Margins: None, "Headers and footers" off. Chrome remembers it after the first time.</li>
@@ -84,6 +88,14 @@
     </div>
     <label>Delivery note <small>(e.g. Within 3 km only, delivery charge ₹30)</small><input name="delivery_note" value="{{ st.delivery_note }}" maxlength="200"></label>
     <p class="muted small">Online orders arrive as Pending on the Orders page (with a sound). Only confirmed orders go to billing.</p>
+    <h2 style="margin-top:16px">Item order</h2>
+    <div class="row-2">
+      <label>Billing screen
+        <select name="sort_pos"><option value="popular" {{ 'selected' if st.sort_pos == 'popular' }}>Most sold first (last 30 days)</option><option value="menu" {{ 'selected' if st.sort_pos == 'menu' }}>Menu order</option></select></label>
+      <label>Customer menu <small>(inside each category)</small>
+        <select name="sort_menu"><option value="popular" {{ 'selected' if st.sort_menu == 'popular' }}>Most sold first (last 30 days)</option><option value="menu" {{ 'selected' if st.sort_menu == 'menu' }}>Menu order</option></select></label>
+    </div>
+    <p class="muted small">Items marked 📌 Pin to top (in Menu → Edit item) always come first.</p>
   </section>
 
   <section class="card" id="loyalty">

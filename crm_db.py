@@ -4,7 +4,8 @@ The schema version lives in SQLite's PRAGMA user_version:
   0 = original single-workspace CRM
   1 = multi-tenant organizations, products, follow-ups, password tokens
   2 = audit log (Super Admin access to client workspaces)
-  ... 8 = cafe module (menu, billing, online orders, customers, points, expenses), 9 = menu item serial numbers
+  ... 8 = cafe module (menu, billing, online orders, customers, points, expenses), 9 = menu item serial numbers,
+  10 = units (pc/kg/l), barcodes, pinned items, weighed lines, price changes on bills
 Before migrating a database that already holds data, a full backup is written to
 instance/backups/. Migrations only ADD tables/columns; no existing data is dropped.
 """
@@ -14,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -818,8 +819,25 @@ def _migrate_v9(conn):
                  " WHERE serial IS NOT NULL AND active = 1")
 
 
+def _migrate_v10(conn):
+    """Cafe: sell by Piece / Kg / Litre, barcodes, pinned items, weighed bill lines, prices changed on a bill."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("menu_items", "unit", "TEXT NOT NULL DEFAULT 'pc'")      # pc / kg / l
+    add("menu_items", "barcode", "TEXT")
+    add("menu_items", "pinned", "INTEGER NOT NULL DEFAULT 0")
+    for t in ("cafe_order_items", "cafe_bill_items"):
+        add(t, "unit", "TEXT NOT NULL DEFAULT 'pc'")
+        add(t, "measure", "REAL")              # kg / litre per line (price = unit price x measure)
+        add(t, "unit_price", "INTEGER")         # menu price per kg / litre
+        add(t, "price_by", "INTEGER REFERENCES users(id)")  # who changed the price on the bill
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_menu_items_barcode ON menu_items(org_id, barcode)"
+                 " WHERE barcode IS NOT NULL AND barcode != '' AND active = 1")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
-              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9)]
+              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10)]
 
 
 def migrate(db_path):

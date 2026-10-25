@@ -55,7 +55,7 @@
     {% endif %}
     {% if top_items %}
     <h2>Top sellers today</h2>
-    <ul class="plain-list">{% for t in top_items %}<li>{{ t.name }} <b>{{ t.q }}</b></li>{% endfor %}</ul>
+    <ul class="plain-list">{% for t in top_items %}<li>{{ t.name }} <b>{{ t.meas|meas(t.unit) if t.unit in ("kg", "l") else t.q }}</b></li>{% endfor %}</ul>
     {% elif not birthdays %}
     <h2>Digital menu</h2>
     {% endif %}
