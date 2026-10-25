@@ -48,6 +48,7 @@
     </div>
     <label class="check"><input type="checkbox" name="kot_on" value="1" {{ 'checked' if st.kot_on }}> Use KOT (kitchen order ticket) printing</label>
     <label class="check"><input type="checkbox" name="kot_with_bill" value="1" {{ 'checked' if st.kot_with_bill }}> When billing takeaway, print the KOT together with the bill (items not yet sent to the kitchen)</label>
+    <label class="check"><input type="checkbox" name="card_qr" value="1" {{ 'checked' if st.card_qr }}> Print a small QR on the bill: the customer scans it to see their points and bills (<b>My Card</b>). Not on Bluetooth prints.</label>
     <h2 style="margin-top:16px">📱 Phone + Bluetooth printer</h2>
     <label class="check"><input type="checkbox" name="bt_print" value="1" {{ 'checked' if st.bt_print }}> Show the <b>🖨 Bluetooth Print</b> button (prints straight to the printer through the RawBT app, no print window)</label>
     <label class="check"><input type="checkbox" name="bt_auto" value="1" {{ 'checked' if st.bt_auto }}> Print by Bluetooth automatically after <b>Bill &amp; Print</b> / <b>KOT</b></label>
@@ -96,6 +97,8 @@
         <select name="sort_menu"><option value="popular" {{ 'selected' if st.sort_menu == 'popular' }}>Most sold first (last 30 days)</option><option value="menu" {{ 'selected' if st.sort_menu == 'menu' }}>Menu order</option></select></label>
     </div>
     <p class="muted small">Items marked 📌 Pin to top (in Menu → Edit item) always come first.</p>
+    <label>Billing screen tiles
+      <select name="pos_tiles"><option value="photo" {{ 'selected' if st.pos_tiles != 'text' }}>With photos</option><option value="text" {{ 'selected' if st.pos_tiles == 'text' }}>Text only (faster on a slow network)</option></select></label>
   </section>
 
   <section class="card" id="loyalty">

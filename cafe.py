@@ -34,6 +34,7 @@ def init(host):
     host.app.jinja_env.filters["meas"] = fmt_measure
     host.app.jinja_env.globals["line_qty"] = line_amount_text
     host.app.jinja_env.globals["UNIT_PER"] = UNIT_PER
+    host.app.jinja_env.globals["pay_text"] = pay_text
 
 
 # ---------------------------------------------------------------- constants
@@ -41,6 +42,9 @@ def init(host):
 APP_TYPES = {"crm": "CRM", "cafe": "Cafe", "both": "CRM + Cafe"}
 ORDER_TYPES = {"dine_in": "Dine-in", "takeaway": "Takeaway", "delivery": "Delivery"}
 PAYMENT_MODES = ["Cash", "UPI", "Card"]
+PAY_COLS = (("Cash", "pay_cash"), ("UPI", "pay_upi"), ("Card", "pay_card"))
+BILL_PAY_MODES = PAYMENT_MODES + ["Split", "Later"]   # what the billing screen can send
+PAY_LABELS = {"Later": "Pay later", "Split": "Split"}
 PAPER_SIZES = {"58": "58 mm thermal", "80": "80 mm thermal", "A4": "A4 / normal printer"}
 GST_RATES = [0, 5, 12, 18, 28]
 UNITS = {"pc": "Piece", "kg": "Kg", "l": "Litre"}
@@ -62,6 +66,7 @@ PERMS = [
     ("bills_view", "View old bills / reprint"),
     ("orders_online", "Handle online orders"),
     ("price_edit", "Change item prices on open orders"),
+    ("payment_edit", "Change payment of old bills (other days)"),
     ("menu_edit", "Edit menu / prices / offers / tables"),
     ("expense_add", "Add expenses"),
     ("expense_view", "View / edit expenses"),
@@ -108,6 +113,8 @@ DEFAULT_SETTINGS = {
     "birthday_on": False,
     "sort_pos": "popular", "sort_menu": "popular",   # most sold first, or the menu order
     "bt_print": False, "bt_auto": False,             # phone Bluetooth printing through the RawBT app
+    "pos_tiles": "photo",                            # billing tiles with photos, or text only (slow network)
+    "card_qr": False,                                # QR to the customer's My Card page on printed bills
 }
 
 def _now():
@@ -346,6 +353,17 @@ def menu_url(org=None, external=True, **kw):
     return url_for("cafe.public_menu", code=org["code"].lower(), _external=external, **kw)
 
 
+def card_url(tok, org=None, external=True):
+    """The customer's private My Card page (points, bills, referral)."""
+    org = org or g.org
+    return url_for("cafe.my_card", code=org["code"].lower(), tok=tok, _external=external)
+
+
+def qr_svg(url, scale=3):
+    import segno
+    return segno.make(url, error="m").svg_inline(scale=scale, border=1)
+
+
 def ensure_categories(oid):
     """First use: give the organization the default expense/income categories."""
     if not H.scalar("SELECT 1 FROM cafe_ledger_categories WHERE org_id = ?", (oid,)):
@@ -549,9 +567,9 @@ def upsert_customer(db, oid, phone, name, birthday=None, referral=None, user_id=
                          (oid, referral.strip().upper(), phone10(referral) or "-")).fetchone()
         referred_by = ref["id"] if ref else None
     cur = db.execute("""INSERT INTO customers (org_id, name, whatsapp, wa_norm, birthday, referral_code, referred_by,
-                        created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)""",
+                        created_by, created_at, card_token) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                      (oid, name or "Customer", phone.strip()[:20], p, bday or None, new_referral_code(db, oid),
-                      referred_by, user_id, _now()))
+                      referred_by, user_id, _now(), secrets.token_urlsafe(12)))
     return cur.lastrowid
 
 
@@ -642,6 +660,56 @@ def max_redeemable(balance, payable_paise, st):
 
 # ---------------------------------------------------------------- bill maths
 
+def parse_payment(mode, split, total):
+    """-> (payment_mode, cash, upi, card, due) in paise. split = {"cash": "200", "upi": "150", "card": ""} for Split."""
+    if mode in PAYMENT_MODES:
+        amounts = {m: (total if m == mode else 0) for m in PAYMENT_MODES}
+        return mode, amounts["Cash"], amounts["UPI"], amounts["Card"], 0
+    if mode == "Later":
+        return "Later", 0, 0, 0, total
+    if mode != "Split":
+        raise ValueError("Choose the payment mode (Cash / UPI / Card).")
+    split = split if isinstance(split, dict) else {}
+    got = {}
+    for m in PAYMENT_MODES:
+        v = to_paise(split.get(m.lower()), 0)
+        if v is None or v < 0:
+            raise ValueError(f"The {m} amount is not valid.")
+        got[m] = v
+    if sum(got.values()) != total:
+        raise ValueError(f"Cash + UPI + Card must be {rupees(total)} (now {rupees(sum(got.values()))}).")
+    used = [m for m in PAYMENT_MODES if got[m]]
+    if len(used) == 1:
+        return parse_payment(used[0], None, total)
+    return "Split", got["Cash"], got["UPI"], got["Card"], 0
+
+
+def pay_text(b):
+    """'Cash', 'Cash ₹200 + UPI ₹150', 'Not paid ₹350' for a bill row/dict."""
+    keys = b.keys() if hasattr(b, "keys") else []
+    if "pay_cash" not in keys:
+        return b["payment_mode"] or ""
+    if b["due"]:
+        return f"Not paid {rupees(b['due'])}"
+    parts = [(m, b[c]) for m, c in PAY_COLS if b[c]]
+    if len(parts) <= 1:
+        return parts[0][0] if parts else (b["payment_mode"] or "")
+    return " + ".join(f"{m} {rupees(v)}" for m, v in parts)
+
+
+def pay_breakdown(oid, d_from, d_to):
+    """[{k: 'Cash'|'UPI'|'Card'|'Not paid', n: bills, total: paise}] for valid bills between the dates (split bills
+    count in each of their parts)."""
+    r = H.query("""SELECT COALESCE(SUM(pay_cash), 0) cash, COALESCE(SUM(pay_upi), 0) upi,
+                     COALESCE(SUM(pay_card), 0) card, COALESCE(SUM(due), 0) due,
+                     SUM(pay_cash > 0) n_cash, SUM(pay_upi > 0) n_upi, SUM(pay_card > 0) n_card, SUM(due > 0) n_due
+                   FROM cafe_bills WHERE org_id = ? AND status = 'paid' AND bill_date BETWEEN ? AND ?""",
+                (oid, d_from, d_to), one=True)
+    out = [{"k": k, "n": r["n_" + c] or 0, "total": r[c]} for k, c in
+           (("Cash", "cash"), ("UPI", "upi"), ("Card", "card"), ("Not paid", "due")) if r[c]]
+    return sorted(out, key=lambda x: -x["total"])
+
+
 def compute_totals(lines, gst_on, inclusive, discount):
     """lines: [{'price': paise, 'qty': n, 'gst_rate': %}]. Returns subtotal, discount, taxable, cgst, sgst, gross."""
     subtotal = sum(l["price"] * l["qty"] for l in lines)
@@ -712,8 +780,7 @@ def home():
     day = today()
     sales = H.query("""SELECT COUNT(*) n, COALESCE(SUM(total), 0) total FROM cafe_bills
                        WHERE org_id = ? AND bill_date = ? AND status = 'paid'""", (oid, day), one=True)
-    by_mode = H.query("""SELECT payment_mode, COALESCE(SUM(total), 0) total FROM cafe_bills WHERE org_id = ?
-                         AND bill_date = ? AND status = 'paid' GROUP BY payment_mode""", (oid, day))
+    by_mode = [{"payment_mode": m["k"], "total": m["total"]} for m in pay_breakdown(oid, day, day)]
     expense = H.scalar("""SELECT COALESCE(SUM(amount), 0) FROM cafe_ledger WHERE org_id = ? AND kind = 'expense'
                           AND entry_date = ? AND deleted_at IS NULL""", (oid, day))
     pending = H.scalar("SELECT COUNT(*) FROM cafe_orders WHERE org_id = ? AND status = 'pending'", (oid,))

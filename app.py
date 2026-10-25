@@ -77,7 +77,18 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("CRM_SECURE_COOKIES") == "1",
     PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    SEND_FILE_MAX_AGE_DEFAULT=365 * 24 * 3600,  # static files: phones keep them; URLs carry ?v=<file version>
 )
+
+
+@app.url_defaults
+def static_version(endpoint, values):
+    """Add ?v=<last change> to static file URLs, so phones cache them for a year but get a new copy after an update."""
+    if endpoint == "static" and "filename" in values and "v" not in values:
+        try:
+            values["v"] = int(os.path.getmtime(os.path.join(app.static_folder, values["filename"])))
+        except OSError:
+            pass
 if os.environ.get("CRM_BEHIND_PROXY") == "1":
     # Hosted behind an HTTPS proxy (e.g. Render): trust its X-Forwarded-* headers so
     # generated links (invites, password resets) use https and the public hostname.
@@ -244,8 +255,30 @@ def audit(action, detail="", org=None):
             (org or org_id(), g.user["id"], action, detail, now()))
 
 
+GZIP_TYPES = ("text/html", "text/css", "application/javascript", "text/javascript", "application/json", "text/csv",
+              "image/svg+xml")
+
+
+def gzip_response(resp):
+    """Send text responses compressed (about 70% smaller): billing stays quick on a weak mobile network."""
+    if (resp.direct_passthrough or resp.status_code < 200 or resp.status_code >= 300 or resp.is_streamed
+            or "Content-Encoding" in resp.headers or "gzip" not in request.headers.get("Accept-Encoding", "")
+            or not (resp.mimetype or "").startswith(GZIP_TYPES)):
+        return resp
+    data = resp.get_data()
+    if len(data) < 800:
+        return resp
+    import gzip
+    resp.set_data(gzip.compress(data, compresslevel=6))
+    resp.headers["Content-Encoding"] = "gzip"
+    resp.headers["Content-Length"] = str(len(resp.get_data()))
+    resp.vary.add("Accept-Encoding")
+    return resp
+
+
 @app.after_request
 def security_headers(resp):
+    resp = gzip_response(resp)
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")

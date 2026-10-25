@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Card · {{ name }}</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Lora:wght@500;700&family=Baloo+Chettan+2:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='menu.css') }}">
+<style>:root { --p: {{ colors.primary }}; --s: {{ colors.secondary }}; --bg: {{ colors.bg }}; --tx: {{ colors.text }}; }</style>
+</head>
+<body class="font-{{ font }} shape-{{ shape }} card-page">
+<main class="mycard">
+  <header class="mc-head">
+    {% if st.logo %}<img class="mc-logo" src="{{ url_for('media', name=st.logo) }}" alt="">{% endif %}
+    <div><div class="mc-cafe">{{ name }}</div><h1>Hi {{ c.name if c.name != 'Customer' else 'there' }} 👋</h1></div>
+  </header>
+
+  {% if st.loyalty.on or c.points %}
+  <section class="mc-points">
+    <span class="mc-label">🎁 Your points</span>
+    <b class="mc-big">{{ c.points }}</b>
+    <span class="mc-value">worth {{ value|rs }} on your next bill</span>
+    {% if expiring.pts %}<span class="mc-warn">⏳ {{ expiring.pts }} points expire on {{ expiring.first[8:10] }}-{{ expiring.first[5:7] }}-{{ expiring.first[:4] }}. Use them soon!</span>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="mc-stats">
+    <div><b>{{ c.visits }}</b><span>Visits</span></div>
+    <div><b>{{ c.total_spent|rs0 }}</b><span>Total spent</span></div>
+    {% if c.last_visit %}<div><b>{{ c.last_visit[8:10] }}-{{ c.last_visit[5:7] }}</b><span>Last visit</span></div>{% endif %}
+  </section>
+
+  {% if menu_link %}<a class="place" href="{{ menu_link }}">🍽 See the menu / Order again</a>{% endif %}
+
+  {% if ref_link %}
+  <section class="mc-box">
+    <h2>👫 Refer &amp; Earn</h2>
+    <p>Share your link. When a friend makes their first bill, you get <b>{{ st.referral.referrer_points }}</b> points{% if st.referral.new_points %} and they get <b>{{ st.referral.new_points }}</b>{% endif %}.</p>
+    <p class="mc-code">Your code: <b>{{ c.referral_code }}</b>{% if friends %} · {{ friends }} friend{{ 's' if friends > 1 }} joined 🎉{% endif %}</p>
+    <a class="mc-btn wa" target="_blank" rel="noopener" href="https://wa.me/?text={{ ('Try ' ~ name ~ '! Use my link to get welcome points: ' ~ ref_link)|urlencode }}">🟢 Share on WhatsApp</a>
+  </section>
+  {% endif %}
+
+  {% if st.birthday_on and not c.birthday %}
+  <section class="mc-box">
+    <h2>🎂 Your birthday</h2>
+    <p>Tell us your birthday and get a surprise on your day.</p>
+    <form method="post" action="{{ url_for('cafe.my_card_birthday', code=org.code.lower(), tok=c.card_token) }}" class="mc-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="date" name="birthday" required><button class="mc-btn">Save</button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if history %}
+  <section class="mc-box">
+    <h2>Points history</h2>
+    <ul class="mc-list">
+      {% for h in history %}{% if loop.index == 9 %}</ul><details class="mc-more"><summary>Show more</summary><ul class="mc-list">{% endif %}<li><span><b>{{ h.label }}</b>{% if h.note %}<small>{{ h.note }}</small>{% endif %}<small>{{ h.created_at[8:10] }}-{{ h.created_at[5:7] }}-{{ h.created_at[:4] }}</small></span>
+        <b class="{{ 'plus' if h.change > 0 else 'minus' }}">{{ '+' if h.change > 0 }}{{ h.change }}</b></li>{% endfor %}
+    </ul>{% if history|length > 8 %}</details>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if bills %}
+  <section class="mc-box">
+    <h2>Your bills</h2>
+    <ul class="mc-list">
+      {% for b in bills %}{% if loop.index == 9 %}</ul><details class="mc-more"><summary>Show more</summary><ul class="mc-list">{% endif %}<li><a href="{{ url_for('cafe.public_bill', tok=b.token) }}"><span><b>Bill {{ st.bill_prefix }}{{ b.bill_no }}</b><small>{{ b.bill_date[8:10] }}-{{ b.bill_date[5:7] }}-{{ b.bill_date[:4] }}{% if b.points_earned %} · 🎁 +{{ b.points_earned }}{% endif %}</small></span><b>{{ b.total|rs }} ›</b></a></li>{% endfor %}
+    </ul>{% if bills|length > 8 %}</details>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if wa %}<a class="mc-btn wa block" href="https://wa.me/{{ wa }}" target="_blank" rel="noopener">Message {{ name }} on WhatsApp</a>{% endif %}
+  <p class="fine">This page is only for you. Please do not share the link.</p>
+</main>
+</body>
+</html>

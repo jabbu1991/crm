@@ -40,7 +40,13 @@
       <div class="pc-points" id="pc-points" hidden><span>🎁 Use points</span><input id="pc-redeem" type="number" min="0" placeholder="0"><button type="button" class="btn btn-sm" id="pc-maxpts">Max</button></div>
       {% endif %}
     </div>
-    <div class="seg pc-pay" id="pc-pay">{% for m in cfg.modes %}<button type="button" data-mode="{{ m }}" class="{{ 'on' if loop.first }}">{{ {'Cash': '💵', 'UPI': '📲', 'Card': '💳'}[m] }} {{ m }}</button>{% endfor %}</div>
+    <div class="seg pc-pay" id="pc-pay">{% for m in cfg.modes %}<button type="button" data-mode="{{ m }}" class="{{ 'on' if loop.first }}">{{ {'Cash': '💵', 'UPI': '📲', 'Card': '💳'}[m] }} {{ m }}</button>{% endfor %}<button type="button" data-mode="Split" title="Part cash, part UPI / card">➗ Split</button><button type="button" data-mode="Later" title="Bill now, money later (e.g. home delivery)">⏳ Later</button></div>
+    <div class="pc-split" id="pc-split" hidden>
+      <label>💵 Cash<input id="sp-cash" inputmode="decimal" placeholder="0"></label>
+      <label>📲 UPI<input id="sp-upi" inputmode="decimal" placeholder="0"></label>
+      <label>💳 Card<input id="sp-card" inputmode="decimal" placeholder="0"></label>
+      <small id="sp-left"></small>
+    </div>
     <div class="pc-msg" id="pc-msg" hidden></div>
     <div class="pc-actions">
       {% if cfg.kot_on %}<button type="button" class="btn btn-big" data-act="kot" title="Send to the kitchen; the order stays open">🍳 KOT</button>{% endif %}
@@ -80,6 +86,8 @@
     <div class="actions"><button type="button" class="btn" data-close>Close</button></div>
   </div>
 </div>
+
+<div class="pos-print" id="pos-print" hidden><iframe id="pos-print-frame" title="Bill"></iframe></div>
 
 <script id="pos-cfg" type="application/json">{{ cfg|tojson }}</script>
 <script>
@@ -307,7 +315,7 @@
     $("pc-address").hidden = state.type !== "delivery";
     $("pc-title").textContent = state.order ? "Order #" + cfg.order.no + (cfg.order.source === "online" ? " (online)" : "") : "New bill";
   }
-  function render() { renderItems(); renderLines(); renderTotals(); }
+  function render() { renderItems(); renderLines(); renderTotals(); if (typeof spShow === "function") { spShow(); saveDraft(); } }
 
   // ---- S.No / barcode / name from the search box, a USB scanner, or the camera
   function findCode(v) {
@@ -388,10 +396,66 @@
     });
   };
 
+  // ---- split payment
+  function spVal(id) { return Math.round((parseFloat($(id).value) || 0) * 100); }
+  function spShow() {
+    $("pc-split").hidden = state.pay !== "Split";
+    if (state.pay !== "Split") return;
+    var t = totals().total, sum = spVal("sp-cash") + spVal("sp-upi") + spVal("sp-card"), left = $("sp-left");
+    left.textContent = sum === t ? "✓ " + rs(t) : (sum < t ? "Still " + rs(t - sum) : rs(sum - t) + " too much");
+    left.className = sum === t ? "ok" : "err";
+  }
+  $("sp-cash").addEventListener("input", function () {
+    var r = totals().total - spVal("sp-cash") - spVal("sp-card");
+    $("sp-upi").value = r > 0 ? (r / 100).toFixed(2).replace(/\.00$/, "") : ""; spShow();
+  });
+  ["sp-upi", "sp-card"].forEach(function (id) { $(id).addEventListener("input", spShow); });
+
+  // ---- keep the bill on the phone until it is saved (refresh or network drop does not lose it)
+  var DRAFT = "pos:" + cfg.org + ":" + (state.order || "new");
+  function saveDraft() {
+    try {
+      if (!state.lines.length && !$("pc-phone").value) { localStorage.removeItem(DRAFT); return; }
+      localStorage.setItem(DRAFT, JSON.stringify({at: Date.now(), order: state.order, type: state.type, table: state.table,
+        lines: state.lines, phone: $("pc-phone").value, name: $("pc-name").value, address: $("pc-address").value, note: $("pc-note").value}));
+    } catch (e) {}
+  }
+  function loadDraft() {
+    try {
+      var d = JSON.parse(localStorage.getItem(DRAFT) || "null");
+      if (!d || Date.now() - d.at > 12 * 3600 * 1000 || !d.lines || !d.lines.length) return;
+      d.lines = d.lines.filter(function (l) { return byId[l.item_id]; });
+      if (!d.lines.length) return;
+      state.lines = d.lines; state.type = d.type || state.type; state.table = d.table || state.table;
+      $("pc-phone").value = d.phone || ""; $("pc-name").value = d.name || ""; $("pc-address").value = d.address || ""; $("pc-note").value = d.note || "";
+      flash("The unsaved bill was brought back.", true);
+    } catch (e) {}
+  }
+  function clearDraft() { try { localStorage.removeItem(DRAFT); } catch (e) {} }
+  ["pc-phone", "pc-name", "pc-address", "pc-note"].forEach(function (id) { $(id).addEventListener("change", saveDraft); });
+
+  // ---- after Bill & Print: the bill opens on top of this screen; New Bill clears it without reloading
+  function newBill() {
+    $("pos-print").hidden = true; $("pos-print-frame").src = "about:blank";
+    if (state.order) {
+      cfg.tables.forEach(function (t) { if (t.busy === state.order) t.busy = null; });
+      state.order = null; cfg.order = null; DRAFT = "pos:" + cfg.org + ":new";
+    }
+    state.type = state.type === "dine_in" ? "takeaway" : state.type; state.table = null;
+    state.lines = []; state.cust = null; state.pay = cfg.modes[0];
+    ["pc-phone", "pc-name", "pc-address", "pc-note", "pc-disc", "pc-redeem", "pc-bday", "pc-ref", "sp-cash", "sp-upi", "sp-card"].forEach(function (id) { if ($(id)) $(id).value = ""; });
+    $("pc-custinfo").hidden = true; $("pc-newcust").hidden = true; if ($("pc-points")) $("pc-points").hidden = true;
+    document.querySelectorAll("#pc-pay button").forEach(function (x, i) { x.classList.toggle("on", i === 0); });
+    document.body.classList.remove("cart-open");
+    clearDraft(); renderType(); render(); spShow();
+    $("pos-q").focus();
+  }
+  window.addEventListener("message", function (e) { if (e.origin === location.origin && e.data === "pos-new") newBill(); });
+
   // ---- events
   document.querySelectorAll("#pc-types button").forEach(function (b) { b.onclick = function () { state.type = b.dataset.type; renderType(); }; });
   $("pc-table").onchange = function () { state.table = parseInt(this.value, 10) || null; };
-  document.querySelectorAll("#pc-pay button").forEach(function (b) { b.onclick = function () { state.pay = b.dataset.mode; document.querySelectorAll("#pc-pay button").forEach(function (x) { x.classList.toggle("on", x === b); }); }; });
+  document.querySelectorAll("#pc-pay button").forEach(function (b) { b.onclick = function () { state.pay = b.dataset.mode; document.querySelectorAll("#pc-pay button").forEach(function (x) { x.classList.toggle("on", x === b); }); spShow(); if (state.pay === "Split") $("sp-cash").focus(); }; });
   document.querySelectorAll("#pc-dmode button").forEach(function (b) { b.onclick = function () { state.dmode = b.dataset.m; document.querySelectorAll("#pc-dmode button").forEach(function (x) { x.classList.toggle("on", x === b); }); renderTotals(); }; });
   ["pc-disc", "pc-redeem"].forEach(function (id) { if ($(id)) $(id).addEventListener("input", renderTotals); });
   $("pos-cartbar").onclick = function () { document.body.classList.add("cart-open"); };
@@ -404,7 +468,13 @@
       if (!state.lines.length && !(act === "save" && state.order)) { flash("Add at least one item."); return; }
       if (state.type === "dine_in" && !state.table) { flash("Choose a table."); return; }
       var t = totals();
+      if (act === "bill" && state.pay === "Split") {
+        var sum = spVal("sp-cash") + spVal("sp-upi") + spVal("sp-card");
+        if (sum !== t.total) { flash("Split: Cash + UPI + Card must be " + rs(t.total) + "."); return; }
+      }
       var payload = {
+        client_ref: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
+        payment_split: state.pay === "Split" ? {cash: $("sp-cash").value, upi: $("sp-upi").value, card: $("sp-card").value} : null,
         action: act, order_id: state.order, order_type: state.type, table_id: state.table,
         items: state.lines.map(function (l) {
           var o = {line_id: l.line_id || null, item_id: l.item_id, qty: l.qty, note: l.note, measure: l.measure || null};
@@ -417,18 +487,37 @@
         discount: {mode: state.dmode, value: $("pc-disc") ? $("pc-disc").value : 0},
         redeem_points: t.pts, payment_mode: state.pay
       };
-      var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payload", JSON.stringify(payload));
-      state.busy = true; b.disabled = true;
-      fetch(cfg.urls.save, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
-        state.busy = false; b.disabled = false;
-        if (!d.ok) { flash(d.error || "Could not save."); return; }
-        if (d.print) { window.location.href = d.print; return; }
-        window.location.href = state.type === "dine_in" ? "{{ url_for('cafe.tables') }}" : "{{ url_for('cafe.orders') }}";
-      }).catch(function () { state.busy = false; b.disabled = false; flash("Internet problem. Try again (hotspot?)."); });
+      var label = b.innerHTML, tries = 0;
+      state.busy = true; b.disabled = true; b.textContent = "Saving…";
+      function done() { state.busy = false; b.disabled = false; b.innerHTML = label; }
+      // a weak network: wait up to 20 s, then try again (same client_ref, so a bill is never made twice)
+      function send() {
+        tries += 1;
+        var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payload", JSON.stringify(payload));
+        var ctl = window.AbortController ? new AbortController() : null, timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
+        fetch(cfg.urls.save, {method: "POST", body: fd, credentials: "same-origin", signal: ctl ? ctl.signal : undefined}).then(function (r) {
+          clearTimeout(timer);
+          if (r.status >= 500 || r.status === 409) throw new Error("retry");
+          return r.json();
+        }).then(function (d) {
+          done();
+          if (!d.ok) { flash(d.error || "Could not save."); return; }
+          clearDraft();
+          if (d.embed) { $("pos-print-frame").src = d.embed; $("pos-print").hidden = false; return; }
+          if (d.print) { window.location.href = d.print; return; }
+          window.location.href = state.type === "dine_in" ? "{{ url_for('cafe.tables') }}" : "{{ url_for('cafe.orders') }}";
+        }).catch(function () {
+          clearTimeout(timer);
+          if (tries < 4) { b.textContent = "Network slow… trying again (" + (tries + 1) + ")"; setTimeout(send, 1500 * tries); return; }
+          done(); flash("No internet. The bill is kept on this phone; press the button again when the network is back.");
+        });
+      }
+      send();
     };
   });
 
   if (cfg.order) { $("pc-phone").value = cfg.order.customer.phone; $("pc-name").value = cfg.order.customer.name; $("pc-address").value = cfg.order.address; $("pc-note").value = cfg.order.note; if (cfg.order.customer.phone) lookup(); }
+  if (!cfg.order) loadDraft();
   renderCats(); renderType(); render();
 })();
 </script>

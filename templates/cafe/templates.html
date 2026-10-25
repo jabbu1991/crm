@@ -3,7 +3,7 @@
 {% block content %}
 <h1>🟢 WhatsApp marketing templates</h1>
 <p class="muted">Choose a template on the Customers page and send it to each customer. You can use:
-  <span class="tags"><code>{name}</code> <code>{points}</code> <code>{menu_link}</code> <code>{referral_link}</code> <code>{cafe_name}</code></span></p>
+  <span class="tags"><code>{name}</code> <code>{points}</code> <code>{menu_link}</code> <code>{referral_link}</code> <code>{my_card}</code> <code>{cafe_name}</code></span></p>
 {% for t in rows %}
 <div class="tpl">
   <form method="post" class="form">{{ csrf() }}<input type="hidden" name="id" value="{{ t.id }}">

@@ -8,7 +8,7 @@ import json
 import re
 import unicodedata
 
-from cafe import fmt_measure
+from cafe import fmt_measure, pay_text, rupees
 
 ESC, GS = b"\x1b", b"\x1d"
 
@@ -110,7 +110,12 @@ def bill_receipt(r, st, name, bill, items, balance=None, order_types=None):
     d = bill["bill_date"]
     r.pair(f"Bill: {st.get('bill_prefix') or ''}{bill['bill_no']}", f"{d[8:10]}-{d[5:7]}-{d[:4]} {bill['created_at'][11:16]}")
     kind = (order_types or {}).get(bill["order_type"], "") + (f": {bill['table_name']}" if bill["table_name"] else "")
-    r.pair(kind, bill["payment_mode"] or "")
+    keys = bill.keys() if hasattr(bill, "keys") else []
+    if "pay_cash" in keys and not bill["due"] and sum(1 for c in ("pay_cash", "pay_upi", "pay_card") if bill[c]) > 1:
+        r.text(kind)
+        r.text("Paid: " + pay_text(bill), "right")
+    else:
+        r.pair(kind, pay_text(bill))
     if bill["cust_name"]:
         r.text("Customer: " + bill["cust_name"])
     r.rule()
@@ -153,6 +158,9 @@ def bill_receipt(r, st, name, bill, items, balance=None, order_types=None):
     if bill["points_earned"] or balance is not None:
         r.text(f"Points earned: {bill['points_earned']}" + (f"  Balance: {balance}" if balance is not None else ""),
                "center")
+    if "due" in (bill.keys() if hasattr(bill, "keys") else []) and bill["due"]:
+        r.rule()
+        r.text(f"NOT PAID: {rupees(bill['due'])}", "center", bold=True)
     if st.get("bill_footer"):
         r.text(st["bill_footer"], "center")
     r.cut()

@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -836,8 +836,29 @@ def _migrate_v10(conn):
                  " WHERE barcode IS NOT NULL AND barcode != '' AND active = 1")
 
 
+def _migrate_v11(conn):
+    """Cafe: split payments, pay later, payment changes after billing, customer "My Card" links."""
+    import secrets
+
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("cafe_bills", "pay_cash", "INTEGER NOT NULL DEFAULT 0")   # paise received in cash
+    add("cafe_bills", "pay_upi", "INTEGER NOT NULL DEFAULT 0")
+    add("cafe_bills", "pay_card", "INTEGER NOT NULL DEFAULT 0")
+    add("cafe_bills", "due", "INTEGER NOT NULL DEFAULT 0")        # not paid yet (Pay later)
+    add("cafe_bills", "pay_log", "TEXT")                          # JSON list of payment changes
+    for mode, col in (("Cash", "pay_cash"), ("UPI", "pay_upi"), ("Card", "pay_card")):
+        conn.execute(f"UPDATE cafe_bills SET {col} = total WHERE payment_mode = ? AND {col} = 0", (mode,))
+    add("customers", "card_token", "TEXT")
+    for (cid,) in conn.execute("SELECT id FROM customers WHERE card_token IS NULL").fetchall():
+        conn.execute("UPDATE customers SET card_token = ? WHERE id = ?", (secrets.token_urlsafe(12), cid))
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_card ON customers(card_token)")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
-              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10)]
+              (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
+              (11, _migrate_v11)]
 
 
 def migrate(db_path):

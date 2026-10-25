@@ -1,4 +1,5 @@
 """Customers, loyalty points, WhatsApp marketing templates, expenses / other income, analysis and CSV exports."""
+import secrets
 import csv
 import io
 import json
@@ -7,7 +8,7 @@ from datetime import date, timedelta
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 import cafe_charts as charts
-from cafe import (ITEM_PHOTO_HINT, ORDER_TYPES, PAYMENT_MODES, add_points, bp, cafe_name, cafe_view, can,
+from cafe import (PAY_LABELS, pay_breakdown, pay_text, card_url, ITEM_PHOTO_HINT, ORDER_TYPES, PAYMENT_MODES, add_points, bp, cafe_name, cafe_view, can,
                   ensure_categories, ensure_templates, expire_points, get_settings, host as H, max_redeemable,
                   menu_url, phone10, point_value, rupees, take_points, to_int, to_paise, today, today_date,
                   valid_birthday)
@@ -33,6 +34,7 @@ def fill_template(body, c, st, org):
     ref_link = menu_url(org, ref=c["referral_code"]) if st["referral"]["on"] else menu_url(org)
     values = {"name": (c["name"] or "").split(" ")[0] if c["name"] != "Customer" else "", "points": str(c["points"]),
               "menu_link": menu_url(org), "referral_link": ref_link, "cafe_name": cafe_name(st, org),
+              "my_card": card_url(c["card_token"], org) if c["card_token"] else menu_url(org),
               "full_name": c["name"] or ""}
     out = body
     for k, v in values.items():
@@ -169,7 +171,21 @@ def customer_view(cid):
                      for t in H.query("SELECT * FROM cafe_templates WHERE org_id = ? ORDER BY sort, id", (oid,))]
     return render_template("cafe/customer_view.html", c=c, ledger=ledger, bills=bills_, st=st, referrer=referrer,
                            referred=referred, expiring=expiring, KIND_LABELS=KIND_LABELS, templates=templates,
-                           ref_link=menu_url(ref=c["referral_code"]), pv=point_value(st))
+                           ref_link=menu_url(ref=c["referral_code"]), pv=point_value(st),
+                           card=card_url(c["card_token"]) if c["card_token"] else None)
+
+
+@bp.route("/cafe/customers/<int:cid>/new-card-link", methods=["POST"])
+@cafe_view("customers_view")
+def customer_card_reset(cid):
+    """A new My Card link; the old one stops working (if it was shared with someone else)."""
+    if not (can("points_adjust") or can("marketing")):
+        abort(403)
+    get_customer(cid)
+    H.execute("UPDATE customers SET card_token = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+              (secrets.token_urlsafe(12), H.now(), cid, _org()))
+    flash("New My Card link made. The old link no longer works.", "success")
+    return redirect(url_for("cafe.customer_view", cid=cid))
 
 
 @bp.route("/cafe/customers/<int:cid>/points", methods=["POST"])
@@ -418,9 +434,7 @@ def analysis():
                              SUM(COALESCE(bi.measure, 0) * bi.qty) meas FROM cafe_bill_items bi
                            JOIN cafe_bills b ON b.id = bi.bill_id WHERE b.org_id = ? AND b.status = 'paid'
                            AND b.bill_date BETWEEN ? AND ? GROUP BY bi.name ORDER BY qty DESC LIMIT 10""", (oid, A, B))
-    modes = H.query("""SELECT payment_mode k, COUNT(*) n, SUM(total) total FROM cafe_bills WHERE org_id = ?
-                       AND status = 'paid' AND bill_date BETWEEN ? AND ? GROUP BY payment_mode ORDER BY total DESC""",
-                    (oid, A, B))
+    modes = pay_breakdown(oid, A, B)
     types = H.query("""SELECT order_type k, COUNT(*) n, SUM(total) total FROM cafe_bills WHERE org_id = ?
                        AND status = 'paid' AND bill_date BETWEEN ? AND ? GROUP BY order_type ORDER BY total DESC""",
                     (oid, A, B))
@@ -506,12 +520,13 @@ def export(name):
                           WHERE b.org_id = ? AND b.bill_date BETWEEN ? AND ? ORDER BY b.id""", (oid, A, B))
         return _csv("bills", ["Bill No", "Date", "Time", "Type", "Table", "Customer", "WhatsApp", "Subtotal", "Discount",
                               "Taxable", "CGST", "SGST", "Points used", "Points value", "Round off", "Total", "Payment",
-                              "Points earned", "Status", "Cancel reason", "Billed by"],
+                              "Cash", "UPI", "Card", "Not paid", "Points earned", "Status", "Cancel reason", "Billed by"],
                     [(f"{st['bill_prefix']}{r['bill_no']}", r["bill_date"], r["created_at"][11:16],
                       ORDER_TYPES.get(r["order_type"], r["order_type"]), r["table_name"] or "", r["cust_name"] or "",
                       r["cust_phone"] or "", _r(r["subtotal"]), _r(r["discount"]), _r(r["taxable"]), _r(r["cgst"]),
                       _r(r["sgst"]), r["points_redeemed"], _r(r["points_value"]), _r(r["round_off"]), _r(r["total"]),
-                      r["payment_mode"], r["points_earned"], r["status"], r["cancel_reason"] or "", r["by_name"] or "")
+                      PAY_LABELS.get(r["payment_mode"], r["payment_mode"]), _r(r["pay_cash"]), _r(r["pay_upi"]),
+                      _r(r["pay_card"]), _r(r["due"]), r["points_earned"], r["status"], r["cancel_reason"] or "", r["by_name"] or "")
                      for r in rows])
     if name == "items":
         if not can("reports_view"):

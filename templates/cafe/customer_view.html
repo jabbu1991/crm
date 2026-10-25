@@ -27,6 +27,15 @@
   {% if referrer %}<p class="small">Referred by: <a href="{{ url_for('cafe.customer_view', cid=referrer.id) }}">{{ referrer.name }}</a> {{ '(points given)' if c.referral_rewarded else '(points after their first bill)' }}</p>{% endif %}
   {% if referred %}<p class="small">Brought in: {% for r in referred %}<a href="{{ url_for('cafe.customer_view', cid=r.id) }}">{{ r.name }}</a>{{ ' ✓' if r.referral_rewarded }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
   {% endif %}
+  {% if card %}
+  <h2>🪪 My Card link</h2>
+  <p class="small">The customer opens this to see their points, history and bills. Private: only for this customer.</p>
+  <div class="tpl-buttons">
+    <a class="btn btn-sm btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ c.whatsapp|wa_number }}?text={{ ('Hi ' ~ c.name ~ ', see your points and bills at ' ~ (st.name or g.org.name) ~ ': ' ~ card)|urlencode }}">🟢 Send card link</a>
+    <a class="btn btn-sm" href="{{ card }}" target="_blank" rel="noopener">Open</a>
+    {% if (can('points_adjust') or can('marketing')) and not viewing %}<form method="post" action="{{ url_for('cafe.customer_card_reset', cid=c.id) }}" class="inline" onsubmit="return confirm('Make a new link? The old link will stop working.')">{{ csrf() }}<button class="btn btn-sm">↻ New link</button></form>{% endif %}
+  </div>
+  {% endif %}
   {% if templates %}
   <h2 id="wa">🟢 WhatsApp message</h2>
   <div class="tpl-buttons">{% for title, body in templates %}<a class="btn btn-sm btn-wa" target="_blank" rel="noopener" href="https://wa.me/{{ c.whatsapp|wa_number }}?text={{ body|urlencode }}" title="{{ body }}">{{ title }}</a>{% endfor %}</div>

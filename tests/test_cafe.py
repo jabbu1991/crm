@@ -787,3 +787,178 @@ def test_public_order_with_weight(cw):
     assert r.status_code == 200 and r.get_json()["ok"]
     row = w["db"]().execute("SELECT price, measure FROM cafe_order_items").fetchone()
     assert tuple(row) == (24000, 0.5)
+
+
+# ------------------------------------------------------------------ round 4: speed, split / later payments, My Card
+
+def test_gzip_and_static_cache(cw):
+    b = cw["cafe"]
+    settings(b)
+    r = b.c.get("/cafe/pos", headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("Content-Encoding") == "gzip"
+    import gzip
+    assert b"pos-cfg" in gzip.decompress(r.data)
+    assert b.get("/cafe/pos").headers.get("Content-Encoding") is None      # browsers without gzip still work
+    page = b.get("/cafe/pos").text
+    assert re.search(r'/static/style\.css\?v=\d+', page)
+    st = b.c.get(re.search(r'(/static/style\.css\?v=\d+)', page).group(1))
+    assert "max-age=31536000" in st.headers["Cache-Control"]
+
+
+def test_text_only_tiles(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    b.post("/cafe/menu/item/new", {"name": "Cake", "price": "50", "available": "1", "photo": (png(), "c.png")},
+           content_type="multipart/form-data")
+    assert '"photo": "/media/' in b.get("/cafe/pos").text
+    settings(b, pos_tiles="text")
+    assert '"photo": null' in b.get("/cafe/pos").text
+    assert "/media/" in Browser().get("/m/chai").text                      # customer menu keeps photos
+
+
+def test_retry_does_not_make_two_bills(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    p = {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "client_ref": "abc123",
+         "items": [{"item_id": item_id(w, "Tea"), "qty": 1}]}
+    c1, d1 = pos(b, p)
+    c2, d2 = pos(b, p)
+    assert d1["ok"] and d1 == d2 and "embed=1" in d1["embed"]
+    assert w["db"]().execute("SELECT COUNT(*) FROM cafe_bills").fetchone()[0] == 1
+    # the in-screen print can be framed by our own page only
+    r = b.get(d1["embed"])
+    assert r.headers["X-Frame-Options"] == "SAMEORIGIN" and "pos-new" in r.text
+    assert b.get(d1["print"]).headers["X-Frame-Options"] == "DENY"
+
+
+def test_split_payment_and_reports(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Meal", "350")
+    meal = item_id(w, "Meal")
+    base = {"action": "bill", "order_type": "takeaway", "items": [{"item_id": meal, "qty": 1}]}
+    code, d = pos(b, dict(base, payment_mode="Split", payment_split={"cash": "200", "upi": "100", "card": ""}))
+    assert code == 400 and "must be ₹350" in d["error"]
+    code, d = pos(b, dict(base, payment_mode="Split", payment_split={"cash": "200", "upi": "150", "card": ""}))
+    assert d["ok"], d
+    bill = w["db"]().execute("SELECT * FROM cafe_bills").fetchone()
+    assert (bill["payment_mode"], bill["pay_cash"], bill["pay_upi"], bill["pay_card"], bill["due"]) == ("Split", 20000, 15000, 0, 0)
+    assert "Cash ₹200 + UPI ₹150" in b.get(d["print"]).text
+    pos(b, dict(base, payment_mode="UPI"))
+    page = b.get("/cafe/bills").text
+    assert "₹200" in page and "₹500" in page                               # cash 200, UPI 150 + 350
+    assert "Split" in b.get("/cafe/bills?mode=Split").text
+    ana = b.get("/cafe/analysis").text
+    assert "Cash" in ana and "UPI" in ana
+    csv_ = b.get("/cafe/export/bills.csv?p=today").text
+    assert "Cash,UPI,Card,Not paid" in csv_ and "Split" in csv_
+
+
+def test_pay_later_receive_and_change_payment(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Biriyani", "180")
+    by = item_id(w, "Biriyani")
+    code, d = pos(b, {"action": "bill", "order_type": "delivery", "payment_mode": "Later", "items": [{"item_id": by, "qty": 2}]})
+    assert d["ok"], d
+    db = w["db"]()
+    bid = db.execute("SELECT id FROM cafe_bills").fetchone()[0]
+    assert db.execute("SELECT due, pay_cash FROM cafe_bills").fetchone()[:] == (36000, 0)
+    assert "NOT PAID" in b.get(d["print"]).text
+    page = b.get("/cafe/bills").text
+    assert "1 bill not paid: ₹360" in page
+    assert "Receive payment" in b.get(f"/cafe/bills/{bid}").text
+    # delivery boy brings ₹200 cash + ₹160 UPI
+    r = b.post(f"/cafe/bills/{bid}/payment", {"mode": "Split", "cash": "200", "upi": "160", "card": ""})
+    assert "Payment received: Cash ₹200 + UPI ₹160" in r.text
+    row = w["db"]().execute("SELECT * FROM cafe_bills").fetchone()
+    assert (row["due"], row["pay_cash"], row["pay_upi"], row["total"]) == (0, 20000, 16000, 36000)
+    log = json.loads(row["pay_log"])
+    assert log[0]["from"] == "Not paid ₹360" and log[0]["to"] == "Cash ₹200 + UPI ₹160"
+    assert "bill not paid:" not in b.get("/cafe/bills").text
+    # wrong total is refused
+    r = b.post(f"/cafe/bills/{bid}/payment", {"mode": "Split", "cash": "100", "upi": "100"})
+    assert "must be ₹360" in r.text
+    # cashier: same day ok, an old bill not (without the tick); old unpaid bill ok
+    cashier = make_staff(b, "cash5")
+    r = cashier.post(f"/cafe/bills/{bid}/payment", {"mode": "UPI"})
+    assert "Payment changed: UPI" in r.text
+    with sqlite3.connect(w["db_path"]) as c:
+        c.execute("UPDATE cafe_bills SET bill_date = '2020-01-01'")
+    r = cashier.post(f"/cafe/bills/{bid}/payment", {"mode": "Cash"})
+    assert "not allowed to change the payment" in r.text
+    assert b.post(f"/cafe/bills/{bid}/payment", {"mode": "Cash"}).text.count("Payment changed: Cash") == 1   # admin
+    with sqlite3.connect(w["db_path"]) as c:
+        c.execute("UPDATE cafe_bills SET due = total, pay_cash = 0, payment_mode = 'Later'")
+    assert "Payment received: Cash" in cashier.post(f"/cafe/bills/{bid}/payment", {"mode": "Cash"}).text
+    # another cafe cannot touch it
+    assert w["cafe2"].post(f"/cafe/bills/{bid}/payment", {"mode": "UPI"}, follow=False).status_code == 404
+
+
+def test_my_card_page(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b, loyalty_on="1", referral_on="1", referral_referrer_points="50", referral_new_points="25", birthday_on="1")
+    add_item(b, "Tea", "100")
+    tea = item_id(w, "Tea")
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [{"item_id": tea, "qty": 2}],
+            "customer": {"phone": "9876543210", "name": "Anu"}})
+    db = w["db"]()
+    c = db.execute("SELECT * FROM customers").fetchone()
+    assert c["card_token"] and len(c["card_token"]) >= 12
+    url = f"/m/chai/me/{c['card_token']}"
+    guest = Browser()
+    r = guest.get(url)
+    assert r.status_code == 200 and "Hi Anu" in r.text and ">10<" in r.text and "Your bills" in r.text
+    assert c["referral_code"] in r.text and "Share on WhatsApp" in r.text
+    assert "9876543210" not in r.text                                      # phone not shown
+    # birthday from the card page
+    guest.post(url + "/birthday", {"birthday": "1990-05-17"})
+    assert w["db"]().execute("SELECT birthday FROM customers").fetchone()[0] == "05-17"
+    # wrong token / other cafe -> 404
+    assert guest.get("/m/chai/me/nottherealtoken123").status_code == 404
+    assert guest.get(f"/m/other/me/{c['card_token']}").status_code == 404
+    # link in the WhatsApp bill text and on the customer page; new link kills the old one
+    bid = db.execute("SELECT id FROM cafe_bills").fetchone()[0]
+    assert "me/" + c["card_token"] in b.get(f"/cafe/bills/{bid}").text
+    assert "Send card link" in b.get(f"/cafe/customers/{c['id']}").text
+    b.post(f"/cafe/customers/{c['id']}/new-card-link", {})
+    assert guest.get(url).status_code == 404
+    # print QR only when switched on
+    assert 'class="c card-qr"' not in b.get(f"/cafe/bills/{bid}/print").text
+    settings(b, loyalty_on="1", card_qr="1")
+    assert "<svg" in b.get(f"/cafe/bills/{bid}/print").text
+    # {my_card} in WhatsApp templates
+    from cafe_people import fill_template
+    import app as crm_app
+    with crm_app.app.test_request_context():
+        row = sqlite3.connect(w["db_path"])
+        row.row_factory = sqlite3.Row
+        cust = row.execute("SELECT * FROM customers").fetchone()
+        org = row.execute("SELECT * FROM organizations WHERE code = 'CHAI'").fetchone()
+        st = cafe.get_settings(org["id"])
+        assert "/m/chai/me/" in fill_template("See {my_card}", cust, st, org)
+
+
+def test_migration_v11_fills_old_bills_and_card_links(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "UPI", "items": [{"item_id": item_id(w, "Tea"), "qty": 2}],
+            "customer": {"phone": "9876500000", "name": "Old"}})
+    with sqlite3.connect(w["db_path"]) as c:   # make it look like a bill/customer from before v11
+        c.execute("UPDATE cafe_bills SET pay_upi = 0")
+        c.execute("DROP INDEX uq_customers_card")
+        c.execute("UPDATE customers SET card_token = NULL")
+        c.execute("PRAGMA user_version = 10")
+    crm_db.migrate(w["db_path"])
+    db = w["db"]()
+    assert db.execute("SELECT pay_upi, total FROM cafe_bills").fetchone()[:] == (3000, 3000)
+    assert db.execute("SELECT card_token FROM customers").fetchone()[0]
+    assert db.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION

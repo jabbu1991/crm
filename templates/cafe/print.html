@@ -33,19 +33,23 @@
   .kot td { font-size: 1.15em; padding: 3px 0; }
   .kot .cancel td { text-decoration: line-through; }
   .small { font-size: .85em; }
+  .card-qr svg { width: 26mm; height: 26mm; display: block; margin: 4px auto 0; }
   .menu-link { text-align: center; margin: 8px auto 20px; font: 14px system-ui, sans-serif; }
   @media print { html, body { background: #fff; } .tools, .menu-link { display: none; } .sheet { margin: 0; box-shadow: none; width: {{ '100%' if paper == 'A4' else w }}; } }
 </style>
 </head>
 <body>
 <div class="tools">
-  {% if bt_link %}<a class="primary bt" href="{{ bt_link }}" id="bt-print">🖨 Bluetooth Print</a>{% endif %}
+  {% if bt_link %}<a class="primary bt" href="{{ bt_link }}" id="bt-print"{% if embed %} target="_top"{% endif %}>🖨 Bluetooth Print</a>{% endif %}
   <button class="{{ '' if bt_link else 'primary' }}" onclick="window.print()">🖨 Print</button>
   {% if bill %}<button onclick="savePdf()">⬇️ Save (PDF)</button>
-  {% if not public and bill.cust_phone %}<a class="wa" href="{{ url_for('cafe.bill_view', bid=bill.id) }}#share">🟢 WhatsApp</a>{% endif %}{% endif %}
-  <span class="papers">{% for p, l in (('58', '58mm'), ('80', '80mm'), ('A4', 'A4')) %}<a class="{{ 'on' if paper == p }}" href="?{{ 'kot=' ~ request.args.kot ~ '&' if request.args.kot }}paper={{ p }}">{{ l }}</a>{% endfor %}</span>
+  {% if not public and bill.cust_phone %}<a class="wa" href="{{ url_for('cafe.bill_view', bid=bill.id) }}#share"{% if embed %} target="_top"{% endif %}>🟢 WhatsApp</a>{% endif %}{% endif %}
+  <span class="papers">{% for p, l in (('58', '58mm'), ('80', '80mm'), ('A4', 'A4')) %}<a class="{{ 'on' if paper == p }}" href="?{{ 'kot=' ~ request.args.kot ~ '&' if request.args.kot }}{{ 'embed=1&' if embed }}paper={{ p }}">{{ l }}</a>{% endfor %}</span>
+  {% if embed %}<a href="{{ back }}" target="_top">✓ Done</a><button class="primary" onclick="parent.postMessage('pos-new', location.origin)">🧾 New Bill</button>
+  {% else %}
   {% if back and not public %}<a href="{{ back }}">{{ '✓ Done' if auto else '← Back' }}</a>{% endif %}
   {% if not public and auto %}<a href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
+  {% endif %}
   <div class="hint" id="pdf-hint" hidden>In the print window, choose <b>"Save as PDF"</b> as the printer.</div>
 </div>
 
@@ -61,7 +65,7 @@
   {% if bill.status == 'cancelled' %}<div class="cancelled">CANCELLED</div>{% endif %}
   <hr>
   <div class="meta"><span>Bill: <b>{{ st.bill_prefix }}{{ bill.bill_no }}</b></span><span>{{ bill.bill_date[8:10] }}-{{ bill.bill_date[5:7] }}-{{ bill.bill_date[:4] }} {{ bill.created_at[11:16] }}</span></div>
-  <div class="meta"><span>{{ ORDER_TYPES.get(bill.order_type, '') }}{% if bill.table_name %}: {{ bill.table_name }}{% endif %}</span><span>{{ bill.payment_mode }}</span></div>
+  <div class="meta"><span>{{ ORDER_TYPES.get(bill.order_type, '') }}{% if bill.table_name %}: {{ bill.table_name }}{% endif %}</span><span>{{ pay_text(bill) }}</span></div>
   {% if bill.cust_name %}<div>Customer: {{ bill.cust_name }}{% if bill.cust_phone and not public %} · {{ bill.cust_phone }}{% endif %}</div>{% endif %}
   <hr>
   <table>
@@ -85,8 +89,10 @@
   </table>
   {% if bill.gst_on and bill.gst_inclusive %}<div class="small c">(Prices inclusive of GST)</div>{% endif %}
   {% if bill.points_earned or balance is not none %}<hr><div class="c">🎁 Points earned: <b>{{ bill.points_earned }}</b>{% if balance is not none %} · Balance: <b>{{ balance }}</b>{% endif %}</div>{% endif %}
+  {% if bill.due %}<div class="cancelled">NOT PAID: {{ bill.due|rs }}</div>{% endif %}
   <hr>
   <div class="c">{{ st.bill_footer }}</div>
+  {% if card_qr and not public %}<div class="c card-qr">{{ card_qr|safe }}<div class="small">Scan to see your points &amp; bills</div></div>{% endif %}
 </div>
 {% endif %}
 
@@ -108,7 +114,7 @@
 <script>
 function savePdf() { document.getElementById("pdf-hint").hidden = false; setTimeout(function () { window.print(); }, 150); }
 {% if auto %}window.addEventListener("load", function () { setTimeout(function () {
-  {% if bt_link and st.bt_auto %}window.location.href = document.getElementById("bt-print").href;{% else %}window.print();{% endif %}
+  {% if bt_link and st.bt_auto %}{{ 'window.top' if embed else 'window' }}.location.href = document.getElementById("bt-print").href;{% else %}window.print();{% endif %}
 }, 300); });{% endif %}
 </script>
 </body>

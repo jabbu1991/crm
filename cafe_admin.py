@@ -35,8 +35,9 @@ def settings():
         st["paper"] = f.get("paper") if f.get("paper") in PAPER_SIZES else "80"
         st["sort_pos"] = "popular" if f.get("sort_pos") == "popular" else "menu"
         st["sort_menu"] = "popular" if f.get("sort_menu") == "popular" else "menu"
+        st["pos_tiles"] = "text" if f.get("pos_tiles") == "text" else "photo"
         for k in ("kot_on", "kot_with_bill", "gst_on", "gst_inclusive", "menu_on", "online_on", "order_dine_in",
-                  "order_takeaway", "order_delivery", "birthday_on", "bt_print", "bt_auto"):
+                  "order_takeaway", "order_delivery", "birthday_on", "bt_print", "bt_auto", "card_qr"):
             st[k] = checked(k)
         st["default_gst"] = to_float(f.get("default_gst"), 5, 0, 28)
         lo = st["loyalty"]

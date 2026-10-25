@@ -4,10 +4,12 @@
 <div class="page-head"><h1>Bills</h1>
   <div class="actions"><a class="btn btn-sm" href="{{ url_for('cafe.export', name='bills', p='custom', **{'from': d_from, 'to': d_to}) }}">⬇️ CSV</a></div>
 </div>
+{% if unpaid.n %}<a class="notice notice-warn" href="{{ url_for('cafe.bills', mode='due') }}">⏳ <b>{{ unpaid.n }} bill{{ 's' if unpaid.n > 1 }} not paid: {{ unpaid.due|rs }}</b> · See the list →</a>{% endif %}
+{% if mode == 'due' %}<p class="muted">All bills still to be paid (any date). Open a bill → <b>Receive payment</b> when the money comes.</p>{% endif %}
 <form class="card filters" method="get">
   <label class="inline-label">From <input type="date" name="from" value="{{ d_from }}"></label>
   <label class="inline-label">To <input type="date" name="to" value="{{ d_to }}"></label>
-  <select name="mode"><option value="">All payments</option>{% for m in PAYMENT_MODES %}<option {{ 'selected' if mode == m }}>{{ m }}</option>{% endfor %}</select>
+  <select name="mode"><option value="">All payments</option>{% for m in PAYMENT_MODES %}<option {{ 'selected' if mode == m }}>{{ m }}</option>{% endfor %}<option value="Split" {{ 'selected' if mode == 'Split' }}>Split</option><option value="due" {{ 'selected' if mode == 'due' }}>⏳ Not paid</option></select>
   <select name="status"><option value="">Paid + Cancelled</option><option value="paid" {{ 'selected' if status == 'paid' }}>Paid</option><option value="cancelled" {{ 'selected' if status == 'cancelled' }}>Cancelled</option></select>
   <input name="q" value="{{ q }}" placeholder="Bill no / phone / name" class="grow">
   <button class="btn btn-primary">Show</button>
@@ -18,6 +20,7 @@
   <div class="stat stat-muted"><b>{{ sums.cash|rs0 }}</b><span>💵 Cash</span></div>
   <div class="stat stat-muted"><b>{{ sums.upi|rs0 }}</b><span>📲 UPI</span></div>
   <div class="stat stat-muted"><b>{{ sums.card|rs0 }}</b><span>💳 Card</span></div>
+  {% if sums.due %}<div class="stat stat-warn"><b>{{ sums.due|rs0 }}</b><span>⏳ Not paid</span></div>{% endif %}
   {% if sums.discount %}<div class="stat stat-warn"><b>{{ sums.discount|rs0 }}</b><span>Discount</span></div>{% endif %}
   {% if st.gst_on or sums.tax %}<div class="stat"><b>{{ sums.tax|rs0 }}</b><span>GST</span></div>{% endif %}
 </div>
@@ -32,7 +35,7 @@
     <td class="small">{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</td>
     <td>{{ b.cust_name or '' }}{% if b.cust_phone %}<div class="small muted">{{ b.cust_phone }}</div>{% endif %}</td>
     <td class="wrap small">{{ b.summary }}</td>
-    <td class="num"><b>{{ b.total|rs }}</b></td><td>{{ b.payment_mode }}</td><td class="small">{{ b.created_name or '' }}</td>
+    <td class="num"><b>{{ b.total|rs }}</b></td><td class="small">{% if b.due and b.status == 'paid' %}<span class="badge b-lost">⏳ Not paid</span>{% else %}{{ pay_text(b) }}{% endif %}</td><td class="small">{{ b.created_name or '' }}</td>
     <td class="nowrap"><a class="btn btn-sm" href="{{ url_for('cafe.bill_print', bid=b.id) }}">🖨</a></td>
   </tr>
   {% else %}<tr><td colspan="9" class="muted center">No bills on these days.</td></tr>{% endfor %}

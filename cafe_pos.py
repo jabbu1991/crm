@@ -1,5 +1,6 @@
 """Billing screen, orders (counter + online), KOT, bills, and the public digital menu with online ordering."""
 import json
+import threading
 import time
 
 import cafe_escpos
@@ -7,7 +8,7 @@ from datetime import timedelta
 
 from flask import abort, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
 
-from cafe import (ORDER_TYPES, PAYMENT_MODES, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals,
+from cafe import (ORDER_TYPES, PAYMENT_MODES, BILL_PAY_MODES, PAY_COLS, parse_payment, pay_text, card_url, qr_svg, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals,
                   customer_by_phone, expire_points, get_settings, has_cafe, host as H, live_banners, max_redeemable,
                   menu_data, menu_url, offer_active, effective_price, phone10, point_value, points_for_amount,
                   round_rupee, rupees, take_points, theme_css, to_int, to_paise, to_float, today, today_date, token,
@@ -211,7 +212,7 @@ def settle(db, order, payload):
     if not lines:
         raise BillError("A bill needs at least one item.")
     mode = payload.get("payment_mode")
-    if mode not in PAYMENT_MODES:
+    if mode not in BILL_PAY_MODES:
         raise BillError("Choose the payment mode (Cash / UPI / Card).")
     subtotal = sum(l["price"] * l["qty"] for l in lines)
     disc = discount_paise(payload, subtotal)
@@ -243,6 +244,10 @@ def settle(db, order, payload):
     payable = max(0, t["gross"] - pv)
     total = round_rupee(payable)
     earned = points_for_amount(total, st) if customer else 0
+    try:
+        mode, p_cash, p_upi, p_card, due = parse_payment(mode, payload.get("payment_split"), total)
+    except ValueError as e:
+        raise BillError(str(e))
     table_name = None
     if order["table_id"]:
         row = db.execute("SELECT name FROM cafe_tables WHERE id = ?", (order["table_id"],)).fetchone()
@@ -252,14 +257,14 @@ def settle(db, order, payload):
     cur = db.execute("""INSERT INTO cafe_bills (org_id, bill_no, bill_date, order_id, order_type, table_name,
                         customer_id, cust_name, cust_phone, subtotal, discount, taxable, cgst, sgst, points_redeemed,
                         points_value, round_off, total, points_earned, payment_mode, gst_on, gst_inclusive, gstin,
-                        status, token, created_by, created_at)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?,?,?)""",
+                        status, token, created_by, created_at, pay_cash, pay_upi, pay_card, due)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?,?,?,?,?,?,?)""",
                      (oid, next_no(db, "cafe_bills", "bill_no"), day, order["id"], order["order_type"], table_name,
                       cid, customer["name"] if customer else (cust.get("name") or order["cust_name"] or None),
                       customer["whatsapp"] if customer else None, t["subtotal"], t["discount"], t["taxable"],
                       t["cgst"], t["sgst"], redeem, pv, total - payable, total, earned, mode,
                       1 if st["gst_on"] else 0, 1 if st["gst_inclusive"] else 0, st["gstin"] if st["gst_on"] else None,
-                      token(), g.user["id"], ts))
+                      token(), g.user["id"], ts, p_cash, p_upi, p_card, due))
     bill_id = cur.lastrowid
     db.executemany("""INSERT INTO cafe_bill_items (org_id, bill_id, item_id, name, qty, price, gst_rate, amount, unit,
                       measure, unit_price, price_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -304,6 +309,9 @@ def pos():
     expire_points(oid)
     st = get_settings()
     cats, items = menu_data(oid, sort=st["sort_pos"])
+    if st["pos_tiles"] == "text":
+        for it in items:
+            it["photo"] = None   # no photo downloads on the billing screen
     tables = H.query("""SELECT t.id, t.name, (SELECT o.id FROM cafe_orders o WHERE o.table_id = t.id AND o.status = 'open'
                           LIMIT 1) busy FROM cafe_tables t WHERE t.org_id = ? AND t.active = 1 ORDER BY t.sort, t.id""",
                      (oid,))
@@ -330,11 +338,25 @@ def pos():
         "start_table": request.args.get("table", type=int),
         "gst_on": st["gst_on"], "gst_inclusive": st["gst_inclusive"], "kot_on": st["kot_on"],
         "loyalty": st["loyalty"]["on"], "point_value": point_value(st), "birthday_on": st["birthday_on"],
-        "referral_on": st["referral"]["on"], "modes": PAYMENT_MODES,
+        "referral_on": st["referral"]["on"], "modes": PAYMENT_MODES, "org": g.org["code"].lower(),
         "perms": {p: can(p) for p in ("bill_discount", "points_redeem", "customers_view", "price_edit")},
         "urls": {"save": url_for("cafe.pos_save"), "lookup": url_for("cafe.customer_lookup")},
     }
     return render_template("cafe/pos.html", cfg=cfg, st=st)
+
+
+# The billing screen retries a save when the network drops. Each tap carries a random ref; a retry of a save that
+# already went through gets the first answer again instead of making a second bill. (One app process, so memory is ok.)
+_done_saves = {}
+_done_lock = threading.Lock()
+
+
+def _remember_save(key, out):
+    now_ = time.time()
+    with _done_lock:
+        for k in [k for k, (t, _) in _done_saves.items() if now_ - t > 1800]:
+            del _done_saves[k]
+        _done_saves[key] = (now_, out)
 
 
 @bp.route("/cafe/pos/save", methods=["POST"])
@@ -346,6 +368,17 @@ def pos_save():
         return jsonify(ok=False, error="Invalid data. Reload the page."), 400
     if not isinstance(payload, dict):
         return jsonify(ok=False, error="Invalid data."), 400
+    ref = str(payload.get("client_ref") or "")[:40]
+    key = (_org(), g.user["id"], ref) if ref else None
+    if key:
+        with _done_lock:
+            hit = _done_saves.get(key)
+            if not hit:
+                _done_saves[key] = (time.time(), None)   # in progress
+        if hit:
+            if hit[1] is None:
+                return jsonify(ok=False, busy=True, error="Still saving…"), 409
+            return jsonify(hit[1])
     action = payload.get("action")
     if action not in ("kot", "save", "bill"):
         return jsonify(ok=False, error="Invalid action."), 400
@@ -404,13 +437,24 @@ def pos_save():
         db.commit()
     except BillError as e:
         db.rollback()
+        if key:
+            with _done_lock:
+                _done_saves.pop(key, None)
         return jsonify(ok=False, error=str(e)), 400
+    except Exception:
+        if key:
+            with _done_lock:
+                _done_saves.pop(key, None)
+        raise
     out = {"ok": True, "order_id": order_id}
     if bill_id:
         out["print"] = url_for("cafe.bill_print", bid=bill_id, kot=kot_id or None, auto=1)
+        out["embed"] = url_for("cafe.bill_print", bid=bill_id, kot=kot_id or None, auto=1, embed=1)
         out["view"] = url_for("cafe.bill_view", bid=bill_id)
     elif kot_id:
         out["print"] = url_for("cafe.kot_print", kid=kot_id, auto=1)
+    if key:
+        _remember_save(key, out)
     return jsonify(out)
 
 
@@ -552,7 +596,7 @@ def get_bill(bid):
                       WHERE b.id = ? AND b.org_id = ?""", (bid, _org()), one=True) or abort(404)
 
 
-def bill_whatsapp_text(st, b, items, link, balance=None):
+def bill_whatsapp_text(st, b, items, link, balance=None, card=None):
     lines = [f"🧾 *{cafe_name(st)}*", f"Bill No: {st['bill_prefix']}{b['bill_no']} · {b['bill_date'][8:10]}-"
              f"{b['bill_date'][5:7]}-{b['bill_date'][:4]}", ""]
     for i in items:
@@ -563,10 +607,13 @@ def bill_whatsapp_text(st, b, items, link, balance=None):
         lines.append(f"Discount: -{rupees(b['discount'])}")
     if b["points_redeemed"]:
         lines.append(f"Points used: {b['points_redeemed']} (-{rupees(b['points_value'])})")
-    lines.append(f"*Total: {rupees(b['total'])}* ({b['payment_mode']})")
+    lines.append(f"*Total: {rupees(b['total'])}* ({pay_text(b)})")
     if b["points_earned"]:
         lines.append(f"🎁 Points earned: {b['points_earned']}" + (f" · Balance: {balance}" if balance is not None else ""))
-    lines += ["", f"View bill: {link}", st["bill_footer"] or "Thank you!"]
+    lines += ["", f"View bill: {link}"]
+    if card:
+        lines.append(f"🎁 Your points & bills: {card}")
+    lines.append(st["bill_footer"] or "Thank you!")
     return "\n".join(lines)
 
 
@@ -577,12 +624,16 @@ def bills():
     t = today()
     d_from = H.valid_date(request.args.get("from")) or t
     d_to = H.valid_date(request.args.get("to")) or d_from
-    where = ["b.org_id = ?", "b.bill_date BETWEEN ? AND ?"]
-    args = [oid, d_from, d_to]
     mode = request.args.get("mode")
+    if mode == "due":   # every bill still to be paid, whatever the date
+        where, args = ["b.org_id = ?", "b.due > 0", "b.status = 'paid'"], [oid]
+    else:
+        where = ["b.org_id = ?", "b.bill_date BETWEEN ? AND ?"]
+        args = [oid, d_from, d_to]
     if mode in PAYMENT_MODES:
-        where.append("b.payment_mode = ?")
-        args.append(mode)
+        where.append(f"b.{dict(PAY_COLS)[mode]} > 0")
+    elif mode == "Split":
+        where.append("b.payment_mode = 'Split'")
     status = request.args.get("status")
     if status in ("paid", "cancelled"):
         where.append("b.status = ?")
@@ -599,13 +650,14 @@ def bills():
                        FROM cafe_bills b LEFT JOIN users u ON u.id = b.created_by WHERE {w}
                        ORDER BY b.id DESC LIMIT 50 OFFSET ?""", args + [(page - 1) * 50])
     sums = H.query(f"""SELECT COUNT(*) n, COALESCE(SUM(total), 0) total,
-                         COALESCE(SUM(CASE WHEN payment_mode = 'Cash' THEN total END), 0) cash,
-                         COALESCE(SUM(CASE WHEN payment_mode = 'UPI' THEN total END), 0) upi,
-                         COALESCE(SUM(CASE WHEN payment_mode = 'Card' THEN total END), 0) card,
+                         COALESCE(SUM(pay_cash), 0) cash, COALESCE(SUM(pay_upi), 0) upi,
+                         COALESCE(SUM(pay_card), 0) card, COALESCE(SUM(due), 0) due,
                          COALESCE(SUM(discount), 0) discount, COALESCE(SUM(cgst + sgst), 0) tax
                        FROM cafe_bills b WHERE {w} AND b.status = 'paid'""", args, one=True)
     params = {k: v for k, v in request.args.items() if k != "page"}
-    return render_template("cafe/bills.html", rows=rows, sums=sums, d_from=d_from, d_to=d_to, mode=mode, status=status,
+    unpaid = H.query("SELECT COUNT(*) n, COALESCE(SUM(due), 0) due FROM cafe_bills WHERE org_id = ? AND due > 0"
+                     " AND status = 'paid'", (oid,), one=True)
+    return render_template("cafe/bills.html", unpaid=unpaid, rows=rows, sums=sums, d_from=d_from, d_to=d_to, mode=mode, status=status,
                            q=q, page=page, pages=max(1, -(-total_rows // 50)), params=params, PAYMENT_MODES=PAYMENT_MODES,
                            ORDER_TYPES=ORDER_TYPES, st=get_settings(), total_rows=total_rows)
 
@@ -618,12 +670,52 @@ def bill_view(bid):
     items = H.query("SELECT * FROM cafe_bill_items WHERE bill_id = ? ORDER BY id", (bid,))
     cust = H.query("SELECT * FROM customers WHERE id = ?", (b["customer_id"],), one=True) if b["customer_id"] else None
     link = url_for("cafe.public_bill", tok=b["token"], _external=True)
-    wa_text = bill_whatsapp_text(st, b, items, link, cust["points"] if cust else None)
+    wa_text = bill_whatsapp_text(st, b, items, link, cust["points"] if cust else None,
+                                 card_url(cust["card_token"]) if cust and cust["card_token"] else None)
     kots = H.query("SELECT * FROM cafe_kots WHERE order_id = ? ORDER BY id", (b["order_id"],)) if b["order_id"] else []
     bt = cafe_escpos.build(st, cafe_name(st), st["paper"], bill=b, items=items, balance=cust["points"] if cust else None,
                            order_types=ORDER_TYPES) if st["bt_print"] else None
     return render_template("cafe/bill_view.html", b=b, items=items, cust=cust, st=st, link=link, wa_text=wa_text, bt_link=bt,
-                           kots=kots, ORDER_TYPES=ORDER_TYPES, new=request.args.get("new"))
+                           kots=kots, ORDER_TYPES=ORDER_TYPES, new=request.args.get("new"),
+                           can_pay=can_change_payment(b), pay_log=json.loads(b["pay_log"] or "[]"),
+                           card=card_url(cust["card_token"]) if cust and cust["card_token"] else None)
+
+
+def can_change_payment(b):
+    """Same-day bills and unpaid (Pay later) bills: anyone who bills. Older paid bills: the 'payment_edit' tick."""
+    if b["status"] != "paid" or not can("bill_create"):
+        return False
+    return b["bill_date"] == today() or b["due"] > 0 or can("payment_edit")
+
+
+@bp.route("/cafe/bills/<int:bid>/payment", methods=["POST"])
+@cafe_view("bills_view")
+def bill_payment(bid):
+    """Change how a bill was paid (or receive the money for a Pay later bill). Items and total never change."""
+    b = get_bill(bid)
+    if not can_change_payment(b):
+        flash("You are not allowed to change the payment of this bill." if b["status"] == "paid"
+              else "A cancelled bill cannot be changed.", "error")
+        return redirect(url_for("cafe.bill_view", bid=bid))
+    f = request.form
+    try:
+        mode, cash, upi, card, due = parse_payment(f.get("mode"), {"cash": f.get("cash"), "upi": f.get("upi"),
+                                                                   "card": f.get("card")}, b["total"])
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("cafe.bill_view", bid=bid))
+    before = pay_text(b)
+    new = {"payment_mode": mode, "pay_cash": cash, "pay_upi": upi, "pay_card": card, "due": due}
+    after = pay_text(new)
+    if (b["payment_mode"], b["pay_cash"], b["pay_upi"], b["pay_card"], b["due"]) == (mode, cash, upi, card, due):
+        flash("Nothing changed.", "info")
+        return redirect(url_for("cafe.bill_view", bid=bid))
+    log = json.loads(b["pay_log"] or "[]")
+    log.append({"at": H.now(), "by": g.user["name"], "from": before, "to": after})
+    H.execute("UPDATE cafe_bills SET payment_mode = ?, pay_cash = ?, pay_upi = ?, pay_card = ?, due = ?, pay_log = ?"
+              " WHERE id = ?", (mode, cash, upi, card, due, json.dumps(log[-50:], ensure_ascii=False), bid))
+    flash(("Payment received: " if b["due"] and not due else "Payment changed: ") + after, "success")
+    return redirect(url_for("cafe.bill_view", bid=bid))
 
 
 @bp.route("/cafe/bills/<int:bid>/print")
@@ -644,10 +736,20 @@ def bill_print(bid):
     paper = request.args.get("paper") or st["paper"]
     bt = cafe_escpos.build(st, cafe_name(st), paper, bill=b, items=items, kots=kots,
                            balance=cust["points"] if cust else None, order_types=ORDER_TYPES) if st["bt_print"] else None
-    return render_template("cafe/print.html", st=st, bill=b, items=items, kots=kots, auto=request.args.get("auto"),
-                           name=cafe_name(st), ORDER_TYPES=ORDER_TYPES, paper=paper, bt_link=bt, line_qty=line_amount_text,
-                           balance=cust["points"] if cust else None, back=url_for("cafe.bill_view", bid=bid, new=1)
-                           if request.args.get("auto") else url_for("cafe.bill_view", bid=bid))
+    embed = bool(request.args.get("embed"))
+    card = None
+    if b["customer_id"] and st.get("card_on", True):
+        tok = H.scalar("SELECT card_token FROM customers WHERE id = ?", (b["customer_id"],))
+        card = card_url(tok) if tok else None
+    resp = make_response(render_template(
+        "cafe/print.html", st=st, bill=b, items=items, kots=kots, auto=request.args.get("auto"), embed=embed,
+        name=cafe_name(st), ORDER_TYPES=ORDER_TYPES, paper=paper, bt_link=bt, line_qty=line_amount_text,
+        card=card, card_qr=qr_svg(card) if card and st.get("card_qr") else None,
+        balance=cust["points"] if cust else None, back=url_for("cafe.bill_view", bid=bid, new=1)
+        if request.args.get("auto") else url_for("cafe.bill_view", bid=bid)))
+    if embed:
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN"   # shown inside the billing screen
+    return resp
 
 
 @bp.route("/cafe/bills/<int:bid>/cancel", methods=["POST"])
@@ -833,6 +935,58 @@ def _status_data(o):
     else:
         s = "confirmed"
     return {"status": s, "reason": o["reject_reason"] or ""}
+
+
+# ---------------------------------------------------------------- My Card (customer's own page)
+
+CARD_KINDS = {"earn": "Earned", "redeem": "Used on a bill", "referral": "Friend joined (Refer & Earn)",
+              "referral_welcome": "Welcome points", "manual_add": "Added by the cafe", "manual_sub": "Removed by the cafe",
+              "expired": "Expired", "reverse": "Bill cancelled", "refund": "Bill cancelled (points back)"}
+
+
+def _card_customer(code, tok):
+    org = public_org(code)
+    c = H.query("SELECT * FROM customers WHERE card_token = ? AND org_id = ?", (tok, org["id"]), one=True) or abort(404)
+    return org, c
+
+
+@bp.route("/m/<code>/me/<tok>")
+def my_card(code, tok):
+    org, c = _card_customer(code, tok)
+    expire_points(org["id"])
+    c = H.query("SELECT * FROM customers WHERE id = ?", (c["id"],), one=True)
+    st = get_settings(org["id"])
+    soon = (today_date() + timedelta(days=7)).isoformat()
+    expiring = H.query("""SELECT COALESCE(SUM(remaining), 0) pts, MIN(expires_at) first FROM points_ledger
+                          WHERE customer_id = ? AND remaining > 0 AND expires_at IS NOT NULL AND expires_at <= ?""",
+                       (c["id"], soon), one=True)
+    history = [dict(r, label=CARD_KINDS.get(r["kind"], "Points"),
+                    note=r["note"] if r["kind"] in ("earn", "redeem", "referral", "reverse", "refund") else "")
+               for r in H.query("""SELECT change, kind, note, created_at FROM points_ledger WHERE customer_id = ?
+                                   ORDER BY id DESC LIMIT 40""", (c["id"],))]
+    bills = H.query("""SELECT bill_no, bill_date, total, token, points_earned, points_redeemed FROM cafe_bills
+                       WHERE customer_id = ? AND status = 'paid' ORDER BY id DESC LIMIT 40""", (c["id"],))
+    friends = H.scalar("SELECT COUNT(*) FROM customers WHERE referred_by = ? AND referral_rewarded = 1", (c["id"],))
+    ref_link = menu_url(org, ref=c["referral_code"]) if st["referral"]["on"] else None
+    colors, layout, font, shape = theme_css(st["theme"])
+    resp = make_response(render_template(
+        "cafe/my_card.html", org=org, st=st, c=c, expiring=expiring, history=history, bills=bills, friends=friends,
+        ref_link=ref_link, value=c["points"] * point_value(st), colors=colors, font=font, shape=shape,
+        menu_link=menu_url(org) if st["menu_on"] else None, name=cafe_name(st, org),
+        wa=H.wa_number(st["whatsapp"] or st["phone"] or org["phone"])))
+    resp.headers["X-Robots-Tag"] = "noindex"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@bp.route("/m/<code>/me/<tok>/birthday", methods=["POST"])
+def my_card_birthday(code, tok):
+    org, c = _card_customer(code, tok)
+    st = get_settings(org["id"])
+    bday = valid_birthday(request.form.get("birthday"))
+    if st["birthday_on"] and bday and not c["birthday"]:
+        H.execute("UPDATE customers SET birthday = ?, updated_at = ? WHERE id = ?", (bday, H.now(), c["id"]))
+    return redirect(url_for("cafe.my_card", code=code, tok=tok))
 
 
 @bp.route("/m/<code>/o/<tok>")

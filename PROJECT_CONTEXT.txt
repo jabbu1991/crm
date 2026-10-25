@@ -44,7 +44,7 @@ Contact on website: WhatsApp +91 85472 75320.
   render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py (46 pytest tests, all passing); cafe*.py (cafe module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 10 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 11 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -193,6 +193,18 @@ Digital Catalogue (built 16 Oct 2026)
   for billing and customer menu. Pin to top per item.
 - Bluetooth print (Settings): button on print/bill pages sends ESC/POS text to the RawBT app (intent link,
   cafe_escpos.py); optional auto-print. RawBT free version adds a watermark; licence removes it.
+- Speed on weak networks: text responses gzip-compressed (app.py gzip_response); static files cached 1 year with
+  ?v=<mtime> URLs; Settings > Billing screen tiles: With photos / Text only; after Bill & Print the bill opens in an
+  iframe over the billing screen (print page ?embed=1, X-Frame-Options SAMEORIGIN) and New Bill clears without reload;
+  saves retry up to 4 times with a client_ref (server remembers results 30 min, so no double bill); the open bill is
+  kept in localStorage until saved.
+- Payments: cafe_bills.pay_cash / pay_upi / pay_card / due (paise), payment_mode Cash/UPI/Card/Split/Later.
+  Billing: Split (Cash typed -> rest to UPI) and Later (Pay later, due = total). Bill view: Change payment / Receive
+  payment (pay_log JSON history). Same-day or unpaid bills: anyone with bill_create; older paid bills need the tick
+  'Change payment of old bills'. Bills page: 'N bills not paid' banner + Not paid filter. Reports use pay_breakdown().
+- My Card: customers.card_token -> /m/<code>/me/<token> (points, value, expiring, history, bills, referral share,
+  birthday). Link in WhatsApp bill text, {my_card} template placeholder, customer page Send / New link, optional
+  QR on printed bill (Settings, not on Bluetooth prints).
 - Demo: demo.bat creates "Chai Corner" (cafe_admin / cafe_cashier, password demo1234), menu at /m/chai.
 
 ======================================================================

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
 {% block title %}Bill {{ st.bill_prefix }}{{ b.bill_no }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Bill {{ st.bill_prefix }}{{ b.bill_no }} {% if b.status == 'cancelled' %}<span class="badge b-lost">Cancelled</span>{% else %}<span class="badge b-done">Paid</span>{% endif %}</h1>
+<div class="page-head"><h1>Bill {{ st.bill_prefix }}{{ b.bill_no }} {% if b.status == 'cancelled' %}<span class="badge b-lost">Cancelled</span>{% elif b.due %}<span class="badge b-lost">⏳ Not paid</span>{% else %}<span class="badge b-done">Paid</span>{% endif %}</h1>
   <div class="actions">
     {% if not viewing and can('bill_create') %}<a class="btn btn-primary btn-big" href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
   </div>
@@ -19,11 +19,31 @@
   <dl class="details">
     <dt>Date</dt><dd>{{ b.bill_date }} {{ b.created_at[11:16] }}</dd>
     <dt>Type</dt><dd>{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</dd>
-    <dt>Payment</dt><dd>{{ b.payment_mode }}</dd>
+    <dt>Payment</dt><dd><b>{{ pay_text(b) }}</b></dd>
     <dt>Customer</dt><dd>{% if cust and can('customers_view') %}<a href="{{ url_for('cafe.customer_view', cid=cust.id) }}">{{ cust.name }}</a> · {{ cust.whatsapp }} · 🎁 {{ cust.points }} points{% else %}{{ b.cust_name or '—' }}{% endif %}</dd>
     <dt>Billed by</dt><dd>{{ b.created_name or '' }}</dd>
     {% if b.status == 'cancelled' %}<dt>Cancelled</dt><dd class="overdue">{{ b.cancelled_at }} · {{ b.cancelled_name }} · {{ b.cancel_reason }}</dd>{% endif %}
   </dl>
+  {% if card %}<p class="muted small">Customer's My Card (points &amp; bills): <a href="{{ card }}" target="_blank" rel="noopener">open</a></p>{% endif %}
+  {% if can_pay and not viewing %}
+  <details class="pay-edit" {{ 'open' if b.due }}>
+    <summary class="btn {{ 'btn-primary btn-big' if b.due else 'btn-sm' }}">{{ '💰 Receive payment' if b.due else '✏️ Change payment' }}</summary>
+    <form method="post" action="{{ url_for('cafe.bill_payment', bid=b.id) }}" id="pay-form" data-total="{{ b.total }}">{{ csrf() }}
+      <div class="seg pay-modes">
+        {% for m, l in (('Cash', '💵 Cash'), ('UPI', '📲 UPI'), ('Card', '💳 Card'), ('Split', '➗ Split'), ('Later', '⏳ Pay later')) %}
+        <label><input type="radio" name="mode" value="{{ m }}" {{ 'checked' if (b.payment_mode == m and not b.due) or (b.due and m == 'Cash') }}> {{ l }}</label>{% endfor %}
+      </div>
+      <div class="split-box" hidden>
+        <label>💵 Cash ₹<input name="cash" inputmode="decimal" value="{{ b.pay_cash|pstr if b.payment_mode == 'Split' }}"></label>
+        <label>📲 UPI ₹<input name="upi" inputmode="decimal" value="{{ b.pay_upi|pstr if b.payment_mode == 'Split' }}"></label>
+        <label>💳 Card ₹<input name="card" inputmode="decimal" value="{{ b.pay_card|pstr if b.payment_mode == 'Split' }}"></label>
+        <p class="small split-left"></p>
+      </div>
+      <button class="btn btn-primary">Save payment</button>
+      <span class="muted small">Total {{ b.total|rs }}. Items and total do not change.</span>
+    </form>
+  </details>{% endif %}
+  {% if pay_log %}<p class="small muted"><b>Payment changes:</b>{% for e in pay_log %}<br>{{ e.at[8:10] }}/{{ e.at[5:7] }} {{ e.at[11:16] }} · {{ e.by }}: {{ e.from }} → {{ e.to }}{% endfor %}</p>{% endif %}
   {% if kots %}<p class="small muted">KOT: {% for k in kots %}<a href="{{ url_for('cafe.kot_print', kid=k.id) }}">#{{ k.kot_no }}</a> {% endfor %}</p>{% endif %}
 </section>
 <section class="card">
@@ -47,4 +67,24 @@
   </details>{% endif %}
 </section>
 </div>
+<script>
+(function () {
+  var f = document.getElementById("pay-form"); if (!f) return;
+  var total = parseInt(f.dataset.total, 10), box = f.querySelector(".split-box"), left = f.querySelector(".split-left");
+  var ins = ["cash", "upi", "card"].map(function (n) { return f.elements[n]; });
+  function rs(p) { return "₹" + (p / 100).toFixed(2).replace(/\.00$/, ""); }
+  function val(i) { return Math.round((parseFloat(i.value) || 0) * 100); }
+  function upd() {
+    box.hidden = f.elements.mode.value !== "Split";
+    var sum = ins.reduce(function (a, i) { return a + val(i); }, 0);
+    left.textContent = sum === total ? "✓ Matches the total" : (sum < total ? "Still " + rs(total - sum) + " to enter" : rs(sum - total) + " more than the total");
+    left.style.color = sum === total ? "#15803d" : "#c2410c";
+  }
+  // typing Cash fills the rest into UPI
+  ins[0].addEventListener("input", function () { var r = total - val(ins[0]) - val(ins[2]); ins[1].value = r > 0 ? (r / 100).toFixed(2).replace(/\.00$/, "") : ""; upd(); });
+  ins[1].addEventListener("input", upd); ins[2].addEventListener("input", upd);
+  f.querySelectorAll("input[name=mode]").forEach(function (r) { r.addEventListener("change", upd); });
+  upd();
+})();
+</script>
 {% endblock %}
