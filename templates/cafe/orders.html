@@ -10,6 +10,7 @@
 
 {% if can('orders_online') and not viewing %}
 <div class="order-tools">
+  <button type="button" class="btn btn-sm" id="sound-btn">🔇 Tap to turn on the order bell</button>
   <button type="button" class="btn btn-sm" id="awake-btn" hidden>🔆 Keep screen on</button>
   <button type="button" class="btn btn-sm" id="push-btn" hidden>📲 Phone notifications</button>
   <button type="button" class="btn btn-sm" id="push-test" hidden>Send a test</button>
@@ -110,7 +111,7 @@
   // Phone notifications (Web Push)
   var pb = document.getElementById("push-btn"), pt = document.getElementById("push-test");
   if (!pb || !("serviceWorker" in navigator) || !("PushManager" in window) || !window.Notification) {
-    if (msg && pb) msg.textContent = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone: add this site to the Home Screen to get notifications." : "";
+    if (msg && pb) msg.textContent = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone notifications: open this page in Safari → Share ⬆️ → Add to Home Screen, then open Real View from the Home Screen icon and turn them on here." : "";
     return;
   }
   function b64(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }

@@ -211,6 +211,9 @@ Digital Catalogue (built 16 Oct 2026)
   Orders page buttons: Keep screen on (Wake Lock, remembered per phone) and phone notifications (Web Push:
   cafe_push.py, /sw.js service worker, VAPID key file vapid_private.pem next to the DB, pywebpush; sent in a
   background thread to users who may handle online orders; gone phones removed). iPhone needs Home Screen app.
+  The bell is a WAV made in the browser and played as an <audio> (unlocked by one tap; navigator.audioSession
+  'playback' so iPhone plays it with the silent switch on). On the Orders page the red box is a button (no reload).
+  Home Screen app: static/manifest.webmanifest + icon-192/512 + apple-touch-icon (iPhone push needs it).
 - Customer order: wrong/old form token on /m/<code>/order returns JSON with a fresh token and the page re-sends;
   client_ref makes retries safe (no double orders); real errors shown instead of "No internet".
 - Billing cart: lines never overlap (flex-shrink 0), KOT/Hold/Bill buttons stick to the bottom, total on the button.

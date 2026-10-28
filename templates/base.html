@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ brand.product }}{% endblock %} · {{ g.org.name if g.org else brand.product }}</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Real View">
+  <meta name="theme-color" content="#111827">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% if cafe_mode %}<link rel="stylesheet" href="{{ url_for('static', filename='cafe.css') }}">{% endif %}
 </head>
@@ -93,45 +99,80 @@
 /* Online orders: the bell rings (and the phone vibrates) every 3 s until every waiting order is confirmed or
    rejected, on every phone of the cafe. Checks every 5 s, and at once when the phone comes back to this page. */
 (function () {
-  var URL = "{{ url_for('cafe.orders_pending_json') }}", ORDERS = "{{ url_for('cafe.orders') }}";
-  var el = document.getElementById("pending-count"), title = document.title, count = 0, latest = null, ctx = null;
+  var PENDING = "{{ url_for('cafe.orders_pending_json') }}", ORDERS = "{{ url_for('cafe.orders') }}";
+  var el = document.getElementById("pending-count"), title = document.title, count = 0, latest = null;
   var onOrders = location.pathname === ORDERS;
-  function audio() {
-    if (!ctx) { var C = window.AudioContext || window.webkitAudioContext; if (!C) return null; try { ctx = new C(); } catch (e) { return null; } }
-    if (ctx.state === "suspended") ctx.resume().catch(function () {});
-    return ctx;
+  // The bell is a short sound file made here and played like music: iPhone and Android both allow that after
+  // one tap on the page, and iPhone plays it even with the silent switch on (newer iOS).
+  var bellUrl = null, player = null, unlocked = false;
+  function makeBell() {
+    var rate = 22050, notes = [[990, 0, .16], [660, .18, .16], [990, .36, .16], [990, .9, .16], [660, 1.08, .16], [990, 1.26, .16]];
+    var n = Math.floor(rate * 1.5), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    function str(o, t) { for (var i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); }
+    str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) {
+      var t = i / rate, x = 0;
+      notes.forEach(function (nt) { var d = t - nt[1]; if (d >= 0 && d < nt[2]) x += (Math.sin(2 * Math.PI * nt[0] * d) > 0 ? 1 : -1) * Math.exp(-d * 9); });
+      v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x * .55)) * 32767, true);
+    }
+    return URL.createObjectURL(new Blob([buf], {type: "audio/wav"}));
   }
-  ["pointerdown", "keydown", "touchstart"].forEach(function (ev) { document.addEventListener(ev, function () { audio(); paint(); }, {passive: true}); });
+  function getPlayer() {
+    if (!player) {
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+      bellUrl = bellUrl || makeBell(); player = new Audio(bellUrl); player.preload = "auto";
+    }
+    return player;
+  }
+  function unlock() {   // must run inside a tap
+    if (unlocked) return;
+    var a = getPlayer(); a.muted = true;
+    var pr = a.play();
+    var ok = function () { a.pause(); a.currentTime = 0; a.muted = false; unlocked = true; paint(true); };
+    if (pr && pr.then) pr.then(ok).catch(function () { a.muted = false; }); else ok();
+  }
+  ["touchend", "click", "keydown"].forEach(function (ev) { document.addEventListener(ev, unlock, true); });
   function bell() {
-    var c = audio();
-    if (c && c.state === "running") {
-      [0, 0.18, 0.36, 0.9, 1.08, 1.26].forEach(function (t, i) {
-        var o = c.createOscillator(), gn = c.createGain(); o.type = "square"; o.frequency.value = i % 2 ? 660 : 990;
-        o.connect(gn); gn.connect(c.destination); gn.gain.setValueAtTime(0.18, c.currentTime + t);
-        gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + t + 0.16); o.start(c.currentTime + t); o.stop(c.currentTime + t + 0.17);
-      });
+    if (unlocked) {
+      var a = getPlayer(); a.currentTime = 0;
+      var pr = a.play(); if (pr && pr.catch) pr.catch(function () { unlocked = false; paint(); });
     }
     if (navigator.vibrate) { try { navigator.vibrate([400, 150, 400]); } catch (e) {} }
   }
   function toast() {
     var box = document.getElementById("new-order-toast");
-    if (!box) { box = document.createElement("a"); box.id = "new-order-toast"; box.href = ORDERS; document.body.appendChild(box); }
+    if (!box) {
+      box = document.createElement(onOrders ? "button" : "a"); box.id = "new-order-toast";
+      if (onOrders) box.type = "button"; else box.href = ORDERS;
+      document.body.appendChild(box);
+    }
     return box;
   }
-  function paint() {
+  var okTimer = null;
+  function paint(justUnlocked) {
+    var sb = document.getElementById("sound-btn");
+    if (sb) { sb.textContent = unlocked ? "🔔 Order bell on ✓" : "🔇 Tap to turn on the order bell"; sb.classList.toggle("on", unlocked); }
     if (el) { el.hidden = !count; el.textContent = count; }
     document.title = count ? "(" + count + ") 🔔 " + title : title;
     var box = document.getElementById("new-order-toast");
-    if (!count) { if (box) box.hidden = true; return; }
-    box = toast(); box.hidden = false;
-    var muted = !(ctx && ctx.state === "running");
-    box.textContent = "🔔 " + count + " online order" + (count > 1 ? "s" : "") + " waiting" + (onOrders ? "" : " — tap to open") + (muted ? " · 🔇 tap to turn on the sound" : "");
-    box.classList.toggle("muted", muted);
+    if (!count) {
+      if (justUnlocked && onOrders) {   // show that the sound is now on
+        box = toast(); box.hidden = false; box.classList.add("ok"); box.textContent = "🔔 Sound on ✓ — the bell will ring for new orders";
+        clearTimeout(okTimer); okTimer = setTimeout(function () { if (!count) box.hidden = true; box.classList.remove("ok"); }, 2500);
+      } else if (box && !box.classList.contains("ok")) box.hidden = true;
+      return;
+    }
+    box = toast(); box.hidden = false; box.classList.remove("ok");
+    box.textContent = "🔔 " + count + " online order" + (count > 1 ? "s" : "") + " waiting" + (onOrders ? "" : " — tap to open") +
+      (unlocked ? "" : " · 🔇 tap here to turn on the sound");
+    box.classList.toggle("muted", !unlocked);
   }
   var busy = false;
   function poll() {
     if (busy) return; busy = true;
-    fetch(URL, {credentials: "same-origin", cache: "no-store"}).then(function (r) { return r.json(); }).then(function (d) {
+    fetch(PENDING, {credentials: "same-origin", cache: "no-store"}).then(function (r) { return r.json(); }).then(function (d) {
       busy = false;
       var changed = latest !== null && (d.latest !== latest || d.count !== count);
       count = d.count; latest = d.latest; paint();

@@ -1051,3 +1051,13 @@ def test_orders_page_alert_tools(cw):
     assert 'id="orders-live"' in page and "push-btn" in page and "awake-btn" in page
     base = b.get("/cafe/pos").text
     assert "setInterval(function () { if (count) bell(); }, 3000)" in base
+
+
+def test_home_screen_app_files(cw):
+    b = cw["cafe"]
+    page = b.get("/cafe/orders").text
+    assert "manifest.webmanifest" in page and "apple-touch-icon" in page and "sound-btn" in page
+    m = b.get(re.search(r'href="(/static/manifest\.webmanifest[^"]*)"', page).group(1))
+    data = json.loads(m.data)
+    assert data["display"] == "standalone" and len(data["icons"]) == 2
+    assert b.get("/static/icon-512.png").status_code == 200

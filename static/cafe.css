@@ -263,3 +263,5 @@ button.pl-amt:hover { border-color: #fb923c; }
 .order-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
 .order-tools .btn.on { background: #dcfce7; border-color: #86efac; color: #166534; }
 #new-order-toast { top: 12px; bottom: auto; }
+button#new-order-toast { border: 0; font: inherit; font-weight: 700; cursor: pointer; }
+#new-order-toast.ok { background: #15803d; box-shadow: 0 8px 24px rgba(21, 128, 61, .35); animation: none; }
