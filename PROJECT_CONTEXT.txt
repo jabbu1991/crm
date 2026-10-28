@@ -214,6 +214,9 @@ Digital Catalogue (built 16 Oct 2026)
   The bell is a WAV made in the browser and played as an <audio> (unlocked by one tap; navigator.audioSession
   'playback' so iPhone plays it with the silent switch on). On the Orders page the red box is a button (no reload).
   Home Screen app: static/manifest.webmanifest + icon-192/512 + apple-touch-icon (iPhone push needs it).
+  Push reminders: cafe_push.remind_waiting() runs in a background loop (started on the first request) and re-sends
+  the push every 30 s for each online order still pending, up to 30 minutes old. Orders page Confirm / Reject /
+  Ready / Cancel submit with fetch (no reload) so the unlocked bell stays on.
 - Customer order: wrong/old form token on /m/<code>/order returns JSON with a fresh token and the page re-sends;
   client_ref makes retries safe (no double orders); real errors shown instead of "No internet".
 - Billing cart: lines never overlap (flex-shrink 0), KOT/Hold/Bill buttons stick to the bottom, total on the button.

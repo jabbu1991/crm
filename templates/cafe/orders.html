@@ -99,6 +99,28 @@
   };
   setInterval(function () { if (!document.hidden) window.cafeOrdersRefresh(); }, 30000);
 
+  // Confirm / Reject / Ready / Cancel without leaving the page, so the order bell stays on (a reload would need
+  // another tap before the phone may play sound again).
+  var ACT = /\/cafe\/orders\/\d+\/(confirm|reject|ready|cancel)$/;
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (e.defaultPrevented || !f.action || !ACT.test(new URL(f.action, location.href).pathname)) return;
+    e.preventDefault();
+    var btn = f.querySelector("button"); if (btn) { btn.disabled = true; }
+    fetch(f.action, {method: "POST", body: new FormData(f), credentials: "same-origin"}).then(function (r) { return r.text(); }).then(function (html) {
+      var doc = new DOMParser().parseFromString(html, "text/html"), fresh = doc.getElementById("orders-live");
+      if (!fresh) { location.reload(); return; }
+      document.getElementById("orders-live").innerHTML = fresh.innerHTML;
+      var main = document.querySelector("main.container");
+      main.querySelectorAll(":scope > .flash").forEach(function (x) { x.remove(); });
+      var head = main.querySelector(".page-head");
+      Array.prototype.slice.call(doc.querySelectorAll("main.container > .flash")).reverse().forEach(function (x) {
+        main.insertBefore(document.importNode(x, true), head ? head.nextSibling : main.firstChild);
+      });
+      if (window.cafeOrdersPoll) window.cafeOrdersPoll();
+    }).catch(function () { if (btn) btn.disabled = false; alert("Network problem. Please try again."); });
+  });
+
   var csrf = "{{ csrf_token() }}", msg = document.getElementById("push-msg");
   // Keep screen on
   var ab = document.getElementById("awake-btn");

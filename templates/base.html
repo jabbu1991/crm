@@ -179,6 +179,7 @@
       if (changed && onOrders && window.cafeOrdersRefresh) window.cafeOrdersRefresh();
     }).catch(function () { busy = false; });
   }
+  window.cafeOrdersPoll = poll;
   setInterval(function () { if (count) bell(); }, 3000);
   setInterval(function () { if (!document.hidden) poll(); }, 5000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });

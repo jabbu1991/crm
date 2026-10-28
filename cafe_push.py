@@ -9,6 +9,8 @@ import json
 import os
 import sqlite3
 import threading
+import time
+from datetime import datetime, timedelta
 
 from flask import Response, g, jsonify, request, send_from_directory, url_for
 
@@ -77,30 +79,107 @@ def _send_all(subs, data, key_path, db_path):
             pass
 
 
-def new_order(org, order_id):
-    """Tell the cafe's phones about a new online order (in the background, so the customer is not kept waiting)."""
+REPEAT_EVERY = 30          # seconds between reminders while an online order waits
+REPEAT_FOR = 30 * 60       # stop reminding after 30 minutes (a forgotten order should not ring all night)
+_last_sent = {}            # order id -> time of the last push
+
+
+def _subs_for(org_id):
     rows = H.query("""SELECT s.*, u.role, u.cafe_role, u.cafe_perms FROM push_subscriptions s
-                      JOIN users u ON u.id = s.user_id WHERE s.org_id = ? AND u.active = 1""", (org["id"],))
-    subs = [dict(r) for r in rows if "orders_online" in user_perms(r)]
-    if not subs:
-        return 0
+                      JOIN users u ON u.id = s.user_id WHERE s.org_id = ? AND u.active = 1""", (org_id,))
+    return [dict(r) for r in rows if "orders_online" in user_perms(r)]
+
+
+def _order_message(org, order_id, waiting_min=0):
     o = H.query("""SELECT o.order_no, o.order_type, o.cust_name, t.name table_name,
                      (SELECT COALESCE(SUM(price * qty), 0) FROM cafe_order_items i WHERE i.order_id = o.id) amount
                    FROM cafe_orders o LEFT JOIN cafe_tables t ON t.id = o.table_id WHERE o.id = ?""", (order_id,), one=True)
     kind = {"dine_in": f"Table {o['table_name'] or ''}".strip(), "takeaway": "Takeaway", "delivery": "Delivery"}
     st = get_settings(org["id"])
-    data = json.dumps({
-        "title": f"🔔 New online order #{o['order_no']}",
-        "body": f"{kind.get(o['order_type'], '')} · {o['cust_name'] or ''} · ₹{o['amount'] // 100}".strip(" ·"),
-        "url": url_for("cafe.orders"), "tag": f"order-{org['id']}", "cafe": st["name"] or org["name"],
+    title = (f"⏰ Order #{o['order_no']} still waiting ({waiting_min} min)" if waiting_min
+             else f"🔔 New online order #{o['order_no']}")
+    return json.dumps({
+        "title": title,
+        "body": f"{kind.get(o['order_type'], '')} · {o['cust_name'] or ''} · ₹{o['amount'] // 100} — tap to open".strip(" ·"),
+        "url": "/cafe/orders", "tag": f"order-{org['id']}-{order_id}", "cafe": st["name"] or org["name"],
     }, ensure_ascii=False)
+
+
+def _dispatch(subs, data):
     key_path, _ = vapid()
     args = (subs, data, key_path, H.DB_PATH)
     if sender is not None:      # tests: run now
         _send_all(*args)
     else:
         threading.Thread(target=_send_all, args=args, daemon=True).start()
+
+
+def new_order(org, order_id):
+    """Tell the cafe's phones about a new online order (in the background, so the customer is not kept waiting)."""
+    _last_sent[order_id] = time.time()
+    _start_reminders()
+    subs = _subs_for(org["id"])
+    if not subs:
+        return 0
+    _dispatch(subs, _order_message(org, order_id))
     return len(subs)
+
+
+def remind_waiting(now_ts=None):
+    """Every 30 s, ring the phones again for each online order nobody has confirmed or rejected yet."""
+    now_ts = now_ts or time.time()
+    since = (datetime.now() - timedelta(seconds=REPEAT_FOR)).strftime("%Y-%m-%d %H:%M:%S")
+    rows = H.query("""SELECT o.id, o.org_id, o.created_at FROM cafe_orders o JOIN organizations g ON g.id = o.org_id
+                      WHERE o.status = 'pending' AND o.source = 'online' AND o.created_at >= ? AND g.status = 'Active'""",
+                   (since,))
+    waiting = {r["id"] for r in rows}
+    for k in [k for k in _last_sent if k not in waiting]:
+        _last_sent.pop(k, None)           # handled: no more reminders
+    sent = 0
+    for r in rows:
+        if now_ts - _last_sent.get(r["id"], 0) < REPEAT_EVERY - 1:
+            continue
+        _last_sent[r["id"]] = now_ts
+        subs = _subs_for(r["org_id"])
+        if not subs:
+            continue
+        try:
+            made = datetime.strptime(r["created_at"], "%Y-%m-%d %H:%M:%S")
+            mins = max(1, int((datetime.now() - made).total_seconds() // 60))
+        except ValueError:
+            mins = 1
+        org = H.query("SELECT * FROM organizations WHERE id = ?", (r["org_id"],), one=True)
+        _dispatch(subs, _order_message(org, r["id"], waiting_min=mins))
+        sent += 1
+    return sent
+
+
+_loop = {"started": False}
+
+
+def _start_reminders():
+    """One background loop per app process (the CRM runs one process)."""
+    if _loop["started"] or sender is not None or os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    _loop["started"] = True
+    app = H.app
+
+    def run():
+        while True:
+            time.sleep(10)
+            try:
+                with app.app_context():
+                    if H.scalar("SELECT 1 FROM cafe_orders WHERE status = 'pending' AND source = 'online' LIMIT 1"):
+                        remind_waiting()
+            except Exception:  # noqa: BLE001  (keep the loop alive)
+                pass
+    threading.Thread(target=run, daemon=True, name="order-reminders").start()
+
+
+@bp.before_app_request
+def _ensure_reminders():
+    if not _loop["started"]:
+        _start_reminders()
 
 
 # ---------------------------------------------------------------- routes
@@ -160,10 +239,5 @@ def push_test():
         return jsonify(ok=False, error="Notifications are not on for this phone yet.")
     data = json.dumps({"title": "🔔 Test from " + cafe_name(), "body": "Order notifications work on this phone.",
                        "url": url_for("cafe.orders"), "tag": "test"}, ensure_ascii=False)
-    key_path, _ = vapid()
-    args = (rows, data, key_path, H.DB_PATH)
-    if sender is not None:
-        _send_all(*args)
-    else:
-        threading.Thread(target=_send_all, args=args, daemon=True).start()
+    _dispatch(rows, data)
     return jsonify(ok=True)

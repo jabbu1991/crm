@@ -1061,3 +1061,38 @@ def test_home_screen_app_files(cw):
     data = json.loads(m.data)
     assert data["display"] == "standalone" and len(data["icons"]) == 2
     assert b.get("/static/icon-512.png").status_code == 200
+
+
+def test_push_reminders_until_handled(cw, monkeypatch):
+    import cafe_push
+    sent = []
+    monkeypatch.setattr(cafe_push, "sender", lambda sub, data, key: sent.append(json.loads(data)))
+    cafe_push._last_sent.clear()
+    w = cw
+    b = w["cafe"]
+    settings(b, online_on="1")
+    add_item(b, "Tea", "15")
+    b.post("/cafe/push/subscribe", {"payload": json.dumps({"endpoint": "https://fcm.googleapis.com/x/1",
+                                                           "keys": {"p256dh": "p", "auth": "a"}})})
+    guest = Browser()
+    guest.get("/m/chai")
+    guest.post("/m/chai/order", {"payload": json.dumps({"type": "takeaway", "name": "Anu", "phone": "9876543210",
+                                                        "items": [{"item_id": item_id(w, "Tea"), "qty": 1}]})})
+    assert len(sent) == 1 and "New online order" in sent[0]["title"]
+    import app as crm_app
+    import time as _t
+    with crm_app.app.app_context():
+        assert cafe_push.remind_waiting(_t.time() + 5) == 0          # too soon
+        assert cafe_push.remind_waiting(_t.time() + 31) == 1         # 30 s later: reminder
+        assert "still waiting" in sent[-1]["title"]
+    oid_ = w["db"]().execute("SELECT id FROM cafe_orders").fetchone()[0]
+    b.post(f"/cafe/orders/{oid_}/confirm", {})
+    with crm_app.app.app_context():
+        assert cafe_push.remind_waiting(_t.time() + 100) == 0        # handled: no more reminders
+    # old waiting orders (over 30 minutes) stop ringing
+    guest.post("/m/chai/order", {"payload": json.dumps({"type": "takeaway", "name": "Anu", "phone": "9876543211",
+                                                        "items": [{"item_id": item_id(w, "Tea"), "qty": 1}]})})
+    with sqlite3.connect(w["db_path"]) as c:
+        c.execute("UPDATE cafe_orders SET created_at = '2020-01-01 10:00:00' WHERE status = 'pending'")
+    with crm_app.app.app_context():
+        assert cafe_push.remind_waiting(_t.time() + 200) == 0
