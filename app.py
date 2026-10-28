@@ -27,7 +27,7 @@ import zipfile
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
-from flask import (Flask, Response, abort, flash, g, redirect, render_template,
+from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template,
                    request, send_from_directory, session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -226,6 +226,10 @@ def load_user():
     if request.method == "POST" and request.endpoint != "website_enquiry":
         token = session.get("csrf_token")
         if not token or not secrets.compare_digest(token, request.form.get("csrf_token", "")):
+            if request.endpoint == "cafe.public_order":
+                # The customer menu was open from before (or the cafe staff logged in/out in the same browser):
+                # hand back a fresh token so the page re-sends the order by itself.
+                return jsonify(ok=False, csrf=True, token=csrf_token(), error="Please try again."), 400
             abort(400, "Invalid form token. Please reload the page and try again.")
 
     ep = request.endpoint or ""

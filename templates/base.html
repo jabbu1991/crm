@@ -90,30 +90,73 @@
 </footer>
 {% if cafe_mode and can('orders_online') %}
 <script>
+/* Online orders: the bell rings (and the phone vibrates) every 3 s until every waiting order is confirmed or
+   rejected, on every phone of the cafe. Checks every 5 s, and at once when the phone comes back to this page. */
 (function () {
-  var el = document.getElementById("pending-count"), last = null, title = document.title;
-  function beep() {
-    try {
-      var C = window.AudioContext || window.webkitAudioContext; var ctx = new C();
-      [0, 0.25].forEach(function (t) { var o = ctx.createOscillator(), gn = ctx.createGain(); o.frequency.value = 880;
-        o.connect(gn); gn.connect(ctx.destination); gn.gain.setValueAtTime(0.25, ctx.currentTime + t);
-        gn.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.2); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.22); });
-    } catch (e) {}
+  var URL = "{{ url_for('cafe.orders_pending_json') }}", ORDERS = "{{ url_for('cafe.orders') }}";
+  var el = document.getElementById("pending-count"), title = document.title, count = 0, latest = null, ctx = null;
+  var onOrders = location.pathname === ORDERS;
+  function audio() {
+    if (!ctx) { var C = window.AudioContext || window.webkitAudioContext; if (!C) return null; try { ctx = new C(); } catch (e) { return null; } }
+    if (ctx.state === "suspended") ctx.resume().catch(function () {});
+    return ctx;
   }
+  ["pointerdown", "keydown", "touchstart"].forEach(function (ev) { document.addEventListener(ev, function () { audio(); paint(); }, {passive: true}); });
+  function bell() {
+    var c = audio();
+    if (c && c.state === "running") {
+      [0, 0.18, 0.36, 0.9, 1.08, 1.26].forEach(function (t, i) {
+        var o = c.createOscillator(), gn = c.createGain(); o.type = "square"; o.frequency.value = i % 2 ? 660 : 990;
+        o.connect(gn); gn.connect(c.destination); gn.gain.setValueAtTime(0.18, c.currentTime + t);
+        gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + t + 0.16); o.start(c.currentTime + t); o.stop(c.currentTime + t + 0.17);
+      });
+    }
+    if (navigator.vibrate) { try { navigator.vibrate([400, 150, 400]); } catch (e) {} }
+  }
+  function toast() {
+    var box = document.getElementById("new-order-toast");
+    if (!box) { box = document.createElement("a"); box.id = "new-order-toast"; box.href = ORDERS; document.body.appendChild(box); }
+    return box;
+  }
+  function paint() {
+    if (el) { el.hidden = !count; el.textContent = count; }
+    document.title = count ? "(" + count + ") 🔔 " + title : title;
+    var box = document.getElementById("new-order-toast");
+    if (!count) { if (box) box.hidden = true; return; }
+    box = toast(); box.hidden = false;
+    var muted = !(ctx && ctx.state === "running");
+    box.textContent = "🔔 " + count + " online order" + (count > 1 ? "s" : "") + " waiting" + (onOrders ? "" : " — tap to open") + (muted ? " · 🔇 tap to turn on the sound" : "");
+    box.classList.toggle("muted", muted);
+  }
+  var busy = false;
   function poll() {
-    fetch("{{ url_for('cafe.orders_pending_json') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
-      if (el) { el.hidden = !d.count; el.textContent = d.count; }
-      document.title = d.count ? "(" + d.count + ") " + title : title;
-      if (last !== null && d.latest > last) {
-        beep();
-        var box = document.getElementById("new-order-toast");
-        if (!box) { box = document.createElement("a"); box.id = "new-order-toast"; box.href = "{{ url_for('cafe.orders') }}"; document.body.appendChild(box); }
-        box.textContent = "🔔 New online order! (" + d.count + " waiting) — tap to open"; box.hidden = false;
-      }
-      last = d.latest;
-    }).catch(function () {});
+    if (busy) return; busy = true;
+    fetch(URL, {credentials: "same-origin", cache: "no-store"}).then(function (r) { return r.json(); }).then(function (d) {
+      busy = false;
+      var changed = latest !== null && (d.latest !== latest || d.count !== count);
+      count = d.count; latest = d.latest; paint();
+      if (changed && onOrders && window.cafeOrdersRefresh) window.cafeOrdersRefresh();
+    }).catch(function () { busy = false; });
   }
-  poll(); setInterval(poll, 15000);
+  setInterval(function () { if (count) bell(); }, 3000);
+  setInterval(function () { if (!document.hidden) poll(); }, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
+  window.addEventListener("focus", poll); window.addEventListener("pageshow", poll); window.addEventListener("online", poll);
+  poll();
+
+  // Keep the screen on (counter phone on the charger). Chrome lets go when the page is hidden; take it again on return.
+  var lock = null;
+  function wantAwake() { try { return localStorage.getItem("keepAwake") === "1"; } catch (e) { return false; } }
+  function awake() {
+    if (!wantAwake() || !("wakeLock" in navigator) || document.hidden || lock) return;
+    navigator.wakeLock.request("screen").then(function (l) { lock = l; l.addEventListener("release", function () { lock = null; }); }).catch(function () {});
+  }
+  document.addEventListener("visibilitychange", awake); document.addEventListener("pointerdown", awake, {passive: true}); awake();
+  window.cafeKeepAwake = function (on) {
+    try { localStorage.setItem("keepAwake", on ? "1" : "0"); } catch (e) {}
+    if (on) awake(); else if (lock) { lock.release(); lock = null; }
+  };
+  window.cafeKeepAwakeOn = wantAwake;
 })();
 </script>
 {% endif %}

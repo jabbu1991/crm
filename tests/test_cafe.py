@@ -962,3 +962,92 @@ def test_migration_v11_fills_old_bills_and_card_links(cw):
     assert db.execute("SELECT pay_upi, total FROM cafe_bills").fetchone()[:] == (3000, 3000)
     assert db.execute("SELECT card_token FROM customers").fetchone()[0]
     assert db.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION
+
+
+# ------------------------------------------------------------------ round 5: order alerts, customer order retries
+
+def test_public_order_old_token_and_retry(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b, online_on="1")
+    add_item(b, "Tea", "15")
+    tea = item_id(w, "Tea")
+    guest = Browser()
+    guest.get("/m/chai")
+    payload = {"client_ref": "ref1", "type": "takeaway", "name": "Anu", "phone": "9876543210",
+               "items": [{"item_id": tea, "qty": 1}]}
+    # an old page: wrong token -> JSON with a fresh token (not an HTML error page)
+    r = guest.post("/m/chai/order", {"payload": json.dumps(payload), "csrf_token": "old"}, follow=False)
+    d = r.get_json()
+    assert r.status_code == 400 and d["csrf"] and d["token"] == guest.token()
+    # sent again with the fresh token -> ok; the same ref again (network retry) -> same answer, one order only
+    r1 = guest.post("/m/chai/order", {"payload": json.dumps(payload), "csrf_token": d["token"]}, follow=False).get_json()
+    r2 = guest.post("/m/chai/order", {"payload": json.dumps(payload)}, follow=False).get_json()
+    assert r1["ok"] and r1 == r2
+    assert w["db"]().execute("SELECT COUNT(*) FROM cafe_orders").fetchone()[0] == 1
+    # a refused order can be fixed and sent with the same ref
+    bad = dict(payload, client_ref="ref2", phone="12")
+    assert guest.post("/m/chai/order", {"payload": json.dumps(bad)}, follow=False).status_code == 400
+    good = dict(payload, client_ref="ref2", phone="9876500001")
+    assert guest.post("/m/chai/order", {"payload": json.dumps(good)}, follow=False).get_json()["ok"]
+    # other forms still get the normal error page
+    assert b.post("/cafe/settings", {"name": "x", "csrf_token": "bad"}, follow=False).status_code == 400
+
+
+def test_push_notifications_for_new_orders(cw, monkeypatch):
+    import cafe_push
+    sent = []
+
+    class Gone(Exception):
+        class response:
+            status_code = 410
+
+    def fake(sub, data, key):
+        sent.append((sub["endpoint"], json.loads(data)))
+        if "dead" in sub["endpoint"]:
+            raise Gone()
+    monkeypatch.setattr(cafe_push, "sender", fake)
+    w = cw
+    b = w["cafe"]
+    settings(b, online_on="1")
+    add_item(b, "Tea", "15")
+    assert b.get("/sw.js").status_code == 200 and "showNotification" in b.get("/sw.js").text
+    key = b.get("/cafe/push/key").get_json()["key"]
+    assert len(key) > 80
+    sub = {"endpoint": "https://fcm.googleapis.com/fcm/send/admin1", "keys": {"p256dh": "p", "auth": "a"}}
+    assert b.post("/cafe/push/subscribe", {"payload": json.dumps(sub)}).get_json()["ok"]
+    dead = dict(sub, endpoint="https://fcm.googleapis.com/fcm/send/dead1")
+    b.post("/cafe/push/subscribe", {"payload": json.dumps(dead)})
+    assert b.post("/cafe/push/subscribe", {"payload": json.dumps({"endpoint": "http://x"})}).status_code == 400
+    # staff without online orders: cannot subscribe
+    kitchen = make_staff(b, "kit1", role="custom", perms=["bill_create"])
+    assert kitchen.post("/cafe/push/subscribe", {"payload": json.dumps(dict(sub, endpoint="https://e/k"))},
+                        follow=False).status_code == 403
+    # another cafe's phone never gets this cafe's orders
+    w["cafe2"].post("/cafe/push/subscribe", {"payload": json.dumps(dict(sub, endpoint="https://e/other"))})
+    guest = Browser()
+    guest.get("/m/chai")
+    r = guest.post("/m/chai/order", {"payload": json.dumps({"type": "takeaway", "name": "Anu", "phone": "9876543210",
+                                                            "items": [{"item_id": item_id(w, "Tea"), "qty": 2}]})},
+                   follow=False)
+    assert r.get_json()["ok"]
+    endpoints = sorted(e for e, _ in sent)
+    assert endpoints == ["https://fcm.googleapis.com/fcm/send/admin1", "https://fcm.googleapis.com/fcm/send/dead1"]
+    msg = sent[0][1]
+    assert "New online order #1" in msg["title"] and "Anu" in msg["body"] and "₹30" in msg["body"]
+    left = [r[0] for r in w["db"]().execute("SELECT endpoint FROM push_subscriptions WHERE org_id = ?", (w["oid"]("CHAI"),))]
+    assert left == ["https://fcm.googleapis.com/fcm/send/admin1"]      # the gone phone was removed
+    # test button and turning off
+    sent.clear()
+    assert b.post("/cafe/push/test", {}).get_json()["ok"] and len(sent) == 1
+    b.post("/cafe/push/unsubscribe", {"endpoint": "https://fcm.googleapis.com/fcm/send/admin1"})
+    assert not b.post("/cafe/push/test", {}).get_json()["ok"]
+
+
+def test_orders_page_alert_tools(cw):
+    b = cw["cafe"]
+    settings(b, online_on="1")
+    page = b.get("/cafe/orders").text
+    assert 'id="orders-live"' in page and "push-btn" in page and "awake-btn" in page
+    base = b.get("/cafe/pos").text
+    assert "setInterval(function () { if (count) bell(); }, 3000)" in base

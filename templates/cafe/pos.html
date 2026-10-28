@@ -51,7 +51,7 @@
     <div class="pc-actions">
       {% if cfg.kot_on %}<button type="button" class="btn btn-big" data-act="kot" title="Send to the kitchen; the order stays open">🍳 KOT</button>{% endif %}
       <button type="button" class="btn btn-big" data-act="save" title="Keep the order open without billing">💾 Hold</button>
-      <button type="button" class="btn btn-primary btn-big pc-bill" data-act="bill">🧾 Bill &amp; Print</button>
+      <button type="button" class="btn btn-primary btn-big pc-bill" data-act="bill">🧾 Bill &amp; Print <span class="pc-billtot" id="pc-billtot"></span></button>
     </div>
   </aside>
   <button type="button" class="pos-cartbar mobile-only" id="pos-cartbar">🛒 <span id="cb-count">0 items</span><b id="cb-total">₹0</b><span>Bill →</span></button>
@@ -301,6 +301,7 @@
     row("Total", rs(t.total), "pt-total");
     var n = 0; state.lines.forEach(function (l) { n += l.qty; });
     $("cb-count").textContent = n + " items"; $("cb-total").textContent = rs(t.total);
+    if ($("pc-billtot")) $("pc-billtot").textContent = t.total ? "· " + rs(t.total) : "";
   }
   function renderType() {
     document.querySelectorAll("#pc-types button").forEach(function (b) { b.classList.toggle("on", b.dataset.type === state.type); });
@@ -489,7 +490,7 @@
       };
       var label = b.innerHTML, tries = 0;
       state.busy = true; b.disabled = true; b.textContent = "Saving…";
-      function done() { state.busy = false; b.disabled = false; b.innerHTML = label; }
+      function done() { state.busy = false; b.disabled = false; b.innerHTML = label; renderTotals(); }
       // a weak network: wait up to 20 s, then try again (same client_ref, so a bill is never made twice)
       function send() {
         tries += 1;

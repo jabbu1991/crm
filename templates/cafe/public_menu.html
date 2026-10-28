@@ -266,16 +266,35 @@
     if (ph.length !== 10) return fail("Please enter a 10-digit WhatsApp number.");
     if (otype === "dine_in" && !$("table-sel").value) return fail("Please choose your table.");
     if (otype === "delivery" && f.address.value.trim().length < 8) return fail("Please enter the delivery address.");
-    var payload = {type: otype, table: $("table-sel").value, name: f.name.value, phone: ph, address: f.address.value, note: f.note.value,
+    var payload = {client_ref: Date.now().toString(36) + Math.random().toString(36).slice(2, 10), type: otype, table: $("table-sel").value, name: f.name.value, phone: ph, address: f.address.value, note: f.note.value,
                    birthday: f.birthday ? f.birthday.value : "", ref: f.ref ? f.ref.value : "", website: f.website.value,
                    items: Object.keys(cart).map(function (k) { var x = pk(k); return {item_id: x.id, qty: cart[k], measure: x.m}; })};
-    var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payload", JSON.stringify(payload));
     btn.disabled = true; btn.textContent = "Sending…";
-    fetch(cfg.order_url, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
-      if (!d.ok) { btn.disabled = false; btn.textContent = "Place order"; return fail(d.error || "Could not place the order. Please try again."); }
-      try { localStorage.setItem("me", JSON.stringify({name: f.name.value, phone: ph})); localStorage.removeItem(KEY); } catch (e2) {}
-      window.location.href = d.url;
-    }).catch(function () { btn.disabled = false; btn.textContent = "Place order"; fail("No internet connection. Please try again."); });
+    var tries = 0;
+    function stop(msg) { btn.disabled = false; btn.textContent = "Place order"; fail(msg); }
+    // Weak network: wait up to 20 s and try again (same client_ref, so the cafe never gets the order twice).
+    // An old page (security token changed): take the fresh token and send again by itself.
+    function send() {
+      tries += 1;
+      var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payload", JSON.stringify(payload));
+      var ctl = window.AbortController ? new AbortController() : null, timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
+      fetch(cfg.order_url, {method: "POST", body: fd, credentials: "same-origin", signal: ctl ? ctl.signal : undefined}).then(function (r) {
+        clearTimeout(timer);
+        if (r.status >= 500 || r.status === 409) throw new Error("retry");
+        return r.json().catch(function () { return {ok: false, error: "Something went wrong. Please try again."}; });
+      }).then(function (d) {
+        if (!d.ok && d.csrf && d.token && tries < 4) { csrf = d.token; send(); return; }
+        if (!d.ok) return stop(d.error || "Could not place the order. Please try again.");
+        try { localStorage.setItem("me", JSON.stringify({name: f.name.value, phone: ph})); localStorage.removeItem(KEY); } catch (e2) {}
+        window.location.href = d.url;
+      }).catch(function () {
+        clearTimeout(timer);
+        if (tries < 4) { btn.textContent = "Network slow… trying again"; setTimeout(send, 1500 * tries); return; }
+        stop(navigator.onLine === false ? "No internet connection. Your order is kept here; please try again." :
+             "Could not reach the cafe. Your order is kept here; please try again.");
+      });
+    }
+    send();
   });
 
   // ---- search

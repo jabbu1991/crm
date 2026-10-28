@@ -252,3 +252,14 @@ button.pl-amt:hover { border-color: #fb923c; }
 .pos-print { position: fixed; inset: 0; z-index: 70; background: #e9ebef; }
 .pos-print[hidden] { display: none; }
 .pos-print iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* billing cart: never squeeze lines on top of each other; keep the action buttons in view */
+.pos-cart > * { flex-shrink: 0; }
+.pc-actions { position: sticky; bottom: -14px; background: #fff; padding: 8px 0 14px; margin-bottom: -14px; z-index: 2; box-shadow: 0 -8px 12px -8px rgba(0, 0, 0, .15); }
+.pc-bill .pc-billtot { font-weight: 800; white-space: nowrap; }
+#new-order-toast { left: 16px; text-align: center; font-size: 16px; animation: order-pulse 1s ease-in-out infinite alternate; }
+#new-order-toast.muted { background: #b91c1c; }
+@keyframes order-pulse { from { transform: scale(1); } to { transform: scale(1.03); } }
+@media (prefers-reduced-motion: reduce) { #new-order-toast { animation: none; } }
+.order-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.order-tools .btn.on { background: #dcfce7; border-color: #86efac; color: #166534; }
+#new-order-toast { top: 12px; bottom: auto; }

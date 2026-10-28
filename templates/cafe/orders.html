@@ -8,6 +8,15 @@
 </div>
 {% if request.args.kot %}<div class="flash flash-success">The KOT is ready. <a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=request.args.kot, auto=1) }}">🖨 Print KOT</a></div>{% endif %}
 
+{% if can('orders_online') and not viewing %}
+<div class="order-tools">
+  <button type="button" class="btn btn-sm" id="awake-btn" hidden>🔆 Keep screen on</button>
+  <button type="button" class="btn btn-sm" id="push-btn" hidden>📲 Phone notifications</button>
+  <button type="button" class="btn btn-sm" id="push-test" hidden>Send a test</button>
+  <span class="small muted" id="push-msg"></span>
+</div>
+{% endif %}
+<div id="orders-live">
 {% if can('orders_online') %}
 <section class="card pending-card {{ 'has' if pending }}">
   <h2>🔔 Online orders waiting for confirmation ({{ pending|length }})</h2>
@@ -74,5 +83,62 @@
     </tbody>
   </table>
 </section>
-<script>setTimeout(function () { if (!document.querySelector("details[open]") && document.activeElement.tagName !== "INPUT") location.reload(); }, 30000);</script>
+</div>
+<script>
+(function () {
+  // New / changed orders appear without reloading. Skipped while you are typing a reason or have a box open.
+  function busy() { var a = document.activeElement; return document.querySelector("#orders-live details[open]") || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)); }
+  window.cafeOrdersRefresh = function () {
+    if (busy()) return;
+    fetch(location.href, {credentials: "same-origin", cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
+      if (busy()) return;
+      var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("orders-live");
+      if (fresh) document.getElementById("orders-live").innerHTML = fresh.innerHTML;
+    }).catch(function () {});
+  };
+  setInterval(function () { if (!document.hidden) window.cafeOrdersRefresh(); }, 30000);
+
+  var csrf = "{{ csrf_token() }}", msg = document.getElementById("push-msg");
+  // Keep screen on
+  var ab = document.getElementById("awake-btn");
+  if (ab && "wakeLock" in navigator && window.cafeKeepAwake) {
+    ab.hidden = false;
+    var paintA = function () { var on = window.cafeKeepAwakeOn(); ab.classList.toggle("on", on); ab.textContent = on ? "🔆 Screen stays on ✓" : "🔆 Keep screen on"; };
+    ab.onclick = function () { window.cafeKeepAwake(!window.cafeKeepAwakeOn()); paintA(); };
+    paintA();
+  }
+  // Phone notifications (Web Push)
+  var pb = document.getElementById("push-btn"), pt = document.getElementById("push-test");
+  if (!pb || !("serviceWorker" in navigator) || !("PushManager" in window) || !window.Notification) {
+    if (msg && pb) msg.textContent = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone: add this site to the Home Screen to get notifications." : "";
+    return;
+  }
+  function b64(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
+  function post(url, data) { var fd = new FormData(); fd.append("csrf_token", csrf); Object.keys(data).forEach(function (k) { fd.append(k, data[k]); }); return fetch(url, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }); }
+  pb.hidden = false;
+  navigator.serviceWorker.register("{{ url_for('cafe.service_worker') }}", {scope: "/"}).then(function (reg) {
+    function paintP(sub) {
+      var on = !!sub && Notification.permission === "granted";
+      pb.classList.toggle("on", on); pb.textContent = on ? "📲 Notifications on ✓" : "📲 Turn on phone notifications"; pt.hidden = !on;
+      if (Notification.permission === "denied") msg.textContent = "Notifications are blocked. Chrome ⋮ → Settings → Site settings → Notifications → allow this site.";
+    }
+    reg.pushManager.getSubscription().then(paintP);
+    pb.onclick = function () {
+      reg.pushManager.getSubscription().then(function (sub) {
+        if (sub && Notification.permission === "granted") {   // turn off
+          return post("{{ url_for('cafe.push_unsubscribe') }}", {endpoint: sub.endpoint}).then(function () { return sub.unsubscribe(); }).then(function () { paintP(null); msg.textContent = "Notifications off for this phone."; });
+        }
+        return fetch("{{ url_for('cafe.push_key') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (k) {
+          return reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64(k.key)});
+        }).then(function (s) {
+          return post("{{ url_for('cafe.push_subscribe') }}", {payload: JSON.stringify(s)}).then(function (d) {
+            paintP(d.ok ? s : null); msg.textContent = d.ok ? "Done. New orders will show on this phone even when the screen is off." : (d.error || "");
+          });
+        });
+      }).catch(function () { paintP(null); msg.textContent = Notification.permission === "denied" ? "Notifications are blocked for this site in Chrome settings." : "Could not turn on notifications on this browser."; });
+    };
+    pt.onclick = function () { post("{{ url_for('cafe.push_test') }}", {}).then(function (d) { msg.textContent = d.ok ? "Test sent. It should arrive in a few seconds." : (d.error || ""); }); };
+  }).catch(function () { pb.hidden = true; });
+})();
+</script>
 {% endblock %}

@@ -206,3 +206,4 @@ main { max-width: 980px; margin: 0 auto; padding: 0 0 24px; }
 .mc-list span { display: flex; flex-direction: column; } .mc-list small { opacity: .65; font-size: 12px; }
 .mc-list .plus { color: #15803d; } .mc-list .minus { color: #b91c1c; }
 .mc-more summary { cursor: pointer; font-weight: 700; color: var(--p); padding: 8px 0; }
+.sheet label[hidden] { display: none; }

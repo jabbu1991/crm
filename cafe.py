@@ -817,3 +817,4 @@ import cafe_admin  # noqa: E402,F401
 import cafe_pos  # noqa: E402,F401
 import cafe_people  # noqa: E402,F401
 import cafe_import  # noqa: E402,F401
+import cafe_push  # noqa: E402,F401

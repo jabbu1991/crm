@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -856,9 +856,24 @@ def _migrate_v11(conn):
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_card ON customers(card_token)")
 
 
+def _migrate_v12(conn):
+    """Phone push notifications (new online orders)."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_ok_at TEXT
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_push_org ON push_subscriptions(org_id)")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11)]
+              (11, _migrate_v11), (12, _migrate_v12)]
 
 
 def migrate(db_path):

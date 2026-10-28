@@ -4,6 +4,7 @@ import threading
 import time
 
 import cafe_escpos
+import cafe_push
 from datetime import timedelta
 
 from flask import abort, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
@@ -873,36 +874,64 @@ def public_order(code):
         return jsonify(ok=False, error="Invalid data."), 400
     if p.get("website"):  # honeypot
         return jsonify(ok=True, url=url_for("cafe.public_menu", code=code))
+    ref = str(p.get("client_ref") or "")[:40]
+    key = ("menu", org["id"], ref) if ref else None
+    if key:   # the page re-sends after a network drop: answer with the first result, never a second order
+        with _done_lock:
+            hit = _done_saves.get(key)
+            if not hit:
+                _done_saves[key] = (time.time(), None)
+        if hit:
+            if hit[1] is None:
+                return jsonify(ok=False, busy=True, error="Still sending…"), 409
+            return jsonify(hit[1])
+    try:
+        out, code_ = _public_order(org, st, types, code, p, ip, now_ts, hits)
+    except Exception:
+        if key:
+            with _done_lock:
+                _done_saves.pop(key, None)
+        raise
+    if key:
+        if out.get("ok"):
+            _remember_save(key, out)
+        else:
+            with _done_lock:
+                _done_saves.pop(key, None)
+    return jsonify(out), code_
+
+
+def _public_order(org, st, types, code, p, ip, now_ts, hits):
     otype = p.get("type")
     name = (p.get("name") or "").strip()[:80]
     phone = phone10(p.get("phone"))
     if otype not in types:
-        return jsonify(ok=False, error="Choose an order type."), 400
+        return dict(ok=False, error="Choose an order type."), 400
     if not name or not phone:
-        return jsonify(ok=False, error="Enter a name and a 10-digit WhatsApp number."), 400
+        return dict(ok=False, error="Enter a name and a 10-digit WhatsApp number."), 400
     address = (p.get("address") or "").strip()[:300]
     if otype == "delivery" and len(address) < 8:
-        return jsonify(ok=False, error="Please enter the delivery address."), 400
+        return dict(ok=False, error="Please enter the delivery address."), 400
     oid = org["id"]
     db = H.get_db()
     if db.execute("SELECT COUNT(*) FROM cafe_orders WHERE org_id = ? AND status = 'pending' AND cust_phone = ?",
                   (oid, phone)).fetchone()[0] >= 3:
-        return jsonify(ok=False, error="There are unconfirmed orders from this number. Please wait a little."), 429
+        return dict(ok=False, error="There are unconfirmed orders from this number. Please wait a little."), 429
     table_id = None
     if otype == "dine_in":
         table_id = to_int(p.get("table"), 0)
         if not db.execute("SELECT 1 FROM cafe_tables WHERE id = ? AND org_id = ? AND active = 1", (table_id, oid)).fetchone():
-            return jsonify(ok=False, error="Please choose your table."), 400
+            return dict(ok=False, error="Please choose your table."), 400
     try:
         wanted = parse_items(p.get("items"))
     except BillError as e:
-        return jsonify(ok=False, error=str(e)), 400
+        return dict(ok=False, error=str(e)), 400
     if not wanted:
-        return jsonify(ok=False, error="Your cart is empty."), 400
+        return dict(ok=False, error="Your cart is empty."), 400
     if any(w["price"] is not None or w["line_id"] for w in wanted):
-        return jsonify(ok=False, error="Invalid data."), 400
+        return dict(ok=False, error="Invalid data."), 400
     if sum(w["qty"] for w in wanted) > 100:
-        return jsonify(ok=False, error="Up to 100 items per order."), 400
+        return dict(ok=False, error="Up to 100 items per order."), 400
     _order_hits[ip] = hits + [now_ts]
     # Run as the organization (no logged-in user here).
     saved_org = g.get("org")
@@ -916,11 +945,12 @@ def public_order(code):
         db.commit()
     except BillError as e:
         db.rollback()
-        return jsonify(ok=False, error=str(e)), 400
+        return dict(ok=False, error=str(e)), 400
     finally:
         g.org = saved_org
     tok = db.execute("SELECT token FROM cafe_orders WHERE id = ?", (order_id,)).fetchone()[0]
-    return jsonify(ok=True, url=url_for("cafe.public_order_status", code=code, tok=tok))
+    cafe_push.new_order(org, order_id)
+    return dict(ok=True, url=url_for("cafe.public_order_status", code=code, tok=tok)), 200
 
 
 def _status_data(o):
