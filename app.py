@@ -33,6 +33,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import crm_db
+import crm_options
 from crm_constants import (BUYING_POSSIBILITIES, CAMPAIGN_TYPES, CLOSED_LOST_STATUSES, COUNTRIES,
                            DEFAULT_COUNTRY, INDIAN_STATES, LEAD_QUALITIES, LEAD_SOURCES, LEAD_STATUSES,
                            ORG_ADMIN, PRIORITIES, PRODUCT_STAGES, PROJECT_STATUSES, ROLE_LABELS, STAFF,
@@ -248,7 +249,7 @@ def load_user():
 # and these form pages are hidden (their submit would be refused anyway).
 VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static"}
 # Pages a Cafe-only organization still uses (everything else in the CRM is hidden from it).
-SHARED_ENDPOINTS = {"logout", "login", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
+SHARED_ENDPOINTS = {"logout", "login", "org_login", "org_manifest", "org_icon", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
                     "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product"}
 WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
                         "product_edit", "staff_new", "staff_edit", "account"}
@@ -342,11 +343,14 @@ def super_required(view):
 def inject_globals():
     return dict(
         csrf_token=csrf_token, brand=BRAND, is_admin=is_admin, viewing=bool(g.get('viewing')), is_super=is_super, ROLE_LABELS=ROLE_LABELS,
-        LEAD_STATUSES=LEAD_STATUSES, BUYING_POSSIBILITIES=BUYING_POSSIBILITIES, LEAD_QUALITIES=LEAD_QUALITIES,
-        LEAD_SOURCES=LEAD_SOURCES, PRIORITIES=PRIORITIES, PRODUCT_STAGES=PRODUCT_STAGES,
+        LEAD_STATUSES=opt_values("status"), BUYING_POSSIBILITIES=opt_values("buying_possibility"),
+        LEAD_QUALITIES=LEAD_QUALITIES, LEAD_SOURCES=opt_values("source"), PRIORITIES=opt_values("priority"),
+        PRODUCT_STAGES=PRODUCT_STAGES, with_current=crm_options.with_current,
+        TOP_POSSIBILITY=top_possibility() if g.get("org") else "High",
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
         COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link,
         list_settings=list_settings, LIST_COLUMNS=LIST_COLUMNS, quick_dates=quick_dates(),
+        client_brand=g.get("login_brand") or (org_brand() if g.get("user") else None),
     )
 
 
@@ -407,7 +411,160 @@ def wa_number(value):
 
 @app.template_filter("badge")
 def badge_class(value):
-    return "b-" + (value or "none").lower().replace(" ", "-")
+    cls = "b-" + (value or "none").lower().replace(" ", "-")
+    stage = status_stages().get(value) if g.get("org") else None
+    return cls + (f" b-stage-{stage}" if stage else "")
+
+
+# ---------------------------------------------------------------- client branding (white-label)
+
+HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _rgb(h):
+    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def _hex(rgb):
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(round(c)))) for c in rgb)
+
+
+def _luminance(rgb):
+    def ch(c):
+        c = c / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, gg, b = (ch(c) for c in rgb)
+    return 0.2126 * r + 0.7152 * gg + 0.0722 * b
+
+
+def _mix(a, b, t):
+    return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+
+def brand_palette(color):
+    """From one brand colour: a button colour that keeps white text readable, a darker hover, a dark top bar."""
+    rgb = _rgb(color)
+    primary = rgb
+    for _ in range(20):   # darken until white text on it is readable (contrast >= 4.5)
+        if (1.05) / (_luminance(primary) + 0.05) >= 4.5:
+            break
+        primary = _mix(primary, (0, 0, 0), 0.12)
+    return {"primary": _hex(primary), "primary_dark": _hex(_mix(primary, (0, 0, 0), 0.18)),
+            "topbar": _hex(_mix(rgb, (15, 23, 42), 0.78)), "raw": color}
+
+
+def org_brand(org=None):
+    """The client's own look (logo, name, colour) once they log in, or on their login link. None for the agency."""
+    org = org if org is not None else g.get("org")
+    if not org or org["kind"] == "agency":
+        return None
+    keys = org.keys()
+    logo = org["brand_logo"] if "brand_logo" in keys else None
+    color = org["brand_color"] if "brand_color" in keys else None
+    kind = org["app_type"] if "app_type" in keys else "crm"
+    if kind in ("cafe", "both") and (not logo or not color):
+        st = cafe.get_settings(org["id"])
+        logo = logo or st.get("logo") or None
+        if not color and kind == "cafe":
+            color = (st.get("theme") or {}).get("primary")
+    logo = logo or (org["catalog_logo"] if "catalog_logo" in keys else None)
+    color = color if color and HEX_COLOR.match(color) else None
+    return {"name": org["name"], "logo": logo, "code": org["code"].lower(), "id": org["id"],
+            "palette": brand_palette(color) if color else None}
+
+
+def logo_color(name):
+    """The strongest colour in a logo file (skips white / black / grey), or None."""
+    from PIL import Image
+    try:
+        img = Image.open(os.path.join(media_dir(), name)).convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None
+    img.thumbnail((120, 120))
+    pal = img.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
+    palette = pal.getpalette()[:24]
+    for count, idx in sorted(pal.getcolors(), reverse=True):
+        r, gg, b = palette[idx * 3: idx * 3 + 3]
+        mx, mn = max(r, gg, b), min(r, gg, b)
+        if mx and (mx - mn) / mx >= 0.18 and 0.06 <= (mx + mn) / 510 <= 0.93:
+            return "#%02x%02x%02x" % (r, gg, b)
+    return None
+
+
+def save_branding(oid, org):
+    """Brand logo / colour from a settings form (Org Admin or Super Admin)."""
+    logo = request.files.get("brand_logo")
+    new_logo = org["brand_logo"]
+    if logo and logo.filename:
+        name = save_image(logo, box=(400, 400), max_kb=80)
+        if name:
+            remove_media(org["brand_logo"])
+            new_logo = name
+        else:
+            flash("The logo file is not a photo.", "error")
+    elif request.form.get("remove_brand_logo"):
+        remove_media(org["brand_logo"])
+        new_logo = None
+    color = (request.form.get("brand_color") or "").strip()
+    if not org["brand_color"] and color.lower() == "#4f46e5":   # the picker's default: nothing chosen
+        color = ""
+    if request.form.get("brand_color_auto") and (new_logo or org["catalog_logo"]):
+        color = logo_color(new_logo or org["catalog_logo"]) or color
+    if request.form.get("brand_color_off"):
+        color = ""
+    execute("UPDATE organizations SET brand_logo = ?, brand_color = ? WHERE id = ?",
+            (new_logo, color if HEX_COLOR.match(color or "") else None, oid))
+
+
+# ---------------------------------------------------------------- per-client dropdown options
+
+def org_opts(kind, oid=None):
+    """This client's options for a dropdown (in order, hidden ones marked). Cached for the request."""
+    oid = oid or (g.org["id"] if g.get("org") else None)
+    if not oid:
+        return crm_options.defaults(kind)
+    cache = g.setdefault("_opts", {})
+    if (oid, kind) not in cache:
+        cache[(oid, kind)] = crm_options.load(get_db(), oid, kind)
+    return cache[(oid, kind)]
+
+
+def opt_values(kind, oid=None):
+    """What the dropdowns offer (hidden options left out)."""
+    return crm_options.visible(org_opts(kind, oid))
+
+
+def opt_all(kind, oid=None):
+    """Every value the client has (hidden ones included): valid on existing leads."""
+    return crm_options.all_values(org_opts(kind, oid))
+
+
+def status_stages(oid=None):
+    return {o["value"]: o["stage"] for o in org_opts("status", oid)}
+
+
+def stage_sql(stage, oid=None):
+    """'Converted','Order Confirmed' … : the client's statuses of one stage, for SQL IN (...)."""
+    return crm_options.sql_list(crm_options.stage_values(org_opts("status", oid), stage))
+
+
+def default_status(oid=None):
+    opts = org_opts("status", oid)
+    for o in opts:
+        if o["stage"] == "new" and not o["hidden"]:
+            return o["value"]
+    vis = crm_options.visible(opts)
+    return vis[0] if vis else "New"
+
+
+def default_priority(oid=None):
+    vis = opt_values("priority", oid)
+    return "Normal" if "Normal" in vis else ""
+
+
+def top_possibility(oid=None):
+    vals = opt_all("buying_possibility", oid)
+    return vals[0] if vals else ""
 
 
 # ---------------------------------------------------------------- password tokens
@@ -524,13 +681,74 @@ def login():
             flash("Your organization's account is inactive. Contact the agency.", "error")
         else:
             flash("Invalid username or password.", "error")
+    code = (request.form.get("brand_code") or request.args.get("brand") or "").lower()
+    if re.fullmatch(r"[a-z0-9_-]{2,30}", code):
+        borg = query("SELECT * FROM organizations WHERE LOWER(code) = ? AND kind != 'agency'", (code,), one=True)
+        g.login_brand = org_brand(borg) if borg else None
     return render_template("login.html")
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
+    brand = org_brand() if g.get("org") and not g.get("viewing") else None
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("org_login", code=brand["code"]) if brand else url_for("login"))
+
+
+@app.route("/<code>")
+def org_login(code):
+    """A client's own login link (crm.realviewcreativestudio.in/chickees): their logo and name on the login page."""
+    if not re.fullmatch(r"[a-z0-9_-]{2,30}", code):
+        abort(404)
+    org = query("SELECT * FROM organizations WHERE LOWER(code) = ? AND kind != 'agency'", (code,), one=True)
+    if not org:
+        abort(404)
+    if g.get("user"):
+        return redirect(url_for("dashboard"))
+    g.login_brand = org_brand(org)
+    return render_template("login.html", org_link=True)
+
+
+@app.route("/<code>/app.webmanifest")
+def org_manifest(code):
+    """Home Screen app with the client's name and logo."""
+    org = query("SELECT * FROM organizations WHERE LOWER(code) = ? AND kind != 'agency'", (code.lower(),), one=True)
+    if not org:
+        abort(404)
+    b = org_brand(org)
+    icons = [{"src": url_for("org_icon", code=b["code"], size=sz), "sizes": f"{sz}x{sz}", "type": "image/png"}
+             for sz in (192, 512)] if b["logo"] else [
+        {"src": url_for("static", filename=f"icon-{sz}.png"), "sizes": f"{sz}x{sz}", "type": "image/png"} for sz in (192, 512)]
+    color = b["palette"]["topbar"] if b["palette"] else "#111827"
+    data = {"name": b["name"], "short_name": b["name"][:12], "start_url": url_for("org_login", code=b["code"]),
+            "scope": "/", "display": "standalone", "background_color": color, "theme_color": color, "icons": icons}
+    resp = app.response_class(json.dumps(data), mimetype="application/manifest+json")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/<code>/icon-<int:size>.png")
+def org_icon(code, size):
+    """The client's logo as a square app icon (white background)."""
+    if size not in (180, 192, 512):
+        abort(404)
+    org = query("SELECT * FROM organizations WHERE LOWER(code) = ? AND kind != 'agency'", (code.lower(),), one=True)
+    b = org_brand(org) if org else None
+    if not b or not b["logo"]:
+        abort(404)
+    from PIL import Image
+    try:
+        src = Image.open(os.path.join(media_dir(), b["logo"])).convert("RGB")
+    except Exception:  # noqa: BLE001
+        abort(404)
+    canvas = Image.new("RGB", (size, size), "white")
+    src.thumbnail((int(size * 0.84), int(size * 0.84)), Image.LANCZOS)
+    canvas.paste(src, ((size - src.width) // 2, (size - src.height) // 2))
+    out = io.BytesIO()
+    canvas.save(out, "PNG", optimize=True)
+    resp = app.response_class(out.getvalue(), mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 @app.route("/reset/<token>", methods=["GET", "POST"])
@@ -658,8 +876,8 @@ SORTABLE = {
     "country": "l.country COLLATE NOCASE",
     "requirement": "product_names COLLATE NOCASE",
     "status": "l.status",
-    "possibility": "CASE l.buying_possibility WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 3 ELSE 4 END",
-    "priority": "CASE l.priority WHEN 'Urgent' THEN 1 WHEN 'High' THEN 2 WHEN 'Normal' THEN 3 WHEN 'Low' THEN 4 ELSE 5 END",
+    "possibility": "l.buying_possibility",   # replaced by the client's own order in sort_sql()
+    "priority": "l.priority",
     "followup": "COALESCE(l.next_follow_up, '9999')",
     "staff": "u.name COLLATE NOCASE",
     "assigned": "ua.name COLLATE NOCASE",
@@ -706,6 +924,16 @@ TEXT_FILTERS = {
 }
 
 
+def sort_sql(key):
+    if key == "possibility":
+        return crm_options.case_order("l.buying_possibility", opt_all("buying_possibility"))
+    if key == "priority":
+        return crm_options.case_order("l.priority", opt_all("priority"))
+    if key == "status":
+        return crm_options.case_order("l.status", opt_all("status"))
+    return SORTABLE[key]
+
+
 def lead_filters(params):
     """Return (clauses, args) for the lead scope plus filters given in params."""
     scope_sql, args = lead_scope()
@@ -746,6 +974,8 @@ def lead_filters(params):
         if d:
             clauses.append(f"date(l.created_at) {op} date(?)")
             args.append(d)
+    if params.get("outcome") in ("new", "won", "lost", "open"):   # dashboard: Converted / Lost … by stage
+        clauses.append(f"l.status IN ({stage_sql(params['outcome'])})")
     fu = params.get("followup")
     if fu == "due":
         clauses.append("l.next_follow_up IS NOT NULL AND l.next_follow_up != '' AND l.next_follow_up <= ?")
@@ -769,7 +999,7 @@ def lead_list(params, extra_columns="", extra_args=()):
     except ValueError:
         page = 1
     rows = query(f"SELECT {LEAD_COLUMNS}{extra_columns} {LEAD_FROM} WHERE {where} "
-                 f"ORDER BY {SORTABLE[sort]} {direction}, l.id DESC LIMIT ? OFFSET ?",
+                 f"ORDER BY {sort_sql(sort)} {direction}, l.id DESC LIMIT ? OFFSET ?",
                  list(extra_args) + args + [per, (page - 1) * per])
     return dict(leads=rows, total=total, page=page, pages=pages, sort=sort, direction=direction.lower(), per=per)
 
@@ -813,9 +1043,10 @@ def dashboard():
 
     stats = dict(
         total=count(), today_added=count(" AND date(l.created_at) = date('now','localtime')"),
-        new=count(" AND l.status = 'New'"), hot=count(" AND l.lead_quality = 'Hot'"),
-        high=count(" AND l.buying_possibility = 'High'"), converted=count(" AND l.status = 'Converted'"),
-        lost=count(" AND l.status IN ('Lost', 'Not Interested')"),
+        new=count(f" AND l.status IN ({stage_sql('new')})"), hot=count(" AND l.lead_quality = 'Hot'"),
+        high=count(" AND l.buying_possibility = ?", [top_possibility()]),
+        converted=count(f" AND l.status IN ({stage_sql('won')})"),
+        lost=count(f" AND l.status IN ({stage_sql('lost')})"),
         followups_due=count(" AND l.next_follow_up IS NOT NULL AND l.next_follow_up != '' AND l.next_follow_up <= ?",
                             [today()]),
     )
@@ -827,7 +1058,7 @@ def dashboard():
     by_project = query(f"""SELECT p.id, p.name, COUNT(l.id) c FROM leads l JOIN projects p ON p.id = l.project_id
                           WHERE {where} GROUP BY p.id ORDER BY c DESC LIMIT 10""", args)
     by_staff = query(f"""SELECT u.id, u.name, COUNT(l.id) c,
-                           SUM(l.lead_quality = 'Hot') hot, SUM(l.status = 'Converted') converted
+                           SUM(l.lead_quality = 'Hot') hot, SUM(l.status IN ({stage_sql('won')})) converted
                          FROM leads l JOIN users u ON u.id = l.entered_by WHERE {where}
                          GROUP BY u.id ORDER BY c DESC""", args) if is_admin() else []
     due_followups = query(f"""SELECT f.*, l.customer_name, l.company_name, l.phone, l.whatsapp, l.status lead_status,
@@ -853,7 +1084,7 @@ def dashboard():
                             LEFT JOIN products pr ON pr.id = cv.product_id
                             WHERE {lw} AND cv.created_at >= ? GROUP BY l.id ORDER BY last_seen DESC LIMIT 15""",
                         la + [(datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")])
-    return render_template("dashboard.html", catalog_hot=catalog_hot, stats=stats, by_product=by_product, by_state=by_state,
+    return render_template("dashboard.html", disk_pct=disk_status()[2] if is_super() and not g.get("viewing") else None, catalog_hot=catalog_hot, stats=stats, by_product=by_product, by_state=by_state,
                            by_status=by_status, by_project=by_project, by_staff=by_staff,
                            due_followups=due_followups, recent=recent, orgs=orgs)
 
@@ -1209,11 +1440,10 @@ def validate_lead(data, lead=None):
         errors.append("Enter at least one contact: phone, WhatsApp or email.")
     if data["email"] and "@" not in data["email"]:
         errors.append("Email address looks invalid.")
-    if data["status"] not in LEAD_STATUSES:
-        data["status"] = "New"
-    for key, options in (("buying_possibility", BUYING_POSSIBILITIES),
-                         ("priority", PRIORITIES), ("source", LEAD_SOURCES)):
-        if data[key] not in options:
+    if data["status"] not in opt_all("status"):
+        data["status"] = default_status()
+    for key in ("buying_possibility", "priority", "source"):
+        if data[key] not in opt_all(key):
             data[key] = ""
     fu = valid_date(data.get("next_follow_up"))
     if fu is None:
@@ -1337,7 +1567,7 @@ def leads_today():
     sort = params.get("sort") if params.get("sort") in SORTABLE else "created"
     direction = "asc" if params.get("dir") == "asc" else "desc"
     rows = query(f"SELECT {LEAD_COLUMNS} {LEAD_FROM} WHERE {where} "
-                 f"ORDER BY {SORTABLE[sort]} {direction.upper()}, l.id {direction.upper()} LIMIT 500", args)
+                 f"ORDER BY {sort_sql(sort)} {direction.upper()}, l.id {direction.upper()} LIMIT 500", args)
     return render_template("leads_today.html", leads=rows, params=params, sort=sort, direction=direction,
                            new_id=request.args.get("new", type=int),
                            staff=org_users(active_only=False) if is_admin() else [])
@@ -1352,7 +1582,7 @@ def leads_export():
                        (SELECT GROUP_CONCAT(pr.name || ' [' || lp.stage || ']', '; ') FROM lead_products lp
                           JOIN products pr ON pr.id = lp.product_id WHERE lp.lead_id = l.id) product_stages
                      {LEAD_FROM} WHERE {' AND '.join(clauses)}
-                     ORDER BY {SORTABLE[sort]} {'ASC' if request.args.get('dir') == 'asc' else 'DESC'}""", args)
+                     ORDER BY {sort_sql(sort)} {'ASC' if request.args.get('dir') == 'asc' else 'DESC'}""", args)
     return leads_csv_response(rows)
 
 
@@ -1380,7 +1610,7 @@ def leads_csv_response(rows):
 @login_required
 def lead_new():
     data = {k: "" for k in LEAD_TEXT_FIELDS}
-    data.update(status="New", priority="Normal", country=DEFAULT_COUNTRY,
+    data.update(status=default_status(), priority=default_priority(), country=DEFAULT_COUNTRY,
                 project_id=request.args.get("project", type=int), product_ids=[], assigned_to=g.user["id"])
     if request.method == "POST":
         data = lead_form_data()
@@ -1473,8 +1703,7 @@ def touch_lead(db, lid, ts):
     db.execute("UPDATE leads SET updated_by = ?, updated_at = ? WHERE id = ?", (g.user["id"], ts, lid))
 
 
-QUICK_FIELDS = {"status": ("Status", LEAD_STATUSES),
-                "buying_possibility": ("Buying possibility", BUYING_POSSIBILITIES), "priority": ("Priority", PRIORITIES)}
+QUICK_FIELDS = {"status": "Status", "buying_possibility": "Buying possibility", "priority": "Priority"}
 
 
 @app.route("/leads/<int:lid>/status", methods=["POST"])
@@ -1486,7 +1715,8 @@ def lead_quick_status(lid):
     db = get_db()
     ts = now()
     changes = []
-    for field, (label, options) in QUICK_FIELDS.items():
+    for field, label in QUICK_FIELDS.items():
+        options = opt_all(field)
         if field not in request.form:
             continue
         value = request.form.get(field) or ""
@@ -1677,7 +1907,7 @@ def lead_delete(lid):
     return redirect(url_for("leads") if nxt.startswith(f"/leads/{lid}") else nxt)
 
 
-BULK_FIELDS = dict(QUICK_FIELDS, source=("Source", LEAD_SOURCES))
+BULK_FIELDS = dict(QUICK_FIELDS, source="Source")
 
 
 @app.route("/leads/bulk", methods=["POST"])
@@ -1709,7 +1939,8 @@ def leads_bulk():
         flash(f"{len(leads)} lead(s) moved to the Recycle Bin.", "success")
         return redirect(back)
     values = {}
-    for field, (label, options) in BULK_FIELDS.items():
+    for field, label in BULK_FIELDS.items():
+        options = opt_all(field)
         v = request.form.get(field) or ""
         if v in options:
             values[field] = (label, v)
@@ -1843,8 +2074,8 @@ def leads_import_template():
                    whatsapp="9876543210", email="example@example.com", place="Kochi", district="Ernakulam",
                    state="Kerala", country=DEFAULT_COUNTRY, project=projects_all[0]["name"] if projects_all else "",
                    products=products[0]["name"] if products else "", requirement="Wants a price quote",
-                   status=LEAD_STATUSES[0], buying_possibility=BUYING_POSSIBILITIES[0], priority="Normal",
-                   source=LEAD_SOURCES[0], next_follow_up=quick_dates()[0][1], notes="Called once, call again")
+                   status=default_status(), buying_possibility=(opt_values("buying_possibility") or [""])[0],
+                   priority=default_priority(), source=(opt_values("source") or [""])[0], next_follow_up=quick_dates()[0][1], notes="Called once, call again")
     out = io.StringIO()
     writer = SafeCsvWriter(out)
     writer.writerow([h for _, h in IMPORT_TEMPLATE_HEADERS])
@@ -1933,7 +2164,7 @@ def states():
         args = args + [int(params["project"])]
     rows = query(f"""SELECT COALESCE(NULLIF(TRIM(l.state),''),'(not set)') state,
                        COALESCE(NULLIF(TRIM(l.country),''),'') country, COUNT(*) total,
-                       SUM(l.lead_quality = 'Hot') hot, SUM(l.status = 'Converted') converted
+                       SUM(l.lead_quality = 'Hot') hot, SUM(l.status IN ({stage_sql('won')})) converted
                      FROM leads l WHERE {where} GROUP BY 1, 2 ORDER BY total DESC, state""", args)
     india = [r for r in rows if r["country"] in ("India", "") and r["state"] != "(not set)"]
     other = [r for r in rows if r["country"] not in ("India", "") and r["state"] != "(not set)"]
@@ -1959,7 +2190,7 @@ def product_stats(params, product_id=None):
     clauses, args = lead_filters({k: v for k, v in params.items() if k not in ("product", "stage")})
     join_cond = " AND ".join(clauses)
     extra = " AND pr.id = ?" if product_id else ""
-    lost = "','".join(CLOSED_LOST_STATUSES)
+    lost = stage_sql("lost")[1:-1]
     return query(f"""
         SELECT pr.id, pr.name, pr.code, pr.category, pr.active,
           COUNT(DISTINCT l.id) total_leads,
@@ -2300,8 +2531,9 @@ def reports():
     groups = query(f"""
         SELECT COALESCE(NULLIF(TRIM({column}),''),'(not set)') grp, COUNT(*) total,
           SUM(l.lead_quality = 'Hot') hot, SUM(l.lead_quality = 'Warm') warm, SUM(l.lead_quality = 'Cold') cold,
-          SUM(l.buying_possibility = 'High') high_possibility, SUM(l.status = 'Converted') converted,
-          SUM(l.status IN ('Lost', 'Not Interested')) lost, {id_col} group_id
+          SUM(l.buying_possibility = {crm_options.sql_list([top_possibility()])}) high_possibility,
+          SUM(l.status IN ({stage_sql('won')})) converted,
+          SUM(l.status IN ({stage_sql('lost')})) lost, {id_col} group_id
         {LEAD_FROM} WHERE {' AND '.join(clauses)} GROUP BY {group_key} ORDER BY total DESC, grp COLLATE NOCASE""", args)
     return render_template("reports.html", by=by, label=label, groups=groups, params=params,
                            projects_all=visible_projects(), grand_total=sum(r["total"] for r in groups))
@@ -2523,6 +2755,101 @@ def list_columns_settings():
                            max_card=MAX_CARD_FIELDS, defaults=DEFAULT_LIST_COLUMNS)
 
 
+# ---------------------------------------------------------------- dropdown options (per client)
+
+LEAD_OPTION_COLUMNS = {"status": "status", "buying_possibility": "buying_possibility", "priority": "priority",
+                       "source": "source"}
+
+
+def options_editor(oid, back_url, self_url):
+    """Edit one client's dropdown lists. Renames also update that client's existing leads; options are hidden,
+    never deleted, so old leads keep their values."""
+    db = get_db()
+    if request.method == "POST":
+        kind = request.form.get("kind")
+        if kind not in crm_options.KINDS:
+            abort(400)
+        label = crm_options.KINDS[kind][0]
+        if request.form.get("reset"):
+            crm_options.reset(db, oid, kind)
+            db.commit()
+            audit("options_reset", label, org=oid)
+            flash(f"{label}: back to the standard list. Leads keep their values.", "success")
+            return redirect(self_url + f"#{kind}")
+        values = [clean(v)[:crm_options.MAX_LEN] for v in request.form.getlist("value")]
+        origs = request.form.getlist("orig")
+        shows = request.form.getlist("show")
+        stages = request.form.getlist("stage") if kind == "status" else []
+        if not (len(values) == len(origs) == len(shows)) or (kind == "status" and len(stages) != len(values)):
+            abort(400)
+        current = crm_options.load(db, oid, kind)
+        known = {o["value"] for o in current}
+        rows, seen, errors = [], set(), []
+        for i, v in enumerate(values):
+            orig = origs[i] if origs[i] in known else ""
+            if not v:
+                if orig:   # an existing option cannot be emptied: keep its name
+                    v = orig
+                else:
+                    continue   # a new empty row: ignore
+            if v.lower() in seen:
+                errors.append(f"'{v}' is in the list twice.")
+                continue
+            seen.add(v.lower())
+            stage = stages[i] if kind == "status" and stages[i] in crm_options.STAGES else ("open" if kind == "status" else None)
+            rows.append({"value": v, "orig": orig, "hidden": shows[i] != "1", "stage": stage})
+        # an option dropped from the form (only new rows can be) is simply not saved; existing ones stay
+        for o in current:
+            if o["value"] not in {r["orig"] for r in rows if r["orig"]}:
+                rows.append({"value": o["value"], "orig": o["value"], "hidden": True, "stage": o.get("stage")})
+        if len(rows) > crm_options.MAX_OPTIONS:
+            errors.append(f"At most {crm_options.MAX_OPTIONS} options.")
+        if not any(not r["hidden"] for r in rows):
+            errors.append("Keep at least one option shown.")
+        if kind == "status" and not any(r["stage"] == "new" and not r["hidden"] for r in rows) \
+                and not any(not r["hidden"] for r in rows):
+            errors.append("Keep at least one status shown.")
+        if errors:
+            for e in dict.fromkeys(errors):
+                flash(e, "error")
+            return redirect(self_url + f"#{kind}")
+        col = LEAD_OPTION_COLUMNS[kind]
+        renamed = 0
+        for r in rows:
+            if r["orig"] and r["orig"] != r["value"]:
+                renamed += db.execute(f"UPDATE leads SET {col} = ? WHERE org_id = ? AND {col} = ?",
+                                      (r["value"], oid, r["orig"])).rowcount
+        crm_options.save(db, oid, kind, rows, now())
+        db.commit()
+        g.pop("_opts", None)
+        audit("options_saved", f"{label}: " + ", ".join(r["value"] + (" (hidden)" if r["hidden"] else "") for r in rows),
+              org=oid)
+        flash(f"{label} saved." + (f" {renamed} leads updated to the new names." if renamed else ""), "success")
+        return redirect(self_url + f"#{kind}")
+    lists = {}
+    for kind in crm_options.KINDS:
+        col = LEAD_OPTION_COLUMNS[kind]
+        used = {r["v"]: r["n"] for r in db.execute(
+            f"SELECT {col} v, COUNT(*) n FROM leads WHERE org_id = ? GROUP BY {col}", (oid,))}
+        lists[kind] = [dict(o, used=used.get(o["value"], 0)) for o in crm_options.load(db, oid, kind)]
+    org = query("SELECT * FROM organizations WHERE id = ?", (oid,), one=True)
+    return render_template("options.html", lists=lists, KINDS=crm_options.KINDS, STAGES=crm_options.STAGES,
+                           org=org, back_url=back_url)
+
+
+@app.route("/settings/options", methods=["GET", "POST"])
+@admin_required
+def org_options_settings():
+    return options_editor(org_id(), url_for("organization_settings"), url_for("org_options_settings"))
+
+
+@app.route("/admin/organizations/<int:oid>/options", methods=["GET", "POST"])
+@super_required
+def admin_org_options(oid):
+    org_or_404(oid)
+    return options_editor(oid, url_for("admin_orgs"), url_for("admin_org_options", oid=oid))
+
+
 @app.route("/organization", methods=["GET", "POST"])
 @admin_required
 def organization_settings():
@@ -2552,6 +2879,8 @@ def organization_settings():
                 elif request.form.get("remove_logo"):
                     execute("UPDATE organizations SET catalog_logo = NULL WHERE id = ?", (org_id(),))
                     remove_media(org["catalog_logo"])
+            if org["kind"] != "agency":
+                save_branding(org_id(), query("SELECT * FROM organizations WHERE id = ?", (org_id(),), one=True))
             flash("Organization settings saved.", "success")
             return redirect(url_for("organization_settings"))
     counts = dict(users=scalar("SELECT COUNT(*) FROM users WHERE org_id = ?", (org_id(),)),
@@ -2711,6 +3040,149 @@ def org_or_404(oid):
     return query("SELECT * FROM organizations WHERE id = ?", (oid,), one=True) or abort(404)
 
 
+# ---------------------------------------------------------------- server status (Super Admin)
+
+DISK_WARN_PCT = 70
+
+
+def _size(path):
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
+def _dir_size(path):
+    total, count = 0, 0
+    if os.path.isdir(path):
+        for root, _, files in os.walk(path):
+            for f in files:
+                total += _size(os.path.join(root, f))
+                count += 1
+    return total, count
+
+
+def data_dir():
+    return os.path.dirname(os.path.abspath(DB_PATH))
+
+
+def backups_dir():
+    return os.path.join(data_dir(), "backups")
+
+
+def disk_status():
+    """(used bytes, total bytes, percent) of the disk that holds the database and photos."""
+    import shutil
+    try:
+        du = shutil.disk_usage(data_dir())
+        return du.used, du.total, round(du.used * 100 / du.total, 1) if du.total else 0
+    except OSError:
+        return 0, 0, 0
+
+
+def org_media_files(db, oid):
+    """Every photo file that belongs to one organization."""
+    names = set()
+    for sql in ("SELECT catalog_logo FROM organizations WHERE id = ?", "SELECT brand_logo FROM organizations WHERE id = ?",
+                "SELECT filename FROM product_images WHERE org_id = ?", "SELECT photo FROM menu_items WHERE org_id = ?",
+                "SELECT photo FROM menu_banners WHERE org_id = ?", "SELECT photo FROM cafe_ledger WHERE org_id = ?"):
+        try:
+            names.update(r[0] for r in db.execute(sql, (oid,)) if r[0])
+        except sqlite3.Error:
+            pass
+    row = db.execute("SELECT data FROM cafe_settings WHERE org_id = ?", (oid,)).fetchone() if \
+        db.execute("SELECT 1 FROM sqlite_master WHERE name = 'cafe_settings'").fetchone() else None
+    if row and row[0]:
+        try:
+            st = json.loads(row[0])
+            names.update(x for x in (st.get("logo"), st.get("cover")) if x)
+        except ValueError:
+            pass
+    return names
+
+
+@app.route("/admin/server")
+@super_required
+def admin_server():
+    db = get_db()
+    used, total, pct = disk_status()
+    db_size = sum(_size(DB_PATH + ext) for ext in ("", "-wal", "-shm"))
+    media_size, media_count = _dir_size(media_dir())
+    backup_size, backup_count = _dir_size(backups_dir())
+    backups = []
+    if os.path.isdir(backups_dir()):
+        for f in sorted(os.listdir(backups_dir()), key=lambda f: os.path.getmtime(os.path.join(backups_dir(), f)),
+                        reverse=True):
+            fp = os.path.join(backups_dir(), f)
+            backups.append({"name": f, "size": _size(fp),
+                            "when": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%m-%Y %H:%M")})
+    mem = None
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    mem = int(line.split()[1]) * 1024
+    except OSError:
+        pass
+
+    def n(sql, oid):
+        try:
+            return db.execute(sql, (oid,)).fetchone()[0]
+        except sqlite3.Error:
+            return 0
+    clients = []
+    for o in db.execute("SELECT * FROM organizations ORDER BY kind, name COLLATE NOCASE").fetchall():
+        files = org_media_files(db, o["id"])
+        clients.append({
+            "org": o, "users": n("SELECT COUNT(*) FROM users WHERE org_id = ?", o["id"]),
+            "leads": n("SELECT COUNT(*) FROM leads WHERE org_id = ?", o["id"]),
+            "products": n("SELECT COUNT(*) FROM products WHERE org_id = ?", o["id"]),
+            "bills": n("SELECT COUNT(*) FROM cafe_bills WHERE org_id = ?", o["id"]),
+            "customers": n("SELECT COUNT(*) FROM customers WHERE org_id = ?", o["id"]),
+            "menu": n("SELECT COUNT(*) FROM menu_items WHERE org_id = ? AND active = 1", o["id"]),
+            "photos": len(files), "photo_size": sum(_size(os.path.join(media_dir(), f)) for f in files),
+        })
+    # rough share of the database: about 1.5 KB per lead and 1.2 KB per bill
+    for c in clients:
+        c["data_size"] = int(c["leads"] * 1500 + c["bills"] * 1200 + c["customers"] * 400)
+        c["total"] = c["data_size"] + c["photo_size"]
+    clients.sort(key=lambda c: -c["total"])
+    return render_template("admin_server.html", used=used, total=total, pct=pct, db_size=db_size,
+                           media_size=media_size, media_count=media_count, backup_size=backup_size,
+                           backup_count=backup_count, backups=backups, mem=mem, clients=clients,
+                           warn=DISK_WARN_PCT, schema=crm_db.SCHEMA_VERSION)
+
+
+@app.route("/admin/server/clean-backups", methods=["POST"])
+@super_required
+def admin_clean_backups():
+    """Delete old automatic backups (made before each database upgrade); keep the newest 2."""
+    folder = backups_dir()
+    files = [os.path.join(folder, f) for f in os.listdir(folder)] if os.path.isdir(folder) else []
+    files = sorted((f for f in files if os.path.isfile(f)), key=os.path.getmtime, reverse=True)
+    freed = 0
+    for f in files[2:]:
+        freed += _size(f)
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    audit("backups_cleaned", f"{len(files[2:])} files, {freed // 1024} KB")
+    flash(f"Removed {len(files[2:])} old backups ({freed / 1048576:.1f} MB freed). The newest 2 are kept."
+          if files[2:] else "Nothing to remove: only the newest 2 backups are there.", "success")
+    return redirect(url_for("admin_server"))
+
+
+@app.template_filter("mb")
+def mb_filter(n):
+    n = n or 0
+    if n < 1024 * 1024:
+        return f"{n / 1024:.0f} KB"
+    if n < 1024 ** 3:
+        return f"{n / 1048576:.1f} MB"
+    return f"{n / 1024 ** 3:.2f} GB"
+
+
 @app.route("/admin/organizations")
 @super_required
 def admin_orgs():
@@ -2792,6 +3264,8 @@ def admin_org_edit(oid):
             execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ?, app_type = ? WHERE id = ?",
                     (1 if request.form.get("wa_templates_allowed") else 0,
                      1 if request.form.get("catalog_allowed") else 0, form_app_type(), oid))
+            if org["kind"] != "agency":
+                save_branding(oid, org)
             flash("Organization updated.", "success")
             return redirect(url_for("admin_orgs"))
     return render_template("admin_org_form.html", data=data, admin=None, org=org)
@@ -2937,8 +3411,10 @@ def website_enquiry():
     lead_id = db.execute(
         "INSERT INTO leads (org_id, project_id, customer_name, phone, whatsapp, phone_norm, requirement, notes,"
         " status, priority, source, country, entered_by, assigned_to, created_at, updated_at)"
-        " VALUES (?,?,?,?,?,?,?,?, 'New', 'High', 'Website', 'India', ?,?,?,?)",
-        (oid, pid, name, phone, phone, phone_key(phone), requirement, message, uid, uid, ts, ts)).lastrowid
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?, 'India', ?,?,?,?)",
+        (oid, pid, name, phone, phone, phone_key(phone), requirement, message, default_status(oid),
+         "High" if "High" in opt_all("priority", oid) else "", "Website" if "Website" in opt_all("source", oid) else "",
+         uid, uid, ts, ts)).lastrowid
     product = db.execute("SELECT id FROM products WHERE org_id = ? AND active = 1 AND name = ? COLLATE NOCASE",
                          (oid, service)).fetchone() if service else None
     if product:

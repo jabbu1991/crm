@@ -734,7 +734,7 @@ def test_quick_update_from_lead_list(world):
     assert f'form="qf{lid}"' in fu and f'form="qfc{lid}"' in fu and 'data-wa="916200000001"' in fu
     dash = w["a_s1"].get("/").get_data(as_text=True)
     assert f'form="qd{lid}"' in dash and f'form="qr{lid}"' in dash and f'href="/leads/{lid}/edit"' in dash
-    assert 'class="orgname" href="/"' in dash
+    assert 'class="brand client-brand" href="/"' in dash   # the client's own name and logo lead to the dashboard
     w["a_s1"].post(f"/leads/{lid}/status", {"status": "Quotation", "next": "/followups"})
     with w["db"]() as conn:
         assert conn.execute("SELECT status FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Quotation"
@@ -1081,3 +1081,123 @@ def test_import_template_round_trip(world):
                                 (SELECT COUNT(*) FROM leads WHERE customer_name LIKE '%delete this row%')
                               FROM leads l WHERE customer_name = 'Template Customer'""").fetchone()
     assert row == (w["proj_a"], ex["Status"], ex["Source"], "Kerala", "2030-02-03", ex["Notes"], 1, 0)
+
+
+# ------------------------------------------------------------------ per-client dropdowns, branding, server status
+
+def _status_form(rows):
+    """rows: [(orig, value, stage, shown)] -> form data for the status list."""
+    return {"kind": "status", "orig": [r[0] for r in rows], "value": [r[1] for r in rows],
+            "stage": [r[2] for r in rows], "show": ["1" if r[3] else "0" for r in rows]}
+
+
+def test_client_dropdown_options(world):
+    w = world
+    a = w["a_admin"]
+    lid = add_lead(a, w["proj_a"], "Ravi", "9847000001", extra={"status": "Converted", "source": "Facebook"})
+    add_lead(a, w["proj_a"], "Sara", "9847000002", extra={"status": "Negotiation"})
+    page = a.get("/settings/options").get_data(as_text=True)
+    assert "Lead status" in page and "Lead source" in page and "(standard list)" in page
+    # rename Converted -> Order Confirmed (won), hide Negotiation, add Site Visit (open), reorder
+    import crm_constants
+    rows = []
+    for v in crm_constants.LEAD_STATUSES:
+        stage = {"New": "new", "Converted": "won", "Lost": "lost", "Not Interested": "lost"}.get(v, "open")
+        if v == "Converted":
+            rows.append(("Converted", "Order Confirmed", "won", True))
+        elif v == "Negotiation":
+            rows.append(("Negotiation", "Negotiation", "open", False))
+        else:
+            rows.append((v, v, stage, True))
+    rows.insert(2, ("", "Site Visit", "open", True))
+    r = a.post("/settings/options", _status_form(rows))
+    assert "Lead status saved. 1 leads updated" in r.get_data(as_text=True)
+    with w["db"]() as c:
+        assert c.execute("SELECT status FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Order Confirmed"
+    form = a.get("/leads/new").get_data(as_text=True)
+    assert "<option >Site Visit</option>" in form and "Order Confirmed" in form and ">Negotiation<" not in form
+    # the lead that has the hidden status keeps it (and shows it)
+    neg = w["ids"]("SELECT id FROM leads WHERE customer_name = 'Sara'")[0]
+    assert "selected>Negotiation" in a.get(f"/leads/{neg}/edit").get_data(as_text=True).replace("'selected' ", "")
+    # dashboard counts the renamed status as converted; links filter by kind
+    dash = a.get("/").get_data(as_text=True)
+    assert 'href="/leads?outcome=won"><b>1</b>' in dash
+    assert "Ravi" in a.get("/leads?outcome=won").get_data(as_text=True)
+    # new statuses can be used on leads; unknown ones fall back to the new-lead status
+    add_lead(a, w["proj_a"], "Visit", "9847000003", extra={"status": "Site Visit"})
+    add_lead(a, w["proj_a"], "Bogus", "9847000004", extra={"status": "Whatever"})
+    with w["db"]() as c:
+        got = dict(c.execute("SELECT customer_name, status FROM leads WHERE customer_name IN ('Visit','Bogus')"))
+    assert got == {"Visit": "Site Visit", "Bogus": "New"}
+    # duplicate names refused; at least one option shown
+    bad = _status_form([(r[0], "Same" if i < 2 else r[1], r[2], r[3]) for i, r in enumerate(rows)])
+    assert "twice" in a.post("/settings/options", bad).get_data(as_text=True)
+    # other organizations keep the standard list
+    assert "Order Confirmed" not in w["b_admin"].get("/leads/new").get_data(as_text=True)
+    assert "Site Visit" not in w["b_admin"].get("/leads/new").get_data(as_text=True)
+    # source: add IndiaMART; Super Admin can edit a client's lists too
+    src = {"kind": "source", "orig": crm_constants.LEAD_SOURCES + [""], "value": crm_constants.LEAD_SOURCES + ["IndiaMART"],
+           "show": ["1"] * (len(crm_constants.LEAD_SOURCES) + 1)}
+    assert "Lead source saved" in w["sup"].post(f"/admin/organizations/{w['org_a']}/options", src).get_data(as_text=True)
+    assert "IndiaMART" in a.get("/leads/new").get_data(as_text=True)
+    # staff cannot edit; reset goes back to the standard list (leads keep their values)
+    assert w["a_s1"].c.get("/settings/options").status_code in (302, 403)
+    a.post("/settings/options", {"kind": "status", "reset": "1"})
+    assert "Site Visit" not in a.get("/leads/new").get_data(as_text=True)
+    with w["db"]() as c:
+        assert c.execute("SELECT status FROM leads WHERE id = ?", (lid,)).fetchone()[0] == "Order Confirmed"
+
+
+def test_client_branding_and_login_link(world, monkeypatch):
+    w = world
+    a = w["a_admin"]
+    page = a.get("/").get_data(as_text=True)
+    assert 'class="client-name">Org A<' in page and "Powered by" in page
+    assert 'class="brand-logo" src="/static/logo-mark.png' not in page
+    # agency (Super Admin) keeps Real View
+    sup = w["sup"].get("/").get_data(as_text=True)
+    assert "client-name" not in sup and "a product of" in sup
+    # logo + colour from the org settings
+    from test_cafe import png
+    r = a.post("/organization", {"name": "Org A", "brand_logo": (png((300, 300), (220, 30, 30)), "logo.png"),
+                                 "brand_color": "#4f46e5", "brand_color_auto": "1"}, content_type="multipart/form-data")
+    assert "Organization settings saved" in r.get_data(as_text=True)
+    with w["db"]() as c:
+        logo, color = c.execute("SELECT brand_logo, brand_color FROM organizations WHERE code = 'ORGA'").fetchone()
+    assert logo and color and color != "#4f46e5"
+    page = a.get("/").get_data(as_text=True)
+    assert f'src="/media/{logo}"' in page and "--primary:" in page
+    # the client's login link
+    guest = Browser()
+    r = guest.get("/orga")
+    assert r.status_code == 200 and "<h1>Org A</h1>" in r.get_data(as_text=True) and 'name="brand_code" value="orga"' in r.get_data(as_text=True)
+    assert guest.get("/nosuchclient").status_code == 404 and guest.get("/agency").status_code == 404
+    assert "/orga/app.webmanifest" in r.get_data(as_text=True)
+    assert json.loads(guest.get("/orga/app.webmanifest").data)["name"] == "Org A"
+    assert guest.get("/orga/icon-192.png").headers["Content-Type"] == "image/png"
+    # wrong password on the client link keeps their brand
+    r = guest.post("/login", {"username": "a_admin", "password": "wrong", "brand_code": "orga"})
+    assert "Invalid username" in r.get_data(as_text=True) and "<h1>Org A</h1>" in r.get_data(as_text=True)
+    # logging out goes back to the client's link
+    assert a.post("/logout", {}, follow=False).headers["Location"].endswith("/orga")
+    # existing pages still win over client codes
+    assert guest.get("/login").status_code == 200
+
+
+def test_server_status_page(world, tmp_path):
+    w = world
+    import os
+    folder = os.path.join(os.path.dirname(w["db_path"]), "backups")
+    os.makedirs(folder, exist_ok=True)
+    import time as _t
+    for i in range(4):
+        p = os.path.join(folder, f"crm-pre-v{i}.db")
+        with open(p, "wb") as f:
+            f.write(b"x" * 2048)
+        os.utime(p, (_t.time() - 1000 + i, _t.time() - 1000 + i))
+    page = w["sup"].get("/admin/server").get_data(as_text=True)
+    assert "Server status" in page and "Org A" in page and "Disk used" in page and "Remove old backups" in page
+    r = w["sup"].post("/admin/server/clean-backups", {})
+    assert "Removed 2 old backups" in r.get_data(as_text=True)
+    assert sorted(os.listdir(folder)) == ["crm-pre-v2.db", "crm-pre-v3.db"]
+    assert w["a_admin"].c.get("/admin/server").status_code in (302, 403, 404)

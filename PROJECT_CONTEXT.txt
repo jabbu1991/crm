@@ -44,7 +44,7 @@ Contact on website: WhatsApp +91 85472 75320.
   render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py (46 pytest tests, all passing); cafe*.py (cafe module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 12 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -220,6 +220,19 @@ Digital Catalogue (built 16 Oct 2026)
 - Customer order: wrong/old form token on /m/<code>/order returns JSON with a fresh token and the page re-sends;
   client_ref makes retries safe (no double orders); real errors shown instead of "No internet".
 - Billing cart: lines never overlap (flex-shrink 0), KOT/Hold/Bill buttons stick to the bottom, total on the button.
+- Per-client dropdowns (crm_options.py, table org_options): Lead status (+ stage new/open/won/lost), Buying
+  possibility, Priority, Lead source. No rows = standard list. Settings → Dropdown options (/settings/options, Org
+  Admin) and /admin/organizations/<id>/options (Super Admin). Rename updates that client's leads; Hide keeps old
+  values (forms add the lead's current value back). Dashboard / reports count Converted / Lost / New by stage;
+  'top possibility' = first option; /leads?outcome=won|lost|new|open filters by stage.
+- Client branding: organizations.brand_logo / brand_color (Org settings or Super Admin edit; 'take colour from
+  logo'); cafe orgs fall back to the cafe logo and menu theme colour, CRM orgs to the catalogue logo. Logged-in
+  client users (and Super Admin viewing a client) see the client's logo/name/colour in the top bar, tab title and
+  icon; footer 'Powered by Real View CRM'. Client login link /<code> (e.g. /chickees), per-client Home Screen app
+  /<code>/app.webmanifest + /<code>/icon-<size>.png; logout returns to the client's link. Agency keeps Real View.
+- Server status (/admin/server, Super Admin, nav '🖥 Server'): disk used/free, DB / photos / backups sizes, CRM
+  memory, per-client counts and approximate space; warning at 70% (also on the Super Admin dashboard); 'Remove old
+  backups' keeps the newest 2.
 - Demo: demo.bat creates "Chai Corner" (cafe_admin / cafe_cashier, password demo1234), menu at /m/chai.
 
 ======================================================================

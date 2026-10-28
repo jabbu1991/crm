@@ -17,6 +17,7 @@
   {% endfor %}
 </div>
 
+{% if params.get('outcome') in ('new', 'open', 'won', 'lost') %}<p class="filter-note">Showing <b>{{ {'new': 'new', 'open': 'open', 'won': 'converted / won ✅', 'lost': 'lost / not interested ❌'}[params.outcome] }}</b> leads (every status of that kind). <a href="{{ url_for('leads', **dict(params, outcome=None, page=1)) }}">Show all</a></p>{% endif %}
 {{ lead_filter_form(params, dict(projects_all=projects_all, products_all=products_all, staff=staff, states=states, places=places, districts=districts), url_for('leads')) }}
 {{ lead_table(leads, params, sort, direction, 'leads', show_project=not project) }}
 {{ pager(page, pages, total, 'leads', params, per=per) }}

@@ -2,7 +2,7 @@
 {% block title %}{{ 'Edit organization' if org else 'New client organization' }}{% endblock %}
 {% block content %}
 <h1>{{ 'Edit ' ~ org.name if org else 'New client organization' }}</h1>
-<form method="post" class="card form narrow">
+<form method="post" class="card form narrow" enctype="multipart/form-data">
   {{ csrf() }}
   <fieldset>
     <legend>Organization</legend>
@@ -25,6 +25,21 @@
     {% if org %}<label class="check"><input type="checkbox" name="wa_templates_allowed" value="1" {{ 'checked' if org.wa_templates_allowed }}> WhatsApp templates included in this client's plan</label>
     <label class="check"><input type="checkbox" name="catalog_allowed" value="1" {{ 'checked' if org.catalog_allowed }}> Digital catalogue included in this client's plan</label>{% endif %}
   </fieldset>
+  {% if org and org.kind != 'agency' %}
+  <fieldset>
+    <legend>🎨 Client brand</legend>
+    {% if org.brand_logo %}<p><img src="{{ url_for('media', name=org.brand_logo) }}" alt="" style="width:56px;height:56px;object-fit:contain;border:1px solid #e5e7eb;border-radius:8px"></p>{% endif %}
+    <label>Logo<input type="file" name="brand_logo" accept="image/*"></label>
+    {% if org.brand_logo %}<label class="check"><input type="checkbox" name="remove_brand_logo" value="1"> Remove this logo</label>{% endif %}
+    <div class="row-2">
+      <label>Brand colour<input type="color" name="brand_color" value="{{ org.brand_color or '#4f46e5' }}"></label>
+      <div><label class="check"><input type="checkbox" name="brand_color_auto" value="1"> Take the colour from the logo</label>
+        {% if org.brand_color %}<label class="check"><input type="checkbox" name="brand_color_off" value="1"> Use the standard colours</label>{% endif %}</div>
+    </div>
+    <p class="small">Login link: <a href="{{ url_for('org_login', code=org.code|lower, _external=True) }}" target="_blank" rel="noopener">{{ url_for('org_login', code=org.code|lower, _external=True) }}</a></p>
+    <p><a class="btn btn-sm" href="{{ url_for('admin_org_options', oid=org.id) }}">⚙️ Dropdown options for this client</a></p>
+  </fieldset>
+  {% endif %}
   {% if not org %}
   <fieldset>
     <legend>First Organization Admin account</legend>

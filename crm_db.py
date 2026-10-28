@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -871,9 +871,29 @@ def _migrate_v12(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_push_org ON push_subscriptions(org_id)")
 
 
+def _migrate_v13(conn):
+    """Per-client dropdown options (lead status, possibility, priority, source) and client branding."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS org_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        kind TEXT NOT NULL,
+        value TEXT NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0,
+        hidden INTEGER NOT NULL DEFAULT 0,
+        stage TEXT,
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_org_options ON org_options(org_id, kind, sort)")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)")}
+    if "brand_logo" not in cols:
+        conn.execute("ALTER TABLE organizations ADD COLUMN brand_logo TEXT")
+    if "brand_color" not in cols:
+        conn.execute("ALTER TABLE organizations ADD COLUMN brand_color TEXT")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13)]
 
 
 def migrate(db_path):

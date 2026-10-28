@@ -83,7 +83,7 @@
     <h2>Quick update</h2>
     <form method="post" action="{{ url_for('lead_quick_status', lid=lead.id) }}" class="form">
       {{ csrf() }}
-      <label>Status<select name="status">{% for s in LEAD_STATUSES %}<option {{ 'selected' if lead.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Status<select name="status">{% for s in with_current(LEAD_STATUSES, lead.status) %}<option {{ 'selected' if lead.status == s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Add a note (call summary, next step…)<textarea name="note" rows="2"></textarea></label>
       <button class="btn btn-primary">Save</button>
     </form>

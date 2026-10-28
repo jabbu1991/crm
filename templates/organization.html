@@ -12,6 +12,25 @@
     <label>Email<input type="email" name="email" value="{{ org.email or '' }}"></label>
   </div>
   <label>Address<textarea name="address" rows="2">{{ org.address or '' }}</textarea></label>
+  {% set ob = client_brand %}
+  {% if org.kind != 'agency' %}
+  <fieldset>
+    <legend>🎨 Your brand</legend>
+    <p class="muted small">Your logo and colour are shown at the top for everyone in {{ org.name }}, on your own login link and on the phone Home Screen app.</p>
+    {% if ob %}<div class="brand-preview" style="background: {{ ob.palette.topbar if ob.palette else '#111827' }}">{% if ob.logo %}<img src="{{ url_for('media', name=ob.logo) }}" alt="">{% endif %}{{ ob.name }}</div>{% endif %}
+    <label>Logo <small>(square works best; it is made small automatically)</small><input type="file" name="brand_logo" accept="image/*"></label>
+    {% if org.brand_logo %}<label class="check"><input type="checkbox" name="remove_brand_logo" value="1"> Remove this logo</label>{% endif %}
+    <div class="row-2">
+      <label>Brand colour<input type="color" name="brand_color" value="{{ org.brand_color or '#4f46e5' }}"></label>
+      <div>
+        <label class="check"><input type="checkbox" name="brand_color_auto" value="1"> Take the colour from the logo</label>
+        {% if org.brand_color %}<label class="check"><input type="checkbox" name="brand_color_off" value="1"> Use the standard colours</label>{% endif %}
+      </div>
+    </div>
+    {% if org.kind != 'agency' %}<p class="small">Your login link: <a href="{{ url_for('org_login', code=org.code|lower, _external=True) }}" target="_blank" rel="noopener">{{ url_for('org_login', code=org.code|lower, _external=True) }}</a> — give this to your staff.</p>{% endif %}
+  </fieldset>
+  {% endif %}
+  <p><a class="btn btn-sm" href="{{ url_for('org_options_settings') }}">⚙️ Dropdown options (status, source, priority…)</a></p>
   {% if org.wa_templates_allowed %}
   <label class="check"><input type="checkbox" name="wa_templates_on" value="1" {{ 'checked' if org.wa_templates_on }}> Use WhatsApp templates in this organization</label>
   <p class="muted small">When off, WhatsApp buttons send only "Hi &lt;name&gt;,". Each user can also switch templates off for themselves in My Account.</p>

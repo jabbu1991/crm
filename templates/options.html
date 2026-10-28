@@ -1,0 +1,61 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Dropdown options{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Dropdown options{% if is_super() and org.id != g.org.id %} · {{ org.name }}{% endif %}</h1>
+  <div class="actions"><a class="btn" href="{{ back_url }}">← Back</a></div>
+</div>
+<p class="muted">Choose what the lead dropdowns show for <b>{{ org.name }}</b>. Changes apply only to this organization.
+  <b>Rename</b> also changes the name on existing leads. <b>Hide</b> removes an option from the dropdowns, but leads that
+  already have it keep it. Use ↑ ↓ to change the order.</p>
+
+{% for kind, (label, _) in KINDS.items() %}
+<section class="card opt-card" id="{{ kind }}">
+  <h2>{{ label }}{% if not lists[kind][0].custom %} <small class="muted">(standard list)</small>{% endif %}</h2>
+  {% if kind == 'status' %}<p class="small muted">For each status choose its kind, so the dashboard counts it right:
+    <b>Won ✅</b> = converted / ordered, <b>Lost ❌</b> = not interested / lost, <b>New</b> = fresh lead, <b>Open</b> = still working.</p>{% endif %}
+  {% if kind == 'buying_possibility' %}<p class="small muted">The first option is counted as the top possibility on the dashboard.</p>{% endif %}
+  {% if not viewing %}
+  <form method="post" class="opt-form">{{ csrf() }}<input type="hidden" name="kind" value="{{ kind }}">
+    <div class="opt-rows">
+      {% for o in lists[kind] %}
+      <div class="opt-row {{ 'is-hidden' if o.hidden }}">
+        <span class="opt-move"><button type="button" class="btn btn-sm" data-up title="Move up">↑</button><button type="button" class="btn btn-sm" data-down title="Move down">↓</button></span>
+        <input type="hidden" name="orig" value="{{ o.value }}">
+        <input name="value" value="{{ o.value }}" maxlength="40" required aria-label="Name">
+        {% if kind == 'status' %}<select name="stage" aria-label="Kind">{% for k, l in STAGES.items() %}<option value="{{ k }}" {{ 'selected' if o.stage == k }}>{{ l }}</option>{% endfor %}</select>{% endif %}
+        <select name="show" class="opt-show" aria-label="Show or hide"><option value="1" {{ 'selected' if not o.hidden }}>Shown</option><option value="0" {{ 'selected' if o.hidden }}>Hidden</option></select>
+        <span class="small muted opt-used">{{ o.used }} lead{{ 's' if o.used != 1 }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-sm" data-add>+ Add option</button>
+      <button class="btn btn-primary">Save {{ label|lower }}</button>
+      {% if lists[kind][0].custom %}<button class="btn btn-sm" name="reset" value="1" onclick="return confirm('Go back to the standard list? Leads keep their values.')">Reset to standard</button>{% endif %}
+    </div>
+  </form>
+  {% else %}
+  <p>{% for o in lists[kind] %}<span class="chip">{{ o.value }}{% if o.hidden %} (hidden){% endif %}</span> {% endfor %}</p>
+  {% endif %}
+</section>
+{% endfor %}
+<template id="opt-new-status"><div class="opt-row"><span class="opt-move"><button type="button" class="btn btn-sm" data-up>↑</button><button type="button" class="btn btn-sm" data-down>↓</button></span><input type="hidden" name="orig" value=""><input name="value" maxlength="40" placeholder="New option" aria-label="Name"><select name="stage" aria-label="Kind">{% for k, l in STAGES.items() %}<option value="{{ k }}" {{ 'selected' if k == 'open' }}>{{ l }}</option>{% endfor %}</select><select name="show" class="opt-show"><option value="1">Shown</option><option value="0">Hidden</option></select><button type="button" class="btn btn-sm" data-remove title="Remove">✕</button></div></template>
+<template id="opt-new"><div class="opt-row"><span class="opt-move"><button type="button" class="btn btn-sm" data-up>↑</button><button type="button" class="btn btn-sm" data-down>↓</button></span><input type="hidden" name="orig" value=""><input name="value" maxlength="40" placeholder="New option" aria-label="Name"><select name="show" class="opt-show"><option value="1">Shown</option><option value="0">Hidden</option></select><button type="button" class="btn btn-sm" data-remove title="Remove">✕</button></div></template>
+<script>
+document.querySelectorAll(".opt-form").forEach(function (f) {
+  var rows = f.querySelector(".opt-rows"), kind = f.elements.kind.value;
+  f.addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var row = b.closest(".opt-row");
+    if (b.hasAttribute("data-up") && row.previousElementSibling) rows.insertBefore(row, row.previousElementSibling);
+    if (b.hasAttribute("data-down") && row.nextElementSibling) rows.insertBefore(row.nextElementSibling, row);
+    if (b.hasAttribute("data-remove")) row.remove();
+    if (b.hasAttribute("data-add")) {
+      var t = document.getElementById(kind === "status" ? "opt-new-status" : "opt-new");
+      rows.appendChild(t.content.cloneNode(true)); rows.lastElementChild.querySelector("input[name=value]").focus();
+    }
+  });
+  f.addEventListener("change", function (e) { if (e.target.classList.contains("opt-show")) e.target.closest(".opt-row").classList.toggle("is-hidden", e.target.value !== "1"); });
+});
+</script>
+{% endblock %}

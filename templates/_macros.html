@@ -33,7 +33,7 @@
 {% macro quick_select(l, field, options, allow_blank=True, prefix='', fid='q') -%}
 <select class="quick badge {{ (prefix ~ (l[field] or 'none'))|badge }}" name="{{ field }}" form="{{ fid }}{{ l.id }}" onchange="this.form.submit()" title="Change and it saves">
   {% if allow_blank %}<option value="">—</option>{% endif %}
-  {% for o in options %}<option {{ 'selected' if l[field] == o }}>{{ o }}</option>{% endfor %}
+  {% for o in with_current(options, l[field]) %}<option {{ 'selected' if l[field] == o }}>{{ o }}</option>{% endfor %}
 </select>
 {%- endmacro %}
 

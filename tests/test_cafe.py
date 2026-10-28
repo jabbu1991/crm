@@ -1056,11 +1056,12 @@ def test_orders_page_alert_tools(cw):
 def test_home_screen_app_files(cw):
     b = cw["cafe"]
     page = b.get("/cafe/orders").text
-    assert "manifest.webmanifest" in page and "apple-touch-icon" in page and "sound-btn" in page
-    m = b.get(re.search(r'href="(/static/manifest\.webmanifest[^"]*)"', page).group(1))
-    data = json.loads(m.data)
-    assert data["display"] == "standalone" and len(data["icons"]) == 2
+    assert "/chai/app.webmanifest" in page and "apple-touch-icon" in page and "sound-btn" in page
+    data = json.loads(b.get("/chai/app.webmanifest").data)
+    assert data["display"] == "standalone" and len(data["icons"]) == 2 and data["name"] == "Chai Point"
+    assert data["start_url"] == "/chai"
     assert b.get("/static/icon-512.png").status_code == 200
+    assert "manifest.webmanifest" in Browser().get("/login").text      # Real View app before login
 
 
 def test_push_reminders_until_handled(cw, monkeypatch):

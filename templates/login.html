@@ -1,12 +1,19 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% block title %}Log in{% endblock %}
 {% block content %}
 <div class="auth-card">
+  {% if client_brand %}
+  {% if client_brand.logo %}<img class="auth-logo client-logo" src="{{ url_for('media', name=client_brand.logo) }}" alt="{{ client_brand.name }}">{% endif %}
+  <h1>{{ client_brand.name }}</h1>
+  <p class="muted">Log in with your account.</p>
+  {% else %}
   <img class="auth-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="{{ brand.company }}">
   <h1>{{ brand.product.rsplit(' ', 1)[0] }}<span class="accent">{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></h1>
   <p class="byline">by {{ brand.company }}</p>
   <p class="muted">Log in with your own account. You'll be taken to your organization's workspace.</p>
-  <form method="post" class="form">
+  {% endif %}
+  <form method="post" class="form" action="{{ url_for('login', next=request.args.get('next')) if client_brand else '' }}">
     {{ csrf() }}
+    {% if client_brand %}<input type="hidden" name="brand_code" value="{{ client_brand.code }}">{% endif %}
     <label>Username or email<input name="username" required autofocus value="{{ request.form.username }}" autocomplete="username"></label>
     <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
     <button class="btn btn-primary">Log in</button>

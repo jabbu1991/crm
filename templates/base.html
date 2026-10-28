@@ -3,23 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{{ brand.product }}{% endblock %} · {{ g.org.name if g.org else brand.product }}</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
-  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  {% set cb = client_brand %}
+  <title>{% block title %}{{ brand.product }}{% endblock %} · {{ cb.name if cb else (g.org.name if g.org else brand.product) }}</title>
+  {% if cb and cb.logo %}<link rel="icon" href="{{ url_for('media', name=cb.logo) }}" type="image/jpeg">
+  <link rel="apple-touch-icon" href="{{ url_for('org_icon', code=cb.code, size=180) }}">
+  {% else %}<link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">{% endif %}
+  <link rel="manifest" href="{{ url_for('org_manifest', code=cb.code) if cb else url_for('static', filename='manifest.webmanifest') }}">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Real View">
-  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-title" content="{{ cb.name[:20] if cb else 'Real View' }}">
+  <meta name="theme-color" content="{{ cb.palette.topbar if cb and cb.palette else '#111827' }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% if cafe_mode %}<link rel="stylesheet" href="{{ url_for('static', filename='cafe.css') }}">{% endif %}
+  {% if cb and cb.palette %}<style>:root { --primary: {{ cb.palette.primary }}; --primary-dark: {{ cb.palette.primary_dark }}; } .topbar { background: {{ cb.palette.topbar }}; }</style>{% endif %}
 </head>
 <body class="{{ 'cafe-ui' if cafe_mode }}">
 {% if g.user %}
 {% set ep = request.endpoint or '' %}
 <header class="topbar">
+  {% if cb %}
+  <a class="brand client-brand" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ cb.name }}">{% if cb.logo %}<img class="brand-logo client-logo" src="{{ url_for('media', name=cb.logo) }}" alt="">{% endif %}<span class="client-name">{{ cb.name }}</span></a>
+  {% else %}
   <a class="brand" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ brand.product }} by {{ brand.company }}"><img class="brand-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
-  <a class="orgname" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ g.org.name }}: dashboard">
+  {% endif %}
+  <a class="orgname{{ ' orgname-hidden' if cb }}" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ g.org.name }}: dashboard">
     <span class="org-badge"><span class="org-initial">{{ (g.org.name or '?')[:1]|upper }}</span><span class="org-text">{{ g.org.name }}</span></span>{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
   </a>
   {% if app_type == 'both' and not g.user.must_change_password %}
@@ -52,7 +60,7 @@
   {% if can('settings_edit') %}<a href="{{ url_for('cafe.settings') }}" class="{{ 'active' if ep == 'cafe.settings' }}">Settings</a>
   <a href="{{ url_for('cafe.design') }}" class="{{ 'active' if ep == 'cafe.design' }}">🎨 Menu Design</a>{% endif %}
   {% if is_admin() or can('staff_manage') %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') }}">Client Organizations</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password %}
 <nav class="mainnav">
@@ -74,7 +82,8 @@
   <a href="{{ url_for('recycle_bin') }}" class="{{ 'active' if ep == 'recycle_bin' }}">🗑 Recycle Bin</a>
   {% endif %}
   {% if is_super() %}
-  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') }}">Client Organizations</a>
+  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' }}">Client Organizations</a>
+  <a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a>
   {% endif %}
 </nav>
 {% endif %}
@@ -92,7 +101,8 @@
   {% block content %}{% endblock %}
 </main>
 <footer class="site-footer">
-  {{ brand.product }} · a product of {% if brand.website %}<a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.company }}</a>{% else %}{{ brand.company }}{% endif %}
+  {% if cb %}Powered by {% if brand.website %}<a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.product }}</a>{% else %}{{ brand.product }}{% endif %}
+  {% else %}{{ brand.product }} · a product of {% if brand.website %}<a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.company }}</a>{% else %}{{ brand.company }}{% endif %}{% endif %}
 </footer>
 {% if cafe_mode and can('orders_online') %}
 <script>

@@ -6,6 +6,7 @@
 {% if is_super() and not viewing %}
 <section class="card super-card">
   <h2>Agency control panel <a class="small" href="{{ url_for('admin_orgs') }}">Manage client organizations →</a></h2>
+  {% if disk_pct and disk_pct >= 70 %}<a class="flash flash-error" style="display:block" href="{{ url_for('admin_server') }}">⚠️ Server disk is {{ disk_pct }}% full — see Server status →</a>{% endif %}
   <div class="stats compact-stats">
     <div class="stat"><b>{{ orgs|selectattr('status', 'equalto', 'Active')|list|length }}</b><span>Active organizations</span></div>
     <div class="stat"><b>{{ orgs|selectattr('kind', 'equalto', 'client')|list|length }}</b><span>Client accounts</span></div>
@@ -38,11 +39,11 @@
 
 <div class="stats">
   <a class="stat" href="{{ url_for('leads') }}"><b>{{ stats.total }}</b><span>{{ 'My leads' if mine else 'Total leads' }}</span></a>
-  <a class="stat" href="{{ url_for('leads', status='New') }}"><b>{{ stats.new }}</b><span>{{ 'My new' if mine else 'New' }} leads</span></a>
+  <a class="stat" href="{{ url_for('leads', outcome='new') }}"><b>{{ stats.new }}</b><span>{{ 'My new' if mine else 'New' }} leads</span></a>
   <a class="stat stat-warn" href="{{ url_for('followups') }}"><b>{{ stats.followups_due }}</b><span>Follow-ups due</span></a>
-  <a class="stat" href="{{ url_for('leads', possibility='High') }}"><b>{{ stats.high }}</b><span>High buying possibility</span></a>
-  <a class="stat stat-good" href="{{ url_for('leads', status='Converted') }}"><b>{{ stats.converted }}</b><span>Converted</span></a>
-  <a class="stat stat-muted" href="{{ url_for('leads', status='Lost') }}"><b>{{ stats.lost }}</b><span>Lost / not interested</span></a>
+  <a class="stat" href="{{ url_for('leads', possibility=TOP_POSSIBILITY) }}"><b>{{ stats.high }}</b><span>{{ TOP_POSSIBILITY }} buying possibility</span></a>
+  <a class="stat stat-good" href="{{ url_for('leads', outcome='won') }}"><b>{{ stats.converted }}</b><span>Converted / won</span></a>
+  <a class="stat stat-muted" href="{{ url_for('leads', outcome='lost') }}"><b>{{ stats.lost }}</b><span>Lost / not interested</span></a>
   <div class="stat"><b>{{ stats.today_added }}</b><span>Added today</span></div>
 </div>
 
