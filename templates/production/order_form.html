@@ -69,6 +69,16 @@
     {% if order and pcan('maker') and order.maker_id %}<label>Amount to the maker (₹) <small class="muted">optional</small><input name="maker_amount" inputmode="decimal" value="{{ paise(d.maker_amount) }}"></label>{% endif %}
   </fieldset>
   {% endif %}
+  {% if old_delivery and not order %}
+  <fieldset>
+    <legend>👷 Who made it? <small class="muted">(optional — counts in the maker's month of the bill date)</small></legend>
+    <div class="row-3">
+      <label>Maker<select name="maker_id"><option value="">—</option>{% for m in makers %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
+      <label>or a new maker<input name="new_maker" placeholder="Name"></label>
+      {% if pcan('maker') %}<label>Amount paid to the maker (₹)<input name="maker_amount" inputmode="decimal" value="{{ paise(d.maker_amount) }}"></label>{% endif %}
+    </div>
+  </fieldset>
+  {% endif %}
   {% if st.warranty and st.parts and (pcan('warranty') or not order) %}
   <fieldset>
     <legend>Parts with their own company warranty <small class="muted">(e.g. motor, pump)</small></legend>

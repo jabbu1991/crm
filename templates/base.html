@@ -47,6 +47,8 @@
   {% if pcan('view') %}<a href="{{ url_for('prod.orders') }}" class="{{ 'active' if ep in ('prod.orders', 'prod.order_view', 'prod.order_edit', 'prod.order_move') }}">📋 Orders</a>{% endif %}
   {% if pcan('edit') and not viewing %}<a href="{{ url_for('prod.order_new') }}" class="nav-cta {{ 'active' if ep == 'prod.order_new' }}">+ New Order</a>{% endif %}
   {% if pcan('maker') %}<a href="{{ url_for('prod.makers') }}" class="{{ 'active' if ep == 'prod.makers' }}">👷 Makers</a>{% endif %}
+  {% if is_admin() %}<a href="{{ url_for('prod.takers') }}" class="{{ 'active' if ep in ('prod.takers', 'prod.taker_page') }}">🧑‍💼 Order takers</a>
+  {% else %}<a href="{{ url_for('prod.taker_page', uid=g.user.id) }}" class="{{ 'active' if ep == 'prod.taker_page' }}">🧑‍💼 My orders</a>{% endif %}
   {% if pcan('settings') %}<a href="{{ url_for('prod.products') }}" class="{{ 'active' if ep in ('prod.products', 'prod.product_edit') }}">Products</a>{% endif %}
   {% if pcan('view') %}<a href="{{ url_for('prod.warranty') }}" class="{{ 'active' if ep == 'prod.warranty' }}">🛡 Warranty</a>
   <a href="{{ url_for('prod.customers') }}" class="{{ 'active' if ep in ('prod.customers', 'prod.customer_view') }}">Customers &amp; Points</a>{% endif %}
@@ -86,6 +88,7 @@
   <a href="{{ url_for('states') }}" class="{{ 'active' if ep in ('states', 'state_view') }}">State-wise Leads</a>
   <a href="{{ url_for('product_leads') }}" class="{{ 'active' if ep in ('product_leads', 'product_lead_list') }}">Product-wise Leads</a>
   <a href="{{ url_for('followups') }}" class="{{ 'active' if ep == 'followups' }}">Follow-ups</a>
+  {% if has_prod and not is_admin() and 'prod' not in my_modules %}<a href="{{ url_for('prod.taker_page', uid=g.user.id) }}" class="{{ 'active' if ep == 'prod.taker_page' }}">📦 My orders</a>{% endif %}
   <a href="{{ url_for('export_page') }}" class="{{ 'active' if ep.startswith('export') }}">Export</a>
   <a href="{{ url_for('wa_templates') }}" class="{{ 'active' if ep.startswith('wa_template') }}">WhatsApp Templates</a>
   {% if is_admin() %}

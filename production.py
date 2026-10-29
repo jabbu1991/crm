@@ -434,6 +434,18 @@ FIRST_ADV = "(SELECT MIN(a.pay_date) FROM prod_advances a WHERE a.order_id = o.i
 QUEUE_ORDER = f"(o.pinned_at IS NULL), o.pinned_at, ({FIRST_ADV} IS NULL), {FIRST_ADV}, o.order_date, o.id"
 
 
+def done_date(o):
+    """The day production finished, for the maker's month: set by hand -> that day; otherwise the earlier of the day it
+    reached Ready for Dispatch and the GST bill date (an old order entered today still counts in its bill month)."""
+    fin = to_date(o["finished_at"])
+    if fin and o["finished_manual"]:
+        return fin
+    bill = to_date(o["bill_date"])
+    if fin and bill:
+        return min(fin, bill)
+    return fin or (bill if o["maker_id"] else None)
+
+
 def order_days(o):
     st = get_settings()
     return o["prod_days"] if o["prod_days"] else st["default_days"]
@@ -868,7 +880,9 @@ def form_context(d, order=None, old_delivery=False, parts=None, advances=None):
     prods = H.query("""SELECT id, name, category, prod_days, warranty_months FROM products WHERE org_id = ? AND
                        (active = 1 OR id = ?) ORDER BY name COLLATE NOCASE""", (oid, d.get("product_id") or 0))
     users = H.query("SELECT id, name FROM users WHERE org_id = ? AND active = 1 ORDER BY name COLLATE NOCASE", (oid,))
+    makers_ = H.query("SELECT id, name FROM prod_makers WHERE org_id = ? AND active = 1 ORDER BY name", (oid,))
     return dict(d=d, order=order, old_delivery=old_delivery, products=prods, users=users, st=get_settings(),
+                makers=makers_,
                 parts=parts if parts is not None else d.get("parts", []),
                 advances=advances if advances is not None else d.get("advances", []),
                 MACHINE_TYPES=MACHINE_TYPES, POWER_SOURCES=POWER_SOURCES,
@@ -896,7 +910,11 @@ def order_new():
             if not old_delivery:
                 d.update(bill_no="", bill_date="", delivered_date="")
             parts_given = bool(d["parts"])
-            new_id = create_order(db, H.org_id(), dict(d, maker_amount=None), imported=old_delivery, ts=ts,
+            extra = {"maker_amount": None}
+            if old_delivery:
+                extra = {"maker_id": maker_from_form(db, ts),
+                         "maker_amount": d["maker_amount"] if can("maker") else None}
+            new_id = create_order(db, H.org_id(), dict(d, **extra), imported=old_delivery, ts=ts,
                                   note="Old delivery added by hand" if old_delivery else "Order created")
             save_children(db, new_id, d, ts, parts=parts_given)
             db.commit()
@@ -986,7 +1004,7 @@ def order_view(order_id):
                            nxt_form=needs_form(o, nxt), link=link, wa=wa_url(o["cust_wa"] or o["cust_phone"],
                                                                               wa_track_text(o)),
                            w=warranty_info(o, parts), st=get_settings(), makers=makers, ph=phase(o),
-                           pending=details_pending(o), adv_total=sum(a["amount"] for a in advances),
+                           pending=details_pending(o), adv_total=sum(a["amount"] for a in advances), done=done_date(o),
                            mk=marks_of(o["set_id"]))
 
 
@@ -1066,8 +1084,10 @@ def order_move(order_id):
         done_stage = mk.get("ready") or mk["dispatch"]
         if target["sort"] >= done_stage["sort"] and (o["stage_sort"] < done_stage["sort"] or not o["finished_at"]):
             sets["finished_at"] = ts   # production finished: counts in this month for the maker
+            sets["finished_manual"] = 0
         elif target["sort"] < done_stage["sort"]:
             sets["finished_at"] = None
+            sets["finished_manual"] = 0
         if prod_stage is not None and target["sort"] >= prod_stage["sort"]:
             sets.update(pinned_at=None, pinned_by=None)   # out of the queue: the 📌 is no longer needed
         if target["sort"] >= mk["delivered"]["sort"] and not o["delivered_date"]:
@@ -1197,6 +1217,95 @@ def order_pin(order_id):
     return redirect(url_for("prod.order_view", order_id=order_id))
 
 
+@bp.route("/production/orders/<int:order_id>/finished", methods=["POST"])
+@prod_view("maker")
+def order_finished(order_id):
+    """Change the day production finished by hand (for the maker's monthly count)."""
+    o = get_order(None, order_id)
+    day = H.valid_date(clean(request.form.get("finished"), 10))
+    if not day:
+        flash("Choose a valid date.", "error")
+    else:
+        db = H.get_db()
+        db.execute("UPDATE prod_orders SET finished_at = ?, finished_manual = 1, updated_by = ?, updated_at = ? WHERE id = ?",
+                   (day, g.user["id"], _now(), order_id))
+        log(db, order_id, o["stage_name"], f"Production finished date set to {day[8:10]}-{day[5:7]}-{day[:4]}")
+        db.commit()
+        flash("Production finished date saved.", "success")
+    return redirect(url_for("prod.order_view", order_id=order_id))
+
+
+# ---------------------------------------------------------------- order takers (who took the order)
+
+def taker_view(view):
+    """Any logged-in person of an organization with Production: Admin sees everyone, staff see only themselves."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        def inner():
+            if not has_prod():
+                abort(404)
+            ensure_setup(H.org_id())
+            return view(*args, **kwargs)
+        return H.login_required(inner)()
+    return wrapped
+
+
+def last_months(n=12):
+    t = today_date()
+    out, y, mo = [], t.year, t.month
+    for _ in range(n):
+        out.append(f"{y:04d}-{mo:02d}")
+        mo -= 1
+        if mo == 0:
+            y, mo = y - 1, 12
+    return out
+
+
+@bp.route("/production/order-takers")
+@taker_view
+def takers():
+    if not H.is_admin():
+        return redirect(url_for("prod.taker_page", uid=g.user["id"]))
+    oid = H.org_id()
+    this_m = today()[:7]
+    rows = H.query("""SELECT u.id, u.name, u.designation, u.active,
+                        (SELECT COUNT(*) FROM prod_orders o WHERE o.taken_by = u.id AND o.status = 'active') total,
+                        (SELECT COUNT(*) FROM prod_orders o WHERE o.taken_by = u.id AND o.status = 'active'
+                           AND substr(o.order_date, 1, 7) = ?) this_month
+                      FROM users u WHERE u.org_id = ? ORDER BY total DESC, u.name COLLATE NOCASE""", (this_m, oid))
+    return render_template("production/takers.html", rows=[r for r in rows if r["total"] or r["active"]],
+                           this_m=this_m)
+
+
+@bp.route("/production/order-takers/<int:uid>")
+@taker_view
+def taker_page(uid):
+    """One person: orders taken per month (by order date, no amounts) and, for a month, which orders."""
+    if not H.is_admin() and uid != g.user["id"]:
+        abort(403)
+    oid = H.org_id()
+    u = H.query("SELECT id, name, designation FROM users WHERE id = ? AND org_id = ?", (uid, oid), one=True) or abort(404)
+    rows = order_rows(oid, "AND o.taken_by = ? AND o.status = 'active'", (uid,), order_by="o.order_date DESC, o.id DESC")
+    months = last_months()
+    table = {k: {"month": k, "orders": 0, "delivered": 0} for k in months}
+    delivered = 0
+    for o in rows:
+        k = (o["order_date"] or "")[:7]
+        dl = phase(o) == "delivered"
+        delivered += dl
+        if k in table:
+            table[k]["orders"] += 1
+            table[k]["delivered"] += dl
+    month = request.args.get("month") or ""
+    items = rows
+    if re.fullmatch(r"\d{4}-\d{2}", month):
+        items = [o for o in rows if (o["order_date"] or "")[:7] == month]
+    else:
+        month = ""
+    return render_template("production/taker.html", u=u, table=[table[k] for k in months], items=items,
+                           total=len(rows), delivered=delivered, month=month, phase=phase)
+
+
 # ---------------------------------------------------------------- makers
 
 @bp.route("/production/makers", methods=["GET", "POST"])
@@ -1259,7 +1368,7 @@ def maker_view(mid):
     items = []
     for o in rows:
         ph = phase(o)
-        fin = to_date(o["finished_at"])
+        fin = done_date(o)
         if ph == "working":
             making += 1
         if fin:

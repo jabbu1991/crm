@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Order takers{% endblock %}
+{% block content %}
+<h1>🧑‍💼 Order takers</h1>
+<p class="muted">Who took the orders ("Order taken by"). Tap a name to see the orders month by month. Staff see only their own page.</p>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Name</th><th class="num">This month</th><th class="num">All orders</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr class="{{ 'inactive' if not r.active }}"><td><a href="{{ url_for('prod.taker_page', uid=r.id) }}"><b>{{ r.name }}</b></a>{% if r.designation %}<div class="small muted">{{ r.designation }}</div>{% endif %}</td>
+    <td class="num"><b>{{ r.this_month }}</b></td><td class="num">{{ r.total }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">No orders yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

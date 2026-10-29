@@ -78,7 +78,7 @@ def stage_id(W, code, name):
 def test_migration_keeps_modules_and_production_starts_off(pw):
     c = pw["db"]()
     rows = {r["code"]: r for r in c.execute("SELECT * FROM organizations")}
-    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 15
+    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 16
     assert rows["STAR"]["mod_crm"] == 1 and rows["STAR"]["mod_prod"] == 1 and rows["STAR"]["mod_cafe"] == 0
     assert rows["ONLY"]["mod_prod"] == 0 and rows["ONLY"]["app_type"] == "crm"
     assert rows["FACT"]["mod_crm"] == 0 and rows["FACT"]["mod_prod"] == 1
@@ -518,3 +518,56 @@ def test_maker_page_counts_month_production_finished(pw):
     star.post(f"/production/orders/{ids[1]}/move", {"to": stage_id(pw, "STAR", "In Production")})
     assert orders(pw, "STAR")[1]["finished_at"] is None
     assert star.get("/production/makers").text.count(f"/production/makers/{mid}") >= 1
+
+
+# ---------------------------------------------------------------- round 3: maker month by bill date, order takers
+
+def test_old_order_counts_in_bill_month_and_date_can_be_set(pw):
+    star = pw["star"]
+    star.post("/production/orders/new", {"name": "Late Entry", "phone": "9000001001", "product_name": "Pump"})
+    oid_ = orders(pw, "STAR")[0]["id"]
+    star.post(f"/production/orders/{oid_}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
+                                                  "new_maker": "Babu", "maker_amount": "2500"})
+    star.post(f"/production/orders/{oid_}/move", {"to": stage_id(pw, "STAR", "Ready for Dispatch")})
+    star.post(f"/production/orders/{oid_}/move", {"to": stage_id(pw, "STAR", "Dispatch"), "confirm": "1",
+                                                  "bill_no": "OLD-77", "bill_date": "2026-03-18"})
+    mid = orders(pw, "STAR")[0]["maker_id"]
+    assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month=2026-03").text
+    assert "<b>#1</b>" not in star.get(f"/production/makers/{mid}?month={date.today().isoformat()[:7]}").text
+    # set by hand wins
+    star.post(f"/production/orders/{oid_}/finished", {"finished": "2026-02-10"})
+    assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month=2026-02").text
+    # old delivery by hand with a maker counts in the bill month
+    r = star.post("/production/orders/new", {"old": "1", "name": "Old Hand", "phone": "9000001002", "product_name": "Gate",
+                                             "bill_no": "OLD-78", "bill_date": "2026-01-05", "maker_id": str(mid),
+                                             "maker_amount": "1800"})
+    assert "Old delivery saved" in r.text
+    o = orders(pw, "STAR")[-1]
+    assert o["maker_id"] == mid and o["maker_amount"] == 180000
+    assert "<b>#2</b>" in star.get(f"/production/makers/{mid}?month=2026-01").text
+
+
+def test_order_taker_pages(pw):
+    star = pw["star"]
+    sales = make_staff(star, "sales9")                       # CRM only, no production ticks
+    sid = pw["db"]().execute("SELECT id FROM users WHERE username = 'sales9'").fetchone()[0]
+    aid = pw["db"]().execute("SELECT id FROM users WHERE username = 'star_admin'").fetchone()[0]
+    star.post("/production/orders/new", {"name": "By Sales", "phone": "9000001101", "product_name": "Pump",
+                                         "taken_by": str(sid)})
+    star.post("/production/orders/new", {"name": "By Sales Old", "phone": "9000001102", "product_name": "Pump",
+                                         "taken_by": str(sid), "order_date": "2026-05-04"})
+    star.post("/production/orders/new", {"name": "By Admin", "phone": "9000001103", "product_name": "Pump",
+                                         "taken_by": str(aid)})
+    html = star.get("/production/order-takers").text
+    assert "Sales9" in html and "Order takers" in html
+    page = star.get(f"/production/order-takers/{sid}?month=2026-05").text
+    assert "By Sales Old" in page and "By Sales<" not in page and "₹" not in page
+    # staff: own page only (also from the CRM menu), never others'
+    assert "📦 My orders" in sales.get("/").text
+    mine = sales.get(f"/production/order-takers/{sid}").text
+    assert "By Sales" in mine and "By Admin" not in mine
+    assert sales.get(f"/production/order-takers/{aid}").status_code == 403
+    r = sales.get("/production/order-takers")
+    assert r.status_code == 302 and r.headers["Location"].endswith(f"/production/order-takers/{sid}")
+    # a CRM-only client has no such page
+    assert pw["only"].get("/production/order-takers").status_code == 404

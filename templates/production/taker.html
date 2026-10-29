@@ -1,0 +1,42 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, dmy with context %}
+{% block title %}{{ u.name }} · orders{% endblock %}
+{% block content %}
+{% set MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+<div class="page-head">
+  <h1>🧑‍💼 {{ 'My orders' if u.id == g.user.id and not is_admin() else u.name }}</h1>
+  {% if is_admin() %}<div class="actions"><a class="btn" href="{{ url_for('prod.takers') }}">← All order takers</a></div>{% endif %}
+</div>
+<div class="stats">
+  <div class="stat"><b>{{ total }}</b><span>Orders taken</span></div>
+  <div class="stat stat-good"><b>{{ delivered }}</b><span>Delivered</span></div>
+  <div class="stat stat-warn"><b>{{ total - delivered }}</b><span>Not delivered yet</span></div>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Month by month</h2>
+    <p class="small muted">Counted by the order taken date. Tap a month to see its orders.</p>
+    <table class="table compact month-table">
+      <thead><tr><th>Month</th><th class="num">Orders taken</th><th class="num">Delivered</th></tr></thead>
+      <tbody>
+      {% for r in table %}
+        <tr class="{{ 'on' if month == r.month }}">
+          <td><a href="{{ url_for('prod.taker_page', uid=u.id, month=r.month) }}">{{ MN[r.month[5:]|int - 1] }} {{ r.month[:4] }}</a></td>
+          <td class="num {{ 'zero' if not r.orders }}"><b>{{ r.orders }}</b></td>
+          <td class="num {{ 'zero' if not r.delivered }}">{{ r.delivered }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>{% if month %}Orders in {{ MN[month[5:]|int - 1] }} {{ month[:4] }} <a class="small" href="{{ url_for('prod.taker_page', uid=u.id) }}">Show all</a>{% else %}All orders{% endif %}</h2>
+    {% set can_open = 'prod' in my_modules %}
+    {% for o in items %}
+      {% if can_open %}<a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}">{% else %}<div class="run-row">{% endif %}
+        <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or '—' }}<span class="po-sub">Ordered {{ dmy(o.order_date) }}</span></span>
+        {{ stage_badge(o.stage_name, o.stage_mark) }}
+      {% if can_open %}</a>{% else %}</div>{% endif %}
+    {% else %}<p class="muted">No orders{{ ' in this month' if month }}.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

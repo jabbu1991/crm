@@ -58,7 +58,8 @@
       <dt>Address</dt><dd>{{ o.cust_address or '—' }}</dd>
       {% if st.referral %}<dt>Unit code</dt><dd><b>{{ o.unit_code }}</b> · {{ o.cust_points }} points</dd>
       {% if o.referral_code %}<dt>Referred by</dt><dd>{% if o.referrer_name %}{{ o.referrer_name }} ({{ o.referrer_code }}){% else %}{{ o.referral_code }} <span class="muted">(not found)</span>{% endif %}{{ ' · points given ✓' if o.points_given }}</dd>{% endif %}{% endif %}
-      <dt>Order date</dt><dd>{{ dmy(o.order_date) }} · taken by {{ o.taken_by_name or '—' }}</dd>
+      <dt>Order date</dt><dd>{{ dmy(o.order_date) }}</dd>
+      <dt>Order taken by</dt><dd>{% if o.taken_by and (is_admin() or o.taken_by == g.user.id) %}<a href="{{ url_for('prod.taker_page', uid=o.taken_by) }}">{{ o.taken_by_name or '—' }}</a>{% else %}{{ o.taken_by_name or '—' }}{% endif %}</dd>
       {% if o.approved_by %}<dt>Approved by</dt><dd>{{ o.approved_by }}</dd>{% endif %}
     </dl>
     <h2>Product</h2>
@@ -85,7 +86,13 @@
         <dt>Expected finish</dt><dd>{{ dmy(o.exp_finish) }}</dd>
         {% if pcan('maker') %}<dt>Amount to maker</dt><dd>{{ o.maker_amount|rs if o.maker_amount is not none else 'not entered' }}</dd>{% endif %}
         {% if o.maker_note %}<dt>Note</dt><dd>{{ o.maker_note }}</dd>{% endif %}
+        {% if done %}<dt>Production finished</dt><dd><b>{{ dmy(done) }}</b> <span class="small muted">(counts in {{ done.strftime('%b %Y') }} for {{ o.maker_name }}{{ ', set by hand' if o.finished_manual }})</span></dd>{% endif %}
       </dl>
+      {% if pcan('maker') and not viewing and (done or ph in ('ready', 'dispatched', 'delivered')) %}
+      <details><summary class="small">✏️ Change production finished date</summary>
+        <form method="post" action="{{ url_for('prod.order_finished', order_id=o.id) }}" class="inline-form">{{ csrf() }}
+          <input type="date" name="finished" value="{{ done.isoformat() if done else today }}" required><button class="btn btn-sm btn-prod">Save</button></form>
+      </details>{% endif %}
       {% if pcan('maker') and not viewing %}
       <details><summary class="small">Change maker / amount</summary>
         <form method="post" action="{{ url_for('prod.order_maker_amount', order_id=o.id) }}" class="form">{{ csrf() }}
