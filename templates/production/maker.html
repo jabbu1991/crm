@@ -1,0 +1,46 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, dmy with context %}
+{% block title %}{{ m.name }} · Maker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>👷 {{ m.name }}{% if not m.active %} <span class="badge b-inactive">hidden</span>{% endif %}</h1>
+  <div class="actions">{% if m.phone %}<a class="btn" href="tel:{{ m.phone }}">📞 {{ m.phone }}</a>{% endif %}<a class="btn" href="{{ url_for('prod.makers') }}">← All makers</a></div>
+</div>
+{% if m.work or m.note %}<p class="muted">{{ m.work or '' }}{{ ' · ' if m.work and m.note }}{{ m.note or '' }}</p>{% endif %}
+<div class="stats">
+  <div class="stat"><b>{{ total }}</b><span>All orders</span></div>
+  <div class="stat stat-warn"><b>{{ making }}</b><span>Making now</span></div>
+  <div class="stat stat-good"><b>{{ finished }}</b><span>Finished</span></div>
+  <div class="stat"><b>{{ total_amount|rs0 }}</b><span>Maker amount (finished)</span></div>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Month by month</h2>
+    <p class="small muted">An order counts in the month its production finished (reached Ready for Dispatch). Tap a month to see its orders.</p>
+    <table class="table compact month-table">
+      <thead><tr><th>Month</th><th class="num">Finished</th><th class="num">Maker amount</th><th class="num">Started</th></tr></thead>
+      <tbody>
+      {% for r in table %}
+        <tr class="{{ 'on' if month == r.month }}">
+          <td><a href="{{ url_for('prod.maker_view', mid=m.id, month=r.month) }}">{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][r.month[5:]|int - 1] }} {{ r.month[:4] }}</a></td>
+          <td class="num {{ 'zero' if not r.finished }}"><b>{{ r.finished }}</b></td>
+          <td class="num {{ 'zero' if not r.amount }}">{{ r.amount|rs0 }}</td>
+          <td class="num {{ 'zero' if not r.started }}">{{ r.started }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>{% if month %}Finished in {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month[5:]|int - 1] }} {{ month[:4] }} <a class="small" href="{{ url_for('prod.maker_view', mid=m.id) }}">Show all</a>{% else %}Orders{% endif %}</h2>
+    {% for i in items %}{% set o = i.o %}
+      <a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}">
+        <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or '—' }}
+          <span class="po-sub">Start {{ dmy(o.mfg_start) }}{% if i.fin %} · finished {{ dmy(i.fin) }}{% endif %}
+          {% if i.late_by is not none %}{% if i.late_by > 0 %} · <span class="w-exp">{{ i.late_by }} day{{ 's' if i.late_by != 1 }} late</span>{% elif i.fin %} · <span class="w-ok">on time</span>{% endif %}{% endif %}</span></span>
+        {% if not i.fin %}{{ stage_badge(o.stage_name, o.stage_mark) }}{% endif %}
+        <b>{{ o.maker_amount|rs0 if o.maker_amount is not none else '—' }}</b>
+      </a>
+    {% else %}<p class="muted">No orders{{ ' in this month' if month }}.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

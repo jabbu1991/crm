@@ -18,7 +18,7 @@
   <tbody>
   {% for m in rows %}
   <tr class="{{ 'inactive' if not m.active }}">
-    <td><b>{{ m.name }}</b>{% if m.note %}<div class="small muted">{{ m.note }}</div>{% endif %}</td>
+    <td><a href="{{ url_for('prod.maker_view', mid=m.id) }}"><b>{{ m.name }}</b></a>{% if m.note %}<div class="small muted">{{ m.note }}</div>{% endif %}</td>
     <td>{% if m.phone %}<a href="tel:{{ m.phone }}">{{ m.phone }}</a>{% endif %}</td><td>{{ m.work or '' }}</td>
     <td class="num">{{ working.get(m.id, 0) }}</td>
     <td class="num"><a href="{{ url_for('prod.orders', show='all', maker=m.id) }}">{{ m.orders }}</a></td>

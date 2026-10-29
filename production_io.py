@@ -158,6 +158,7 @@ def export_all():
     head = ["Order no", "Order date", "Customer", "Phone", "WhatsApp", "Address", "Unit code", "Product", "Category",
             "Machine type", "Power source", "Weight", "Quantity", "Unit price", "Advance received", "Details",
             "Stage", "Status", "Production days", "MFG start", "Expected finish / dispatch", "Late",
+            "Production finished", "First advance", "Moved to top (reason)",
             "Manufacturing in-charge"] + (["Maker amount"] if maker_ok else []) + [
             "GST bill no", "Bill date", "Warranty months", "Warranty ends", "Warranty days left", "Delivered date",
             "Order taken by", "Approved by", "Referral code used", "Imported (old delivery)", "Cancel reason", "Note",
@@ -173,7 +174,8 @@ def export_all():
                           o["weight"], o["quantity"], _rs(o["unit_price"]), _rs(adv.get(o["id"])), o["details"],
                           o["stage_name"], o["status"].title(), o["prod_days"], o["mfg_start"],
                           sc["finish"].isoformat() if sc.get("finish") else (o["exp_finish"] or ""),
-                          "Yes" if sc.get("late") else "", o["maker_name"]]
+                          "Yes" if sc.get("late") else "", (o["finished_at"] or "")[:10], o["first_adv"],
+                          o["pin_reason"] if o["pinned_at"] else "", o["maker_name"]]
                          + ([_rs(o["maker_amount"])] if maker_ok else [])
                          + [o["bill_no"], o["bill_date"], o["warranty_months"], w["end"].isoformat() if w else "",
                             w["left"] if w else "", o["delivered_date"], o["taken_by_name"], o["approved_by"],

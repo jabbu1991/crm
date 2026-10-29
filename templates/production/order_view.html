@@ -20,12 +20,24 @@
   {{ progress(stages, o.stage_id, reached) }}
   <div class="prod-when">
     {% if sched %}
-      {% if ph == 'queue' %}<span>⏳ In the queue · production can start ~<b>{{ dmy(sched.start) }}</b></span>{% endif %}
+      {% if ph == 'queue' %}<span>⏳ Queue position <b>{{ sched.pos }}</b>{{ ' · 📌 moved to the top' if o.pinned_at }} · production can start ~<b>{{ dmy(sched.start) }}</b></span>
+      <span class="small muted">{{ ('First advance ' ~ dmy(o.first_adv)) if o.first_adv else 'No advance yet (orders with an advance go first)' }}</span>{% endif %}
       {% if ph in ('queue', 'working') %}<span class="{{ 'overdue' if sched.late }}">🚚 Expected dispatch ~<b>{{ dmy(sched.finish) }}</b>{{ ' — late' if sched.late }}</span>{% endif %}
       {% if ph == 'ready' %}<span class="w-ok">✅ Production finished — ready for dispatch</span>{% endif %}
     {% endif %}
     {% if o.delivered_date %}<span>📦 Delivered {{ dmy(o.delivered_date) }}</span>{% endif %}
   </div>
+  {% if ph == 'queue' and is_admin() and not viewing and o.status == 'active' %}
+  {% if o.pinned_at %}
+  <form method="post" action="{{ url_for('prod.order_pin', order_id=o.id) }}" class="inline-form">{{ csrf() }}<input type="hidden" name="action" value="unpin">
+    <span class="small">📌 At the top since {{ o.pinned_at[:16] }} by {{ o.pinned_by_name or '' }} — {{ o.pin_reason }}</span><button class="btn btn-sm">Remove from top</button></form>
+  {% else %}
+  <details class="pick-stage"><summary class="small">📌 Move to top of the queue (Admin)…</summary>
+    <form method="post" action="{{ url_for('prod.order_pin', order_id=o.id) }}" class="inline-form">{{ csrf() }}
+      <input name="reason" required placeholder="Why? (e.g. urgent — customer's harvest season)"><button class="btn btn-sm btn-prod">📌 Move to top</button></form>
+  </details>
+  {% endif %}
+  {% endif %}
   {% if pcan('stage') and not viewing and o.status == 'active' %}
   <details class="pick-stage"><summary class="small">Move to another stage…</summary>
     <form method="get" action="{{ url_for('prod.order_move', order_id=o.id) }}" class="inline-form">

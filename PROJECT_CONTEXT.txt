@@ -41,11 +41,11 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (79 pytest tests, all passing); cafe*.py (cafe module),
+  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (81 pytest tests, all passing); cafe*.py (cafe module),
   production.py + production_io.py (production module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -277,6 +277,14 @@ Digital Catalogue (built 16 Oct 2026)
   Delivered ("Imported"), same phone = same customer, existing GST bill no skipped, no points, not in the queue estimate.
   "+ Add old delivery" for one by hand.
 - Switches (Production → Settings): customer link, warranty, part warranties, unit code + points, new-customer points.
+- Queue priority (29 Oct round 2): 📌 pinned by the Admin first (Move to top: Admin only, reason required, in history;
+  pin cleared when the order goes into production), then by the date of the FIRST advance (any amount), then orders
+  without an advance by order date. Queue list shows the position and "Advance <date>" / "No advance". Expected dates and
+  the customer link follow this order.
+- Maker page (/production/makers/<id>): totals (all, making now, finished, maker amount), month-by-month table for 12
+  months — an order counts in the month production finished (prod_orders.finished_at = day it reached the "Production
+  finished" mark, i.e. Ready for Dispatch; cleared if moved back), plus started count; tap a month to list its orders,
+  each with on time / days late.
 
 ======================================================================
 5. WEBSITE (website/ folder)

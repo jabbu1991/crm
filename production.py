@@ -401,6 +401,9 @@ def create_order(db, oid, d, lead_id=None, imported=False, ts=None, note="Order 
         db.execute("""INSERT INTO prod_parts (org_id, order_id, name, company, months, serial, sort)
                       SELECT org_id, ?, name, company, months, '', sort FROM prod_parts WHERE product_id = ?
                       ORDER BY sort, id""", (order_id, product["id"]))
+    if imported:  # an old delivery with a maker counts in the maker's month of delivery
+        db.execute("UPDATE prod_orders SET finished_at = delivered_date WHERE id = ? AND maker_id IS NOT NULL",
+                   (order_id,))
     log(db, order_id, stage["name"], note, ts=ts, oid=oid)
     return order_id
 
@@ -410,8 +413,9 @@ def get_order(oid_or_none, order_id):
     o = H.query("""SELECT o.*, c.name cust_name, c.phone cust_phone, c.whatsapp cust_wa, c.address cust_address,
                      c.unit_code, c.points cust_points, s.name stage_name, s.mark stage_mark, s.sort stage_sort,
                      m.name maker_name, m.phone maker_phone, r.name referrer_name, r.unit_code referrer_code,
-                     p.name catalog_product
-                   FROM prod_orders o JOIN prod_customers c ON c.id = o.customer_id
+                     p.name catalog_product, pu.name pinned_by_name,
+                     (SELECT MIN(a.pay_date) FROM prod_advances a WHERE a.order_id = o.id) first_adv
+                   FROM prod_orders o LEFT JOIN users pu ON pu.id = o.pinned_by JOIN prod_customers c ON c.id = o.customer_id
                    JOIN prod_stages s ON s.id = o.stage_id LEFT JOIN prod_makers m ON m.id = o.maker_id
                    LEFT JOIN prod_customers r ON r.id = o.referrer_id LEFT JOIN products p ON p.id = o.product_id
                    WHERE o.id = ? AND o.org_id = ?""", (order_id, oid), one=True)
@@ -422,6 +426,12 @@ def get_order(oid_or_none, order_id):
 
 def details_pending(o):
     return not (o["product_name"] or "").strip() or o["unit_price"] is None or not o["quantity"]
+
+
+FIRST_ADV = "(SELECT MIN(a.pay_date) FROM prod_advances a WHERE a.order_id = o.id)"
+# Queue priority: 📌 pinned by the Admin (in the order they were pinned), then whoever paid the first advance earliest
+# (any amount), then orders without an advance by order date.
+QUEUE_ORDER = f"(o.pinned_at IS NULL), o.pinned_at, ({FIRST_ADV} IS NULL), {FIRST_ADV}, o.order_date, o.id"
 
 
 def order_days(o):
@@ -440,9 +450,10 @@ def schedule(oid=None):
     the queue goes one after another from today."""
     oid = oid or H.org_id()
     t = today_date()
-    rows = H.query("""SELECT o.id, o.set_id, o.stage_id, o.prod_days, o.mfg_start, o.exp_finish, o.stage_at, o.order_date
-                      FROM prod_orders o WHERE o.org_id = ? AND o.status = 'active' AND o.imported = 0
-                      ORDER BY o.order_date, o.id""", (oid,))
+    rows = H.query(f"""SELECT o.id, o.set_id, o.stage_id, o.prod_days, o.mfg_start, o.exp_finish, o.stage_at,
+                       o.order_date, o.pinned_at, {FIRST_ADV} first_adv
+                       FROM prod_orders o WHERE o.org_id = ? AND o.status = 'active' AND o.imported = 0
+                       ORDER BY {QUEUE_ORDER}""", (oid,))
     out, queue, places = {}, [], []
     for o in rows:
         ph = phase(o)
@@ -458,7 +469,7 @@ def schedule(oid=None):
             out[o["id"]] = {"start": to_date(o["mfg_start"]), "finish": finish, "late": False, "phase": ph}
     heapq.heapify(places)
     nxt = t
-    for o in queue:
+    for pos, o in enumerate(queue, start=1):
         days = order_days(o)
         if places:
             start = heapq.heappop(places)
@@ -468,7 +479,8 @@ def schedule(oid=None):
             start = nxt
             finish = start + timedelta(days=days)
             nxt = finish
-        out[o["id"]] = {"start": start, "finish": finish, "late": False, "phase": "queue"}
+        out[o["id"]] = {"start": start, "finish": finish, "late": False, "phase": "queue", "pos": pos,
+                        "pinned": bool(o["pinned_at"]), "first_adv": o["first_adv"]}
     return out
 
 
@@ -609,7 +621,7 @@ def stage_counts(oid):
 
 def order_rows(oid, where="", args=(), order_by="o.order_date, o.id", limit=None):
     sql = f"""SELECT o.*, c.name cust_name, c.phone cust_phone, c.whatsapp cust_wa, c.unit_code, s.name stage_name,
-                     s.mark stage_mark, s.sort stage_sort, m.name maker_name
+                     s.mark stage_mark, s.sort stage_sort, m.name maker_name, {FIRST_ADV} first_adv
               FROM prod_orders o JOIN prod_customers c ON c.id = o.customer_id JOIN prod_stages s ON s.id = o.stage_id
               LEFT JOIN prod_makers m ON m.id = o.maker_id WHERE o.org_id = ? {where} ORDER BY {order_by}"""
     if limit:
@@ -734,7 +746,7 @@ def orders():
         args.append(a.get("maker", type=int))
     rows = order_rows(oid, "AND " + " AND ".join(where), args,
                       order_by="o.order_no DESC" if show in ("all", "cancelled", "delivered") or (
-                          stage and marks_of_name(stage) == "delivered") else "s.sort, o.order_date, o.id")
+                          stage and marks_of_name(stage) == "delivered") else "s.sort, " + QUEUE_ORDER)
     sched = schedule(oid)
     if show == "late":
         rows = [o for o in rows if sched.get(o["id"], {}).get("late")]
@@ -775,10 +787,13 @@ def order_form_data():
     d["delivered_date"] = H.valid_date(clean(f.get("delivered_date"))) if f.get("delivered_date") else ""
     d["maker_amount"] = money_in(f.get("maker_amount"))
     d["advances"] = []
-    for dt, amt, note in zip(f.getlist("adv_date"), f.getlist("adv_amount"), f.getlist("adv_note")):
+    dates, amts, notes = f.getlist("adv_date"), f.getlist("adv_amount"), f.getlist("adv_note")
+    for i, amt in enumerate(amts):
+        dt = dates[i] if i < len(dates) else ""
+        note = notes[i] if i < len(notes) else ""
         if not (amt or "").strip():
             continue
-        d["advances"].append({"pay_date": H.valid_date(dt.strip()) or today(), "amount": money_in(amt),
+        d["advances"].append({"pay_date": H.valid_date((dt or "").strip()) or today(), "amount": money_in(amt),
                               "note": clean(note, 200)})
     d["parts"] = parts_from_form()
     return d
@@ -1048,6 +1063,13 @@ def order_move(order_id):
                           (H.org_id(), bill_no, order_id)):
                 errors.append(f"GST bill number {bill_no} is already on another order.")
             sets.update(bill_no=bill_no, bill_date=bill_date)
+        done_stage = mk.get("ready") or mk["dispatch"]
+        if target["sort"] >= done_stage["sort"] and (o["stage_sort"] < done_stage["sort"] or not o["finished_at"]):
+            sets["finished_at"] = ts   # production finished: counts in this month for the maker
+        elif target["sort"] < done_stage["sort"]:
+            sets["finished_at"] = None
+        if prod_stage is not None and target["sort"] >= prod_stage["sort"]:
+            sets.update(pinned_at=None, pinned_by=None)   # out of the queue: the 📌 is no longer needed
         if target["sort"] >= mk["delivered"]["sort"] and not o["delivered_date"]:
             sets["delivered_date"] = today()
         if target["sort"] < mk["delivered"]["sort"]:
@@ -1143,6 +1165,38 @@ def order_new_link(order_id):
     return redirect(url_for("prod.order_view", order_id=order_id))
 
 
+@bp.route("/production/orders/<int:order_id>/pin", methods=["POST"])
+@prod_view("view")
+def order_pin(order_id):
+    """📌 Move to top of the Queue (Admin only). A reason is required; who / when goes to the history."""
+    if not H.is_admin():
+        abort(403)
+    o = get_order(None, order_id)
+    db = H.get_db()
+    ts = _now()
+    if request.form.get("action") == "unpin":
+        db.execute("UPDATE prod_orders SET pinned_at = NULL, pinned_by = NULL, updated_at = ? WHERE id = ?", (ts, order_id))
+        log(db, order_id, o["stage_name"], "📌 Removed from the top of the queue", ts=ts)
+        flash(f"Order #{o['order_no']} back in its normal place.", "success")
+    else:
+        reason = clean(request.form.get("reason"), 300)
+        if not reason:
+            flash("Write why this order goes to the top.", "error")
+            return redirect(url_for("prod.order_view", order_id=order_id))
+        if phase(o) != "queue":
+            flash("Only orders still in the queue can be moved to the top.", "error")
+            return redirect(url_for("prod.order_view", order_id=order_id))
+        db.execute("UPDATE prod_orders SET pinned_at = ?, pinned_by = ?, pin_reason = ?, updated_at = ? WHERE id = ?",
+                   (ts, g.user["id"], reason, ts, order_id))
+        log(db, order_id, o["stage_name"], f"📌 Moved to the top of the queue: {reason}", ts=ts)
+        flash(f"Order #{o['order_no']} moved to the top of the queue.", "success")
+    db.commit()
+    back = request.form.get("next") or ""
+    if back.startswith("/") and not back.startswith("//"):
+        return redirect(back)
+    return redirect(url_for("prod.order_view", order_id=order_id))
+
+
 # ---------------------------------------------------------------- makers
 
 @bp.route("/production/makers", methods=["GET", "POST"])
@@ -1180,6 +1234,58 @@ def makers():
         if phase(o) == "working":
             now_working[o["maker_id"]] = now_working.get(o["maker_id"], 0) + 1
     return render_template("production/makers.html", rows=rows, working=now_working, total=working)
+
+
+@bp.route("/production/makers/<int:mid>")
+@prod_view("maker")
+def maker_view(mid):
+    """One maker: totals, a month-wise table (an order counts in the month its production finished = reached
+    Ready for Dispatch), and the orders (tap a month to see only that month)."""
+    oid = H.org_id()
+    m = H.query("SELECT * FROM prod_makers WHERE id = ? AND org_id = ?", (mid, oid), one=True) or abort(404)
+    rows = order_rows(oid, "AND o.maker_id = ? AND o.status = 'active'", (mid,),
+                      order_by="COALESCE(o.finished_at, '9999') DESC, o.mfg_start DESC, o.id DESC")
+    t = today_date()
+    months = []
+    y, mo = t.year, t.month
+    for _ in range(12):
+        months.append(f"{y:04d}-{mo:02d}")
+        mo -= 1
+        if mo == 0:
+            y, mo = y - 1, 12
+    table = {k: {"month": k, "finished": 0, "amount": 0, "started": 0} for k in months}
+    making = finished = 0
+    total_amount = 0
+    items = []
+    for o in rows:
+        ph = phase(o)
+        fin = to_date(o["finished_at"])
+        if ph == "working":
+            making += 1
+        if fin:
+            finished += 1
+            total_amount += o["maker_amount"] or 0
+            k = fin.isoformat()[:7]
+            if k in table:
+                table[k]["finished"] += 1
+                table[k]["amount"] += o["maker_amount"] or 0
+        st_ = to_date(o["mfg_start"])
+        if st_ and st_.isoformat()[:7] in table:
+            table[st_.isoformat()[:7]]["started"] += 1
+        exp = to_date(o["exp_finish"])
+        late_by = None
+        if fin and exp:
+            late_by = (fin - exp).days
+        elif not fin and exp and ph == "working":
+            late_by = (t - exp).days if t > exp else None
+        items.append({"o": o, "fin": fin, "late_by": late_by, "ph": ph})
+    month = request.args.get("month") or ""
+    if re.fullmatch(r"\d{4}-\d{2}", month):
+        items = [i for i in items if i["fin"] and i["fin"].isoformat()[:7] == month]
+    else:
+        month = ""
+    return render_template("production/maker.html", m=m, table=[table[k] for k in months], items=items,
+                           making=making, finished=finished, total=len(rows), total_amount=total_amount, month=month)
 
 
 # ---------------------------------------------------------------- products (production defaults)

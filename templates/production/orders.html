@@ -29,14 +29,14 @@
   {% set ph = phase(o) %}
   <div class="po-row {{ 'po-late' if sc and sc.late }} {{ 'po-cancel' if o.status != 'active' }}">
     <a class="po-main" href="{{ url_for('prod.order_view', order_id=o.id) }}">
-      <span class="po-no">#{{ o.order_no }}</span>
+      <span class="po-no">{% if sc and sc.pos %}<span class="qpos" title="Queue position">{{ sc.pos }}</span>{% endif %}#{{ o.order_no }}</span>
       <span class="po-name"><b>{{ o.cust_name }}</b>{% if o.imported %} <span class="badge">old</span>{% endif %}
         <span class="po-sub">{{ o.product_name or 'Product not set' }}{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</span></span>
     </a>
-    <span class="po-stage">{{ stage_badge(o.stage_name, o.stage_mark) }}{% if details_pending(o) and ph in ('queue', 'working') %} <span class="badge b-ordered" title="Price or quantity missing">details pending</span>{% endif %}</span>
+    <span class="po-stage">{% if o.pinned_at and ph == 'queue' %}<span class="badge pin-badge" title="Moved to the top by the Admin">📌 Top</span> {% endif %}{{ stage_badge(o.stage_name, o.stage_mark) }}{% if details_pending(o) and ph in ('queue', 'working') %} <span class="badge b-ordered" title="Price or quantity missing">details pending</span>{% endif %}</span>
     <span class="po-dates small">
       {% if sc %}
-        {% if ph == 'queue' %}Start ~{{ dmy(sc.start) }}<br>{% endif %}
+        {% if ph == 'queue' %}<span class="{{ 'w-ok' if o.first_adv else 'muted' }}">{{ ('Advance ' ~ dmy(o.first_adv)) if o.first_adv else 'No advance' }}</span><br>Start ~{{ dmy(sc.start) }}<br>{% endif %}
         {% if ph in ('queue', 'working') %}<span class="{{ 'overdue' if sc.late }}">Dispatch ~{{ dmy(sc.finish) }}</span>{% elif ph == 'ready' %}<span class="w-ok">Ready ✓</span>{% endif %}
       {% elif o.bill_no %}Bill {{ o.bill_no }}{% if o.delivered_date %}<br>Delivered {{ dmy(o.delivered_date) }}{% endif %}
       {% else %}<span class="muted">Ordered {{ dmy(o.order_date) }}</span>{% endif %}

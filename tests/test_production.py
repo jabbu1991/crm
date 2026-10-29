@@ -78,7 +78,7 @@ def stage_id(W, code, name):
 def test_migration_keeps_modules_and_production_starts_off(pw):
     c = pw["db"]()
     rows = {r["code"]: r for r in c.execute("SELECT * FROM organizations")}
-    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 14
+    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 15
     assert rows["STAR"]["mod_crm"] == 1 and rows["STAR"]["mod_prod"] == 1 and rows["STAR"]["mod_cafe"] == 0
     assert rows["ONLY"]["mod_prod"] == 0 and rows["ONLY"]["app_type"] == "crm"
     assert rows["FACT"]["mod_crm"] == 0 and rows["FACT"]["mod_prod"] == 1
@@ -444,3 +444,77 @@ def test_tenant_isolation(pw):
         c.execute("""INSERT INTO prod_orders (org_id, order_no, customer_id, set_id, stage_id, order_date, token,
                      created_at) VALUES (?, 99, ?, ?, ?, '2026-01-01', 'x', '2026-01-01')""",
                   (pw["oid"]("FACT"), o["customer_id"], o["set_id"], o["stage_id"]))
+
+
+# ---------------------------------------------------------------- round 2: queue priority, move to top, maker page
+
+def queue_positions(W):
+    with crm.app.test_request_context():
+        from flask import g
+        g.org = W["db"]().execute("SELECT * FROM organizations WHERE code = 'STAR'").fetchone()
+        sc = production.schedule(g.org["id"])
+    names = {o["id"]: W["db"]().execute("SELECT name FROM prod_customers WHERE id = ?", (o["customer_id"],)).fetchone()[0]
+             for o in orders(W, "STAR")}
+    return [names[i] for i, _ in sorted(((i, v) for i, v in sc.items() if v["phase"] == "queue"),
+                                        key=lambda t: t[1]["pos"])]
+
+
+def test_queue_priority_first_advance_then_pin(pw):
+    star = pw["star"]
+    t = date.today()
+    # A ordered first but no advance; B paid an advance 3 days ago; C paid 10 days ago (small amount is enough)
+    star.post("/production/orders/new", {"name": "A", "phone": "9000000801", "product_name": "Pump"})
+    star.post("/production/orders/new", {"name": "B", "phone": "9000000802", "product_name": "Pump",
+                                         "adv_date": [(t - timedelta(days=3)).isoformat()], "adv_amount": ["5000"]})
+    star.post("/production/orders/new", {"name": "C", "phone": "9000000803", "product_name": "Pump",
+                                         "adv_date": [(t - timedelta(days=10)).isoformat()], "adv_amount": ["100"]})
+    assert queue_positions(pw) == ["C", "B", "A"]
+    html = star.get("/production/orders").text
+    assert html.index("<b>C</b>") < html.index("<b>B</b>") < html.index("<b>A</b>")
+    assert "No advance" in html and "Advance " in html
+    a_id = orders(pw, "STAR")[0]["id"]
+    # only the Admin can move to top; a reason is required
+    worker = make_staff(star, "worker2", prod_role="manager")
+    assert worker.post(f"/production/orders/{a_id}/pin", {"reason": "urgent"}).status_code == 403
+    r = star.post(f"/production/orders/{a_id}/pin", {"reason": ""})
+    assert "Write why" in r.text
+    r = star.post(f"/production/orders/{a_id}/pin", {"reason": "Harvest season"})
+    assert "moved to the top" in r.text and "Harvest season" in star.get(f"/production/orders/{a_id}").text
+    assert queue_positions(pw) == ["A", "C", "B"]
+    star.post(f"/production/orders/{a_id}/pin", {"action": "unpin"})
+    assert queue_positions(pw) == ["C", "B", "A"]
+    # a new advance re-orders by itself: A pays an advance 20 days back-dated? (entered today -> after C and B)
+    star.post(f"/production/orders/{a_id}/edit", {"name": "A", "phone": "9000000801", "product_name": "Pump",
+                                                   "quantity": "1", "adv_date": [t.isoformat()], "adv_amount": ["1000"]})
+    assert queue_positions(pw) == ["C", "B", "A"]
+
+
+def test_maker_page_counts_month_production_finished(pw):
+    star = pw["star"]
+    for i in range(3):
+        star.post("/production/orders/new", {"name": f"M{i}", "phone": f"900000090{i}", "product_name": "Pump"})
+    ids = [o["id"] for o in orders(pw, "STAR")]
+    for i in ids:
+        star.post(f"/production/orders/{i}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
+                                                   "new_maker": "Babu", "maker_amount": "2000"})
+    mid = orders(pw, "STAR")[0]["maker_id"]
+    for i in ids[:2]:
+        star.post(f"/production/orders/{i}/move", {"to": stage_id(pw, "STAR", "Ready for Dispatch")})
+    o = orders(pw, "STAR")
+    assert o[0]["finished_at"] and o[1]["finished_at"] and o[2]["finished_at"] is None
+    # one of them finished last month (as if)
+    last = (date.today().replace(day=1) - timedelta(days=1)).isoformat() + " 10:00:00"
+    c = sqlite3.connect(pw["db_path"])
+    c.execute("UPDATE prod_orders SET finished_at = ? WHERE id = ?", (last, ids[0]))
+    c.commit()
+    html = star.get(f"/production/makers/{mid}").text
+    assert "Month by month" in html and "Making now" in html
+    this_m, last_m = date.today().isoformat()[:7], last[:7]
+    page = star.get(f"/production/makers/{mid}?month={this_m}").text
+    assert "<b>#2</b>" in page and "<b>#1</b>" not in page and "<b>#3</b>" not in page
+    page = star.get(f"/production/makers/{mid}?month={last_m}").text
+    assert "<b>#1</b>" in page and "<b>#2</b>" not in page
+    # moving back before Ready clears the finished day
+    star.post(f"/production/orders/{ids[1]}/move", {"to": stage_id(pw, "STAR", "In Production")})
+    assert orders(pw, "STAR")[1]["finished_at"] is None
+    assert star.get("/production/makers").text.count(f"/production/makers/{mid}") >= 1

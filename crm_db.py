@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1117,9 +1117,33 @@ def _migrate_v14(conn):
         conn.execute(stmt)
 
 
+def _migrate_v15(conn):
+    """Production round 2: 'Move to top' pins (Admin) and the day production finished (for the makers' monthly
+    count). Adds only. The finished day of orders already past production is filled in from their stage history."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("prod_orders", "pinned_at", "TEXT")
+    add("prod_orders", "pinned_by", "INTEGER REFERENCES users(id)")
+    add("prod_orders", "pin_reason", "TEXT")
+    add("prod_orders", "finished_at", "TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_orders_maker ON prod_orders(maker_id, finished_at)")
+    # the "Production finished" stage of each set (or Dispatch when a set has no such mark)
+    conn.execute("""UPDATE prod_orders SET finished_at = (
+        SELECT MIN(l.created_at) FROM prod_stage_log l JOIN prod_stages s
+          ON s.set_id = prod_orders.set_id AND s.name = l.stage_name AND s.active = 1
+        WHERE l.order_id = prod_orders.id AND s.sort >= COALESCE(
+          (SELECT r.sort FROM prod_stages r WHERE r.set_id = prod_orders.set_id AND r.mark = 'ready' AND r.active = 1),
+          (SELECT r.sort FROM prod_stages r WHERE r.set_id = prod_orders.set_id AND r.mark = 'dispatch' AND r.active = 1),
+          999999))
+        WHERE finished_at IS NULL AND imported = 0""")
+    conn.execute("""UPDATE prod_orders SET finished_at = delivered_date
+                    WHERE finished_at IS NULL AND imported = 1 AND maker_id IS NOT NULL""")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15)]
 
 
 def migrate(db_path):

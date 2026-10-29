@@ -429,3 +429,7 @@ body.mod-prod .mainnav, body.mod-cafe .mainnav, body.mod-crm .mainnav { border-b
 .prod-tabs .chip.on { background: #ea580c; border-color: #ea580c; color: #fff; }
 body.mod-prod .mainnav .nav-cta { background: #ea580c; }
 body.mod-prod .mainnav .nav-cta:hover, body.mod-prod .mainnav .nav-cta.active { background: #c2410c; }
+.qpos { display: inline-flex; min-width: 22px; height: 22px; padding: 0 5px; margin-right: 6px; border-radius: 999px; background: #1f2937; color: #fff; font-size: 12px; align-items: center; justify-content: center; }
+.pin-badge { background: #fef3c7; color: #92400e; }
+.month-table td.zero { color: #9ca3af; }
+.month-table tr.on td { background: #fff7ed; font-weight: 700; }
