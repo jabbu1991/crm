@@ -1,0 +1,110 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ ('Edit order #' ~ order.order_no) if order else ('Add old delivery' if old_delivery else 'New order') }}{% endblock %}
+{% block content %}
+<h1>{% if order %}Edit order #{{ order.order_no }}{% elif old_delivery %}Add an old delivery{% else %}New order{% endif %}</h1>
+{% if old_delivery and not order %}<p class="muted">For a product delivered before the software. It goes straight to <b>Delivered</b>; warranty counts from the bill date. No referral points.</p>{% endif %}
+<form method="post" class="card form prod-form">
+  {{ csrf() }}{% if old_delivery and not order %}<input type="hidden" name="old" value="1">{% endif %}
+  <fieldset>
+    <legend>Customer information</legend>
+    <div class="row-2">
+      <label>Customer name *<input name="name" required value="{{ d.name or '' }}" autocomplete="off"></label>
+      <label>Address / place<input name="address" value="{{ d.address or '' }}" autocomplete="off"></label>
+    </div>
+    <div class="row-2">
+      <label>Phone *<input name="phone" type="tel" value="{{ d.phone or '' }}" autocomplete="off"></label>
+      <label>WhatsApp<input name="whatsapp" type="tel" value="{{ d.whatsapp or '' }}" autocomplete="off" placeholder="same as phone if empty"></label>
+    </div>
+    <div class="row-3">
+      <label>Order taken date<input type="date" name="order_date" value="{{ d.order_date or '' }}"></label>
+      <label>Order taken by<select name="taken_by"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if d.taken_by == u.id }}>{{ u.name }}</option>{% endfor %}</select></label>
+      {% if st.referral %}<label>Referral code <small class="muted">(optional)</small><input name="referral_code" value="{{ d.referral_code or '' }}" maxlength="20" placeholder="e.g. U12345" style="text-transform:uppercase" {{ 'readonly' if order and order.points_given }}></label>{% endif %}
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Product details</legend>
+    <div class="row-2">
+      <label>Product
+        <select name="product_id" id="product-sel"><option value="">— type below —</option>
+          {% for p in products %}<option value="{{ p.id }}" data-cat="{{ p.category or '' }}" data-days="{{ p.prod_days or '' }}" data-w="{{ '' if p.warranty_months is none else p.warranty_months }}" {{ 'selected' if d.product_id == p.id }}>{{ p.name }}</option>{% endfor %}
+        </select></label>
+      <label>Product name (as on the sheet)<input name="product_name" id="product-name" value="{{ d.product_name or '' }}" placeholder="e.g. Vertical Electric with Stand"></label>
+    </div>
+    <div class="row-3">
+      <label>Product category<input name="category" id="product-cat" value="{{ d.category or '' }}" placeholder="e.g. Crompton 7.5"></label>
+      <label>Machine type<input name="machine_type" list="mtypes" value="{{ d.machine_type or '' }}"><datalist id="mtypes">{% for t in MACHINE_TYPES %}<option>{{ t }}</option>{% endfor %}</datalist></label>
+      <label>Power source<input name="power_source" list="psrc" value="{{ d.power_source or '' }}"><datalist id="psrc">{% for t in POWER_SOURCES %}<option>{{ t }}</option>{% endfor %}</datalist></label>
+    </div>
+    <div class="row-3">
+      <label>Quantity<input type="number" name="quantity" min="1" value="{{ d.quantity or 1 }}"></label>
+      <label>Unit price (₹)<input name="unit_price" inputmode="decimal" value="{{ paise(d.unit_price) }}" placeholder="amount of the machine"></label>
+      <label>Total weight (approx.)<input name="weight" value="{{ d.weight or '' }}" placeholder="e.g. 450 kg"></label>
+    </div>
+    <label>Full product details / specification<textarea name="details" rows="4" placeholder="Size, model, motor, colour, special requirements…">{{ d.details or '' }}</textarea></label>
+    <div class="row-2">
+      <label>Production days <small class="muted">(how many days to make, after production starts)</small><input type="number" name="prod_days" id="prod-days" min="0" value="{{ '' if d.prod_days is none else d.prod_days }}" placeholder="default {{ st.default_days }}"></label>
+      <label>Approved by (name)<input name="approved_by" value="{{ d.approved_by or '' }}" placeholder="e.g. Abdul Salam"></label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Advance payments from the customer</legend>
+    <div id="adv-rows">
+      {% for a in advances or [] %}
+      <div class="row-3 adv-row"><label>Date<input type="date" name="adv_date" value="{{ a.pay_date }}"></label><label>Amount (₹)<input name="adv_amount" inputmode="decimal" value="{{ paise(a.amount) }}"></label><label>Note<input name="adv_note" value="{{ a.note or '' }}" placeholder="Cash / UPI / cheque no."></label></div>
+      {% endfor %}
+      <div class="row-3 adv-row"><label>Date<input type="date" name="adv_date" value="{{ today }}"></label><label>Amount (₹)<input name="adv_amount" inputmode="decimal"></label><label>Note<input name="adv_note" placeholder="Cash / UPI / cheque no."></label></div>
+    </div>
+    <button type="button" class="btn btn-sm" onclick="addRow('adv-rows', 'adv-row')">+ Another advance</button>
+    <p class="small muted">Leave the amount empty to remove a row.</p>
+  </fieldset>
+  {% if (order and (pcan('bill') or pcan('warranty') or pcan('maker'))) or old_delivery %}
+  <fieldset>
+    <legend>Bill &amp; warranty</legend>
+    <div class="row-3">
+      {% if pcan('bill') or old_delivery %}<label>GST bill no{{ ' *' if old_delivery }}<input name="bill_no" value="{{ d.bill_no or '' }}"></label>
+      <label>Bill date{{ ' *' if old_delivery }} <small class="muted">(warranty starts)</small><input type="date" name="bill_date" value="{{ d.bill_date or '' }}"></label>{% endif %}
+      {% if old_delivery %}<label>Delivered date<input type="date" name="delivered_date" value="{{ d.delivered_date or '' }}"></label>{% endif %}
+    </div>
+    {% if st.warranty and (pcan('warranty') or not order) %}<label>Warranty (months) <small class="muted">empty = the product's warranty / {{ st.default_warranty }}</small><input type="number" name="warranty_months" id="w-months" min="0" value="{{ '' if d.warranty_months is none else d.warranty_months }}"></label>{% endif %}
+    {% if order and pcan('maker') and order.maker_id %}<label>Amount to the maker (₹) <small class="muted">optional</small><input name="maker_amount" inputmode="decimal" value="{{ paise(d.maker_amount) }}"></label>{% endif %}
+  </fieldset>
+  {% endif %}
+  {% if st.warranty and st.parts and (pcan('warranty') or not order) %}
+  <fieldset>
+    <legend>Parts with their own company warranty <small class="muted">(e.g. motor, pump)</small></legend>
+    <p class="small muted">{% if not order %}Empty = the product's standard parts list is copied. {% endif %}Each part's warranty also counts from the bill date.</p>
+    <div id="part-rows">
+      {% for p in parts or [] %}
+      <div class="row-4 part-row"><label>Part<input name="part_name" value="{{ p.name }}"></label><label>Company<input name="part_company" value="{{ p.company or '' }}"></label><label>Warranty months<input type="number" min="0" name="part_months" value="{{ '' if p.months is none else p.months }}"></label><label>Serial no<input name="part_serial" value="{{ p.serial or '' }}"></label></div>
+      {% endfor %}
+      <div class="row-4 part-row"><label>Part<input name="part_name" placeholder="e.g. Motor"></label><label>Company<input name="part_company" placeholder="e.g. Crompton"></label><label>Warranty months<input type="number" min="0" name="part_months"></label><label>Serial no<input name="part_serial"></label></div>
+    </div>
+    <button type="button" class="btn btn-sm" onclick="addRow('part-rows', 'part-row')">+ Another part</button>
+  </fieldset>
+  {% endif %}
+  <label>Note<textarea name="note" rows="2">{{ d.note or '' }}</textarea></label>
+  <div class="actions"><button class="btn btn-prod">{{ 'Save changes' if order else ('Save old delivery' if old_delivery else 'Save order (Queue)') }}</button>
+    <a class="btn" href="{{ url_for('prod.order_view', order_id=order.id) if order else url_for('prod.orders') }}">Cancel</a></div>
+</form>
+<script>
+function addRow(boxId, cls) {
+  var box = document.getElementById(boxId), rows = box.getElementsByClassName(cls), last = rows[rows.length - 1];
+  var copy = last.cloneNode(true);
+  copy.querySelectorAll("input").forEach(function (i) { if (i.type !== "date") i.value = ""; });
+  box.appendChild(copy);
+}
+(function () {
+  var sel = document.getElementById("product-sel"), nm = document.getElementById("product-name"),
+      cat = document.getElementById("product-cat"), days = document.getElementById("prod-days"), w = document.getElementById("w-months");
+  if (!sel) return;
+  sel.addEventListener("change", function () {
+    var o = sel.options[sel.selectedIndex];
+    if (!sel.value) return;
+    nm.value = o.text;
+    if (!cat.value) cat.value = o.dataset.cat || "";
+    if (!days.value && o.dataset.days) days.placeholder = "product: " + o.dataset.days;
+    if (w && !w.value && o.dataset.w) w.placeholder = "product: " + o.dataset.w;
+  });
+})();
+</script>
+{% endblock %}

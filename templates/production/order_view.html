@@ -1,0 +1,136 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, progress, next_btn, dmy, left_text with context %}{% from '_macros.html' import csrf with context %}
+{% block title %}Order #{{ o.order_no }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Order #{{ o.order_no }} {{ stage_badge(o.stage_name, o.stage_mark) }}
+    {% if o.status != 'active' %}<span class="badge b-lost">Cancelled</span>{% endif %}
+    {% if o.imported %}<span class="badge">Old delivery (imported)</span>{% endif %}</h1>
+  <div class="actions">
+    {{ next_btn(o, nxt, nxt_form) }}
+    {% if pcan('edit') and not viewing %}<a class="btn" href="{{ url_for('prod.order_edit', order_id=o.id) }}">✏️ Edit details</a>{% endif %}
+    <a class="btn" href="{{ url_for('prod.order_sheet', order_id=o.id) }}" target="_blank" rel="noopener">⬇ Production Sheet</a>
+    {% if lead %}<a class="btn" href="{{ url_for('lead_view', lid=lead.id) }}">👤 Open lead</a>{% endif %}
+  </div>
+</div>
+
+{% if o.status != 'active' %}<div class="flash flash-warning">Cancelled: {{ o.cancel_reason }}</div>{% endif %}
+{% if pending and ph in ('queue', 'working') %}<div class="flash flash-warning">📝 Details pending — price or quantity is not filled in. {% if pcan('edit') and not viewing %}<a href="{{ url_for('prod.order_edit', order_id=o.id) }}">Fill the details</a>{% endif %}</div>{% endif %}
+
+<section class="card">
+  {{ progress(stages, o.stage_id, reached) }}
+  <div class="prod-when">
+    {% if sched %}
+      {% if ph == 'queue' %}<span>⏳ In the queue · production can start ~<b>{{ dmy(sched.start) }}</b></span>{% endif %}
+      {% if ph in ('queue', 'working') %}<span class="{{ 'overdue' if sched.late }}">🚚 Expected dispatch ~<b>{{ dmy(sched.finish) }}</b>{{ ' — late' if sched.late }}</span>{% endif %}
+      {% if ph == 'ready' %}<span class="w-ok">✅ Production finished — ready for dispatch</span>{% endif %}
+    {% endif %}
+    {% if o.delivered_date %}<span>📦 Delivered {{ dmy(o.delivered_date) }}</span>{% endif %}
+  </div>
+  {% if pcan('stage') and not viewing and o.status == 'active' %}
+  <details class="pick-stage"><summary class="small">Move to another stage…</summary>
+    <form method="get" action="{{ url_for('prod.order_move', order_id=o.id) }}" class="inline-form">
+      <select name="to">{% for s in stages %}{% if s.id != o.stage_id %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}{% endfor %}</select>
+      <button class="btn btn-sm">Go</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Customer</h2>
+    <dl class="details">
+      <dt>Name</dt><dd><a href="{{ url_for('prod.customer_view', cid=o.customer_id) }}"><b>{{ o.cust_name }}</b></a></dd>
+      <dt>Phone</dt><dd>{% if o.cust_phone %}<a href="tel:{{ o.cust_phone }}">{{ o.cust_phone }}</a>{% else %}—{% endif %}</dd>
+      <dt>WhatsApp</dt><dd>{{ o.cust_wa or '—' }}</dd>
+      <dt>Address</dt><dd>{{ o.cust_address or '—' }}</dd>
+      {% if st.referral %}<dt>Unit code</dt><dd><b>{{ o.unit_code }}</b> · {{ o.cust_points }} points</dd>
+      {% if o.referral_code %}<dt>Referred by</dt><dd>{% if o.referrer_name %}{{ o.referrer_name }} ({{ o.referrer_code }}){% else %}{{ o.referral_code }} <span class="muted">(not found)</span>{% endif %}{{ ' · points given ✓' if o.points_given }}</dd>{% endif %}{% endif %}
+      <dt>Order date</dt><dd>{{ dmy(o.order_date) }} · taken by {{ o.taken_by_name or '—' }}</dd>
+      {% if o.approved_by %}<dt>Approved by</dt><dd>{{ o.approved_by }}</dd>{% endif %}
+    </dl>
+    <h2>Product</h2>
+    <dl class="details">
+      <dt>Product</dt><dd><b>{{ o.product_name or '—' }}</b>{% if o.quantity > 1 %} × {{ o.quantity }}{% endif %}</dd>
+      <dt>Category</dt><dd>{{ o.category or '—' }}</dd>
+      <dt>Machine type</dt><dd>{{ o.machine_type or '—' }}</dd>
+      <dt>Power source</dt><dd>{{ o.power_source or '—' }}</dd>
+      <dt>Weight</dt><dd>{{ o.weight or '—' }}</dd>
+      <dt>Unit price</dt><dd>{{ o.unit_price|rs if o.unit_price is not none else '—' }}</dd>
+      <dt>Advance received</dt><dd>{% if advances %}<b>{{ adv_total|rs }}</b> <span class="small muted">({% for a in advances %}{{ dmy(a.pay_date) }}: {{ a.amount|rs }}{{ ' ' ~ a.note if a.note }}{{ ', ' if not loop.last }}{% endfor %})</span>{% else %}—{% endif %}</dd>
+      <dt>Production days</dt><dd>{{ o.prod_days if o.prod_days else (st.default_days ~ ' (default)') }}</dd>
+      <dt>Details</dt><dd class="prewrap">{{ o.details or '—' }}</dd>
+      {% if o.note %}<dt>Note</dt><dd class="prewrap">{{ o.note }}</dd>{% endif %}
+    </dl>
+  </section>
+  <div>
+    <section class="card">
+      <h2>👷 Manufacturing</h2>
+      {% if o.maker_id %}
+      <dl class="details">
+        <dt>In-charge</dt><dd><b>{{ o.maker_name }}</b>{% if o.maker_phone %} · <a href="tel:{{ o.maker_phone }}">{{ o.maker_phone }}</a>{% endif %}</dd>
+        <dt>MFG start</dt><dd>{{ dmy(o.mfg_start) }}</dd>
+        <dt>Expected finish</dt><dd>{{ dmy(o.exp_finish) }}</dd>
+        {% if pcan('maker') %}<dt>Amount to maker</dt><dd>{{ o.maker_amount|rs if o.maker_amount is not none else 'not entered' }}</dd>{% endif %}
+        {% if o.maker_note %}<dt>Note</dt><dd>{{ o.maker_note }}</dd>{% endif %}
+      </dl>
+      {% if pcan('maker') and not viewing %}
+      <details><summary class="small">Change maker / amount</summary>
+        <form method="post" action="{{ url_for('prod.order_maker_amount', order_id=o.id) }}" class="form">{{ csrf() }}
+          <div class="row-2"><label>Maker<select name="maker_id">{% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if m.id == o.maker_id }}>{{ m.name }}</option>{% endfor %}</select></label>
+          <label>Amount to maker (₹)<input name="maker_amount" inputmode="decimal" value="{{ o.maker_amount|pstr }}"></label></div>
+          <button class="btn btn-sm btn-prod">Save</button>
+        </form>
+      </details>{% endif %}
+      {% else %}<p class="muted">Assigned when the order moves to production.</p>{% endif %}
+    </section>
+
+    {% if st.warranty %}
+    <section class="card">
+      <h2>🛡 Bill &amp; warranty</h2>
+      {% if o.bill_no or o.bill_date %}
+      <dl class="details">
+        <dt>GST bill no</dt><dd><b>{{ o.bill_no or '—' }}</b> · {{ dmy(o.bill_date) }}</dd>
+        {% if w.main %}<dt>Warranty</dt><dd>{{ w.main.months }} months · ends {{ dmy(w.main.end) }} · {{ left_text(w.main.left) }}</dd>{% endif %}
+      </dl>
+      {% if st.parts and w.parts %}
+      <table class="table compact"><thead><tr><th>Part</th><th>Company</th><th>Warranty</th><th>Ends</th></tr></thead><tbody>
+        {% for x in w.parts %}<tr><td>{{ x.p.name }}{% if x.p.serial %}<div class="small muted">S/N {{ x.p.serial }}</div>{% endif %}</td><td>{{ x.p.company or '—' }}</td>
+          <td>{{ (x.p.months ~ ' months') if x.p.months is not none else '—' }}</td><td class="small">{{ dmy(x.end) }}<br>{{ left_text(x.left) }}</td></tr>{% endfor %}
+      </tbody></table>{% endif %}
+      {% else %}
+      <p class="muted">The GST bill number is asked when the order moves to <b>{{ mk.dispatch.name }}</b>. Warranty starts from the bill date.</p>
+      {% if st.parts and parts %}<p class="small">Parts: {% for p in parts %}{{ p.name }}{{ ' (' ~ p.company ~ ', ' ~ p.months ~ ' m)' if p.company and p.months is not none }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if st.customer_link %}
+    <section class="card">
+      <h2>🔗 Customer link</h2>
+      <p class="small muted">The customer sees the stages, the expected dispatch date{{ ', the warranty' if st.warranty }}{{ ' and their points' if st.referral }}. No login. Maker details are never shown.</p>
+      <div class="linkbox"><input readonly value="{{ link }}" onclick="this.select()" aria-label="Customer link"></div>
+      <div class="actions">
+        {% if wa %}<a class="btn btn-wa" href="{{ wa }}" target="_blank" rel="noopener">🟢 Send on WhatsApp</a>{% endif %}
+        <a class="btn" href="{{ link }}" target="_blank" rel="noopener">Open</a>
+        {% if pcan('edit') and not viewing %}<form method="post" action="{{ url_for('prod.order_new_link', order_id=o.id) }}" class="inline" onsubmit="return confirm('Make a new link? The old link stops working.')">{{ csrf() }}<button class="btn btn-sm">New link</button></form>{% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>History</h2>
+      <ul class="timeline">
+        {% for h in history %}<li><div>{% if h.from_name %}{{ h.from_name }} → {% endif %}<b>{{ h.stage_name }}</b>{% if h.note %} · {{ h.note }}{% endif %}</div><small class="muted">{{ h.user_name or '' }} · {{ h.created_at[:16] }}</small></li>{% endfor %}
+      </ul>
+      {% if pcan('edit') and not viewing %}
+      <details><summary class="small">{{ 'Restore this order' if o.status != 'active' else 'Cancel this order' }}</summary>
+        <form method="post" action="{{ url_for('prod.order_cancel', order_id=o.id) }}" class="inline-form">{{ csrf() }}
+          {% if o.status == 'active' %}<input name="reason" required placeholder="Why is it cancelled?"><button class="btn btn-sm btn-danger">Cancel order</button>
+          {% else %}<button class="btn btn-sm">Restore order</button>{% endif %}
+        </form>
+      </details>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

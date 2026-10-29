@@ -1,0 +1,32 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Import preview{% endblock %}
+{% block content %}
+<h1>Import preview</h1>
+<div class="stats">
+  <div class="stat stat-good"><b>{{ lines|length }}</b><span>To import</span></div>
+  <div class="stat"><b>{{ customers }}</b><span>Customers</span></div>
+  <div class="stat {{ 'stat-hot' if errors }}"><b>{{ errors|length }}</b><span>Rows with problems</span></div>
+  <div class="stat stat-muted"><b>{{ skipped|length }}</b><span>Already in the software</span></div>
+</div>
+{% if errors %}
+<section class="card"><h2>❌ Not imported — fix these rows and upload again</h2>
+<table class="table compact"><thead><tr><th>Row</th><th>Customer</th><th>Problem</th></tr></thead><tbody>
+  {% for e in errors %}<tr class="err-row"><td>{{ e.row }}</td><td>{{ e.name }}</td><td>{{ e.problems|join('; ') }}</td></tr>{% endfor %}
+</tbody></table></section>
+{% endif %}
+{% if skipped %}
+<section class="card"><h2>Skipped (same GST bill no already saved)</h2>
+<p class="small">{% for s in skipped %}Row {{ s.row }}: {{ s.name }} ({{ s.bill_no }}){{ ', ' if not loop.last }}{% endfor %}</p></section>
+{% endif %}
+{% if lines %}
+<section class="card table-wrap"><h2>✅ Will be imported as Delivered</h2>
+<table class="table compact"><thead><tr><th>Row</th><th>Customer</th><th>Phone</th><th>Product</th><th>GST bill</th><th>Bill date</th><th>Warranty</th><th>Parts</th></tr></thead><tbody>
+  {% for l in lines %}<tr><td>{{ l.row }}</td><td>{{ l.name }}</td><td>{{ l.phone or l.whatsapp }}</td><td>{{ l.product_name }}{{ ' ✓' if l.product_id }}</td><td>{{ l.bill_no or '—' }}</td><td>{{ l.bill_date }}</td>
+    <td>{{ (l.warranty_months ~ ' m') if l.warranty_months is not none else 'product / default' }}</td><td>{{ l.parts|length }}</td></tr>{% endfor %}
+</tbody></table>
+<form method="post" action="{{ url_for('prod.import_confirm') }}">{{ csrf() }}<input type="hidden" name="tok" value="{{ tok }}">
+  <div class="actions"><button class="btn btn-prod">Import {{ lines|length }} deliver{{ 'ies' if lines|length != 1 else 'y' }}</button><a class="btn" href="{{ url_for('prod.data') }}">Cancel</a></div></form>
+<p class="small muted">✓ = matched to a product in Products.</p>
+</section>
+{% else %}<p><a class="btn" href="{{ url_for('prod.data') }}">Back</a></p>{% endif %}
+{% endblock %}

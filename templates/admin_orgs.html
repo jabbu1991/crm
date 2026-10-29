@@ -9,7 +9,7 @@
   {% for o in orgs %}
     <tr class="{{ 'inactive' if o.status != 'Active' }}">
       <td><b>{{ o.name }}</b>{% if o.contact_name or o.phone %}<div class="small muted">{{ o.contact_name or '' }} {{ o.phone or '' }}</div>{% endif %}</td>
-      <td>{{ o.code }}</td><td>{{ 'Agency' if o.kind == 'agency' else 'Client' }}<div class="small"><span class="badge {{ 'b-ordered' if o.app_type == 'cafe' else ('b-new' if o.app_type == 'both' else '') }}">{{ APP_TYPES.get(o.app_type, 'CRM') }}</span></div></td>
+      <td>{{ o.code }}</td><td>{{ 'Agency' if o.kind == 'agency' else 'Client' }}<div class="small">{% for m in module_labels(o).split(' + ') %}<span class="badge module-badge" style="--mc: {{ (MODULES.values()|selectattr('label', 'equalto', m)|first).color }}">{{ m }}</span> {% endfor %}</div></td>
       <td><span class="badge {{ o.status|badge }}">{{ o.status }}</span></td>
       <td class="small">{{ o.admins or '—' }}</td>
       <td class="num">{{ o.active_users }}/{{ o.users }}</td><td class="num">{{ o.projects }}</td><td class="num">{{ o.leads }}</td>

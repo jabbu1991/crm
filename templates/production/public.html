@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Order #{{ o.order_no }} · {{ brand.name }}</title>
+{% set c = (brand.palette.primary if brand.palette else '#ea580c') %}
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f6f7fb; color: #111827; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
+  .head { display: flex; align-items: center; gap: 12px; margin: 6px 0 14px; }
+  .head img { width: 52px; height: 52px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid #e5e7eb; }
+  .head .n { font-weight: 800; font-size: 19px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h1 { font-size: 18px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 10px; color: #374151; }
+  .muted { color: #6b7280; } .small { font-size: 13px; }
+  .big { font-size: 22px; font-weight: 800; color: {{ c }}; }
+  ol.steps { list-style: none; margin: 0; padding: 0; }
+  ol.steps li { display: flex; gap: 12px; align-items: flex-start; padding: 0 0 16px; position: relative; }
+  ol.steps li:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: #e5e7eb; }
+  ol.steps li.done:not(:last-child)::before { background: #16a34a; }
+  .dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex: none; background: #e5e7eb; color: #6b7280; }
+  .done .dot { background: #16a34a; color: #fff; } .cur .dot { background: {{ c }}; color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, {{ c }} 25%, transparent); }
+  .cur .sn { font-weight: 800; } .todo .sn { color: #9ca3af; }
+  .sd { font-size: 12px; color: #6b7280; }
+  .w-main { text-align: center; padding: 8px 0 4px; }
+  .w-days { font-size: 44px; font-weight: 900; color: #16a34a; line-height: 1; }
+  .w-days.soon { color: #d97706; } .w-days.exp { color: #dc2626; font-size: 28px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; } td, th { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+  .ok { color: #16a34a; font-weight: 700; } .soon { color: #d97706; font-weight: 700; } .exp { color: #dc2626; font-weight: 700; }
+  .code { font-size: 26px; font-weight: 900; letter-spacing: 2px; color: {{ c }}; }
+  .btn { display: inline-block; padding: 11px 16px; border-radius: 10px; background: #16a34a; color: #fff; text-decoration: none; font-weight: 700; }
+  .btn.alt { background: #fff; color: #111; border: 1px solid #d1d5db; }
+  .foot { text-align: center; font-size: 12px; color: #9ca3af; margin: 18px 0; }
+  .pts td:first-child { font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">{% if brand.logo %}<img src="{{ url_for('media', name=brand.logo) }}" alt="">{% endif %}<div><div class="n">{{ brand.name }}</div>{% if org.phone %}<div class="small muted">📞 <a href="tel:{{ org.phone }}">{{ org.phone }}</a></div>{% endif %}</div></div>
+
+  <div class="card">
+    <h1>Hi {{ o.cust_name }} 👋</h1>
+    <div class="muted">Order #{{ o.order_no }} · <b>{{ o.product_name or '' }}</b>{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</div>
+    {% if cancelled %}<p class="exp">This order was cancelled.</p>{% endif %}
+  </div>
+
+  {% if delivered and w and w.main and not cancelled %}
+  <div class="card">
+    <h2>🛡 Warranty</h2>
+    <div class="w-main">
+      {% if w.main.expired %}<div class="w-days exp">Warranty ended</div><div class="muted">on {{ w.main.end.strftime('%d-%m-%Y') }}</div>
+      {% else %}<div class="w-days {{ 'soon' if w.main.left <= 30 }}">{{ w.main.left }}</div><div class="muted">days of warranty left</div>{% endif %}
+    </div>
+    <table>
+      <tr><td class="muted">Warranty</td><td><b>{{ w.main.months }} months</b></td></tr>
+      <tr><td class="muted">From (bill date)</td><td>{{ w.main.start.strftime('%d-%m-%Y') }}</td></tr>
+      <tr><td class="muted">Until</td><td><b>{{ w.main.end.strftime('%d-%m-%Y') }}</b></td></tr>
+      {% if o.bill_no %}<tr><td class="muted">GST bill no</td><td>{{ o.bill_no }}</td></tr>{% endif %}
+      {% if o.delivered_date %}<tr><td class="muted">Delivered</td><td>{{ o.delivered_date[8:10] }}-{{ o.delivered_date[5:7] }}-{{ o.delivered_date[:4] }}</td></tr>{% endif %}
+    </table>
+    {% if w.parts %}
+    <h2 style="margin-top:14px">Parts — their makers' warranty</h2>
+    <table>
+      <tr><th>Part</th><th>Company</th><th>Until</th></tr>
+      {% for x in w.parts %}<tr><td>{{ x.p.name }}{% if x.p.serial %}<div class="small muted">S/N {{ x.p.serial }}</div>{% endif %}</td><td>{{ x.p.company or '—' }}</td>
+        <td>{% if x.end %}{{ x.end.strftime('%d-%m-%Y') }}<div class="small {{ 'exp' if x.expired else ('soon' if x.left <= 30 else 'ok') }}">{{ 'ended' if x.expired else (x.left ~ ' days left') }}</div>{% else %}—{% endif %}</td></tr>{% endfor %}
+    </table>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>{{ '📦 Your order' if delivered else '🏭 Where is my order?' }}</h2>
+    {% if sched and not cancelled %}
+      <p>Expected dispatch: <span class="big">{{ sched.finish.strftime('%d-%m-%Y') }}</span></p>
+      <p class="small muted">This date is worked out from the production queue and may change a little.</p>
+    {% endif %}
+    {% set ns = namespace(passed=True) %}
+    <ol class="steps">
+      {% for s in stages %}
+        {% set is_cur = s.id == o.stage_id %}{% if is_cur %}{% set ns.passed = False %}{% endif %}
+        <li class="{{ 'done' if ns.passed and not is_cur else ('cur' if is_cur else 'todo') }}">
+          <span class="dot">{{ '✓' if (ns.passed and not is_cur) or (is_cur and loop.last) else loop.index }}</span>
+          <div><div class="sn">{{ s.name }}</div>{% if reached.get(s.name) and (ns.passed or is_cur) %}<div class="sd">{{ reached[s.name][8:10] }}-{{ reached[s.name][5:7] }}-{{ reached[s.name][:4] }}</div>{% endif %}</div>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  {% if st.referral %}
+  <div class="card">
+    <h2>🎁 Refer &amp; earn</h2>
+    <p class="small">Your unit code</p>
+    <div class="code">{{ o.unit_code }}</div>
+    <p class="small muted">When a friend orders with your code, you get points after their product is delivered. 1 point = {{ st.point_value|rs }}.</p>
+    <p>Your points: <b>{{ o.cust_points }}</b> = <b>{{ value|rs }}</b></p>
+    {% if share %}<p><a class="btn" href="{{ share }}" target="_blank" rel="noopener">🟢 Share my code on WhatsApp</a></p>{% endif %}
+    {% if ledger %}
+    <table class="pts">{% for p in ledger %}<tr><td class="{{ 'ok' if p.change > 0 else 'exp' }}">{{ '+' if p.change > 0 }}{{ p.change }}</td>
+      <td>{% if p.kind == 'redeem' %}Redeemed · {{ p.amount|rs }} paid{% elif p.kind == 'referral' %}Referral{% elif p.kind == 'welcome' %}Welcome points{% elif p.kind == 'reversed' %}Taken back{% else %}Adjusted{% endif %}</td>
+      <td class="small muted">{{ (p.pay_date or p.created_at)[8:10] }}-{{ (p.pay_date or p.created_at)[5:7] }}-{{ (p.pay_date or p.created_at)[:4] }}</td></tr>{% endfor %}</table>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if org.phone %}<p style="text-align:center"><a class="btn alt" href="tel:{{ org.phone }}">📞 Call {{ brand.name }}</a></p>{% endif %}
+  <div class="foot">Powered by Real View CRM</div>
+</div>
+</body>
+</html>

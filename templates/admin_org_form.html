@@ -15,11 +15,15 @@
       <label>Phone<input name="phone" value="{{ data.phone or '' }}"></label>
       <label>Email<input type="email" name="email" value="{{ data.email or '' }}"></label>
     </div>
-    <label>Software type * <small>(what this client needs)</small>
-      <select name="app_type">
-        {% for k, v in APP_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if (data.app_type or 'crm') == k }}>{{ v }}{{ ' — leads, follow-ups' if k == 'crm' else (' — billing, menu, QR, online orders' if k == 'cafe' else ' — both, with a switch at the top') }}</option>{% endfor %}
-      </select>
-    </label>
+    <input type="hidden" name="mods_form" value="1">
+    <div class="module-switches">
+      <b>Modules * <small class="muted">(what this client uses — switch on / off any time)</small></b>
+      {% set mods = data.mods or {'crm': 1} %}
+      {% for k, hint in (('crm', 'leads, follow-ups, reports'), ('cafe', 'billing, menu, QR, online orders'), ('prod', 'orders through production stages, warranty, customer tracking link')) %}
+      <label class="check module-check" style="--mc: {{ MODULES[k].color }}"><input type="checkbox" name="mod_{{ k }}" value="1" {{ 'checked' if mods[k] }}> <span class="mc-name">{{ MODULES[k].icon }} {{ MODULES[k].label }}</span> <small class="muted">— {{ hint }}</small></label>
+      {% endfor %}
+      <p class="small muted">More than one ON → a switch at the top of the screen. Switching a module OFF only hides it; its data is kept and comes back when it is switched ON again.</p>
+    </div>
     <label>Address<textarea name="address" rows="2">{{ data.address or '' }}</textarea></label>
     <label>Internal notes<textarea name="notes" rows="2">{{ data.notes or '' }}</textarea></label>
     {% if org %}<label class="check"><input type="checkbox" name="wa_templates_allowed" value="1" {{ 'checked' if org.wa_templates_allowed }}> WhatsApp templates included in this client's plan</label>

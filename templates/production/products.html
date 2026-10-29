@@ -1,0 +1,34 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Products (production){% endblock %}
+{% block content %}
+<h1>Products · production defaults</h1>
+<p class="muted">For each product: how many days it takes to make, its warranty, its stages and the standard parts list (parts from other companies with their own warranty). New orders of the product get these automatically.</p>
+{% if not viewing %}
+<form method="post" class="card form">
+  {{ csrf() }}
+  <h2>Add a product</h2>
+  <div class="row-4"><label>Name *<input name="name" required></label><label>Category<input name="category"></label>
+    <label>Production days<input type="number" min="0" name="prod_days" placeholder="{{ st.default_days }}"></label>
+    <label>Warranty (months)<input type="number" min="0" name="warranty_months" placeholder="{{ st.default_warranty }}"></label></div>
+  <button class="btn btn-prod">Add product</button> <span class="small muted">Products are shared with the CRM (Products &amp; Services).</span>
+</form>
+{% endif %}
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Product</th><th>Category</th><th class="num">Production days</th><th class="num">Warranty</th><th>Stages</th><th class="num">Parts</th><th class="num">Orders</th><th></th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+  <tr class="{{ 'inactive' if not p.active }}">
+    <td><b>{{ p.name }}</b></td><td>{{ p.category or '' }}</td>
+    <td class="num">{{ p.prod_days if p.prod_days else ('(' ~ st.default_days ~ ')') }}</td>
+    <td class="num">{{ (p.warranty_months ~ ' m') if p.warranty_months is not none else ('(' ~ st.default_warranty ~ ' m)') }}</td>
+    <td class="small">{{ p.set_name or (default_set ~ ' (default)') }}</td>
+    <td class="num">{{ p.parts }}</td><td class="num">{{ p.orders }}</td>
+    <td>{% if not viewing %}<a href="{{ url_for('prod.product_edit', pid=p.id) }}">Edit</a>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">No products yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="small muted">(brackets) = not set, the default from ⚙️ Settings is used.</p>
+{% endblock %}

@@ -38,7 +38,7 @@
     <thead><tr><th>Organization</th><th>Type</th><th class="num">Users</th><th class="num">Leads</th><th class="num">Products</th><th class="num">Bills</th><th class="num">Customers</th><th class="num">Menu</th><th class="num">Photos</th><th class="num">Space (about)</th></tr></thead>
     <tbody>{% for c in clients %}<tr class="{{ 'inactive' if c.org.status != 'Active' }}">
       <td><b>{{ c.org.name }}</b> <span class="small muted">{{ c.org.code }}</span></td>
-      <td class="small">{{ 'Agency' if c.org.kind == 'agency' else {'crm': 'CRM', 'cafe': 'Cafe', 'both': 'CRM + Cafe'}.get(c.org.app_type, 'CRM') }}</td>
+      <td class="small">{{ 'Agency' if c.org.kind == 'agency' else module_labels(c.org) }}</td>
       <td class="num">{{ c.users }}</td><td class="num">{{ c.leads }}</td><td class="num">{{ c.products }}</td>
       <td class="num">{{ c.bills }}</td><td class="num">{{ c.customers }}</td><td class="num">{{ c.menu }}</td>
       <td class="num">{{ c.photos }} · {{ c.photo_size|mb }}</td><td class="num"><b>{{ c.total|mb }}</b></td>

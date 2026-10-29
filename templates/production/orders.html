@@ -1,0 +1,51 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, next_btn, dmy with context %}
+{% block title %}Production orders{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>📋 Orders{% if stage %} · {{ stage }}{% elif show == 'late' %} · Late{% elif show == 'pending' %} · Details pending{% elif show == 'delivered' %} · Delivered{% elif show == 'cancelled' %} · Cancelled{% elif show == 'all' %} · All{% endif %}</h1>
+  <div class="actions">{% if pcan('edit') and not viewing %}<a class="btn btn-prod" href="{{ url_for('prod.order_new') }}">+ New Order</a>{% endif %}</div>
+</div>
+
+<div class="prod-tabs">
+  <a class="chip {{ 'on' if not stage and not show }}" href="{{ url_for('prod.orders') }}">Running</a>
+  {% for c in counts %}<a class="chip {{ 'on' if stage == c.name }}" href="{{ url_for('prod.orders', stage=c.name) }}">{{ c.name }} <b>{{ c.n }}</b></a>{% endfor %}
+  <a class="chip {{ 'on' if show == 'late' }}" href="{{ url_for('prod.orders', show='late') }}">🔴 Late</a>
+  <a class="chip {{ 'on' if show == 'pending' }}" href="{{ url_for('prod.orders', show='pending') }}">📝 Details pending</a>
+  <a class="chip {{ 'on' if show == 'all' }}" href="{{ url_for('prod.orders', show='all') }}">All</a>
+  <a class="chip {{ 'on' if show == 'cancelled' }}" href="{{ url_for('prod.orders', show='cancelled') }}">Cancelled</a>
+</div>
+
+<form class="filters card" method="get">
+  {% if stage %}<input type="hidden" name="stage" value="{{ stage }}">{% endif %}{% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
+  <input name="q" value="{{ q }}" placeholder="Search name, phone, order no, bill no, unit code">
+  {% if products %}<select name="product"><option value="">All products</option>{% for p in products %}<option {{ 'selected' if args.get('product') == p }}>{{ p }}</option>{% endfor %}</select>{% endif %}
+  {% if makers %}<select name="maker"><option value="">All makers</option>{% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if args.get('maker', type=int) == m.id }}>{{ m.name }}</option>{% endfor %}</select>{% endif %}
+  <button class="btn btn-sm">Search</button>
+</form>
+
+<div class="po-list">
+  {% for o in rows %}
+  {% set sc = sched.get(o.id) %}
+  {% set ph = phase(o) %}
+  <div class="po-row {{ 'po-late' if sc and sc.late }} {{ 'po-cancel' if o.status != 'active' }}">
+    <a class="po-main" href="{{ url_for('prod.order_view', order_id=o.id) }}">
+      <span class="po-no">#{{ o.order_no }}</span>
+      <span class="po-name"><b>{{ o.cust_name }}</b>{% if o.imported %} <span class="badge">old</span>{% endif %}
+        <span class="po-sub">{{ o.product_name or 'Product not set' }}{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</span></span>
+    </a>
+    <span class="po-stage">{{ stage_badge(o.stage_name, o.stage_mark) }}{% if details_pending(o) and ph in ('queue', 'working') %} <span class="badge b-ordered" title="Price or quantity missing">details pending</span>{% endif %}</span>
+    <span class="po-dates small">
+      {% if sc %}
+        {% if ph == 'queue' %}Start ~{{ dmy(sc.start) }}<br>{% endif %}
+        {% if ph in ('queue', 'working') %}<span class="{{ 'overdue' if sc.late }}">Dispatch ~{{ dmy(sc.finish) }}</span>{% elif ph == 'ready' %}<span class="w-ok">Ready ✓</span>{% endif %}
+      {% elif o.bill_no %}Bill {{ o.bill_no }}{% if o.delivered_date %}<br>Delivered {{ dmy(o.delivered_date) }}{% endif %}
+      {% else %}<span class="muted">Ordered {{ dmy(o.order_date) }}</span>{% endif %}
+    </span>
+    <span class="po-maker small muted">{{ ('👷 ' ~ o.maker_name) if o.maker_name and ph in ('working', 'ready') else '' }}</span>
+    <span class="po-act">{{ next_btn(o, nexts[o.id], needs_form(o, nexts[o.id]) if nexts[o.id] else False, request.full_path) }}</span>
+  </div>
+  {% else %}
+  <p class="empty muted card">No orders here.{% if not stage and not show %} Mark a lead as <b>Converted</b> in the CRM and it comes to the Queue, or add a New Order.{% endif %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

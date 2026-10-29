@@ -1,0 +1,59 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, dmy with context %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ c.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ c.name }}{% if st.referral %} <span class="badge ps ps-production">{{ c.unit_code }}</span>{% endif %}</h1>
+  <div class="actions">{% if wa and st.referral %}<a class="btn btn-wa" href="{{ wa }}" target="_blank" rel="noopener">🟢 Send unit code &amp; link</a>{% endif %}</div>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <dl class="details">
+      <dt>Phone</dt><dd>{% if c.phone %}<a href="tel:{{ c.phone }}">{{ c.phone }}</a>{% else %}—{% endif %}</dd>
+      <dt>WhatsApp</dt><dd>{{ c.whatsapp or '—' }}</dd>
+      <dt>Address</dt><dd>{{ c.address or '—' }}</dd>
+      {% if st.referral %}<dt>Points</dt><dd><b>{{ c.points }}</b> = {{ (c.points * st.point_value)|rs }} <span class="small muted">(1 point = {{ st.point_value|rs }})</span></dd>{% endif %}
+    </dl>
+    <h2>Orders</h2>
+    {% for o in orders %}<a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}"><span class="run-main"><b>#{{ o.order_no }}</b> {{ o.product_name }}</span>{{ stage_badge(o.stage_name, o.stage_mark) }}</a>
+    {% else %}<p class="muted">No orders.</p>{% endfor %}
+    {% if st.referral %}
+    <h2>Orders with this customer's code</h2>
+    {% for o in referred %}<a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}"><span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name }}</span>{{ stage_badge(o.stage_name, o.stage_mark) }}{{ ' ✓ points' if o.points_given }}</a>
+    {% else %}<p class="muted">Nobody has used this code yet.</p>{% endfor %}
+    {% endif %}
+  </section>
+  {% if st.referral %}
+  <div>
+    {% if pcan('points') and not viewing %}
+    <section class="card">
+      <h2>💰 Redeem (money paid to the customer)</h2>
+      <form method="post" class="form">{{ csrf() }}<input type="hidden" name="action" value="redeem">
+        <div class="row-2"><label>Points<input type="number" name="points" min="1" max="{{ c.points }}" value="{{ c.points }}" id="r-pts"></label>
+          <label>Amount paid (₹)<input name="amount" inputmode="decimal" id="r-amt" placeholder="points × {{ st.point_value|pstr }}"></label></div>
+        <div class="row-2"><label>Paid by<select name="pay_mode">{% for m in PAY_MODES %}<option>{{ m }}</option>{% endfor %}</select></label>
+          <label>Date<input type="date" name="pay_date" value="{{ today }}"></label></div>
+        <label>Note<input name="note" placeholder="e.g. UPI ref no."></label>
+        <button class="btn btn-prod" {{ 'disabled' if not c.points }}>Mark as Redeemed</button>
+      </form>
+      <script>(function(){var p=document.getElementById("r-pts"),a=document.getElementById("r-amt"),v={{ st.point_value }};function u(){a.placeholder=((p.value||0)*v/100).toFixed(0)}p.addEventListener("input",u);u()})()</script>
+    </section>
+    <section class="card">
+      <h2>Add / remove points</h2>
+      <form method="post" class="inline-form">{{ csrf() }}<input type="hidden" name="action" value="adjust">
+        <select name="sign"><option value="+">+ Add</option><option value="-">− Remove</option></select>
+        <input type="number" name="points" min="1" placeholder="Points" style="width:90px"><input name="note" required placeholder="Reason (required)">
+        <button class="btn btn-sm">Save</button></form>
+    </section>
+    {% endif %}
+    <section class="card">
+      <h2>Points history</h2>
+      <ul class="timeline">
+        {% for p in ledger %}<li><b class="{{ 'w-ok' if p.change > 0 else 'w-exp' }}">{{ '+' if p.change > 0 }}{{ p.change }}</b> {{ p.kind|title }}{% if p.kind == 'redeem' %} · paid {{ p.amount|rs }} {{ p.pay_mode or '' }} {{ dmy(p.pay_date) }}{% endif %}{% if p.note %} · {{ p.note }}{% endif %}
+          <small class="muted">{{ p.user_name or '' }} · {{ p.created_at[:16] }}</small></li>
+        {% else %}<li class="muted">No points yet.</li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

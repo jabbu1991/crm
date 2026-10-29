@@ -233,26 +233,28 @@ def load_user():
                 return jsonify(ok=False, csrf=True, token=csrf_token(), error="Please try again."), 400
             abort(400, "Invalid form token. Please reload the page and try again.")
 
+    g.req_ts = now()
     ep = request.endpoint or ""
-    if g.get("user") and g.get("org") and ep and not ep.startswith(("cafe.", "admin_")) \
+    if g.get("user") and g.get("org") and ep and not ep.startswith(("cafe.", "prod.", "admin_")) \
             and ep not in SHARED_ENDPOINTS:
-        kind = cafe.app_type()
-        if kind == "cafe":
+        mods = user_modules()
+        if "crm" not in mods:  # this organization (or this person) does not use the CRM
             if request.method == "GET":
-                return redirect(url_for("cafe.home"))
+                return redirect(module_home(mods[0]))
             abort(404)
-        if kind == "both" and session.get("app_mode") == "cafe" and ep != "dashboard":
+        if session.get("app_mode") in ("cafe", "prod") and ep != "dashboard":
             session["app_mode"] = "crm"  # opening a CRM page from a link: show the CRM menu
 
 
 # While a Super Admin views a client workspace, these are the only POSTs allowed,
 # and these form pages are hidden (their submit would be refused anyway).
-VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static"}
+VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static", "switch_module", "cafe.switch_mode"}
 # Pages a Cafe-only organization still uses (everything else in the CRM is hidden from it).
 SHARED_ENDPOINTS = {"logout", "login", "org_login", "org_manifest", "org_icon", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
                     "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product"}
 WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
-                        "product_edit", "staff_new", "staff_edit", "account"}
+                        "product_edit", "staff_new", "staff_edit", "account", "prod.order_new", "prod.order_edit",
+                        "prod.order_move", "prod.product_edit", "prod.stage_set"}
 
 
 def audit(action, detail="", org=None):
@@ -303,6 +305,70 @@ def start_session(user):
     session.permanent = True
     session["user_id"] = user["id"]
     session["sv"] = user["session_version"]
+    if "last_mode" in user.keys() and user["last_mode"] in MODULE_KEYS:
+        session["app_mode"] = user["last_mode"]  # open the module this person used last
+
+
+# ---------------------------------------------------------------- modules (CRM / Cafe / Production)
+
+MODULES = {"crm": {"label": "CRM", "icon": "💼", "color": "#2563eb"},
+           "cafe": {"label": "Cafe", "icon": "☕", "color": "#92400e"},
+           "prod": {"label": "Production", "icon": "🏭", "color": "#ea580c"}}
+MODULE_KEYS = tuple(MODULES)
+
+
+def org_modules(org=None):
+    """The modules the Super Admin switched on for an organization, in a fixed order (crm, cafe, prod)."""
+    org = org if org is not None else g.get("org")
+    if not org:
+        return ["crm"]
+    keys = org.keys()
+    t = org["app_type"] if "app_type" in keys else "crm"
+    on = {
+        "crm": org["mod_crm"] if "mod_crm" in keys and org["mod_crm"] is not None else t in ("crm", "both"),
+        "cafe": org["mod_cafe"] if "mod_cafe" in keys and org["mod_cafe"] is not None else t in ("cafe", "both"),
+        "prod": org["mod_prod"] if "mod_prod" in keys else 0,
+    }
+    mods = [k for k in MODULE_KEYS if on[k]]
+    return mods or ["crm"]
+
+
+def user_modules(user=None, org=None):
+    """Modules this person can open: admins get every module of the organization; staff get CRM unless it is
+    switched off for them, the cafe as before, and Production only when they have a production permission."""
+    user = user if user is not None else g.get("user")
+    mods = org_modules(org)
+    if not user or g.get("viewing") or user["role"] in (SUPER_ADMIN, ORG_ADMIN):
+        return mods
+    out = []
+    for m in mods:
+        if m == "crm" and user["crm_off"] and len(mods) > 1:
+            continue
+        if m == "prod" and not production.user_perms(user):
+            continue
+        out.append(m)
+    return out or mods[:1]
+
+
+def current_module():
+    mods = user_modules()
+    m = session.get("app_mode")
+    return m if m in mods else mods[0]
+
+
+def module_home(m):
+    return url_for({"cafe": "cafe.home", "prod": "prod.home"}.get(m, "dashboard"))
+
+
+def set_module(m):
+    """Remember the open module for this browser and, for the next login, for this person."""
+    session["app_mode"] = m
+    if g.get("user") and not g.get("viewing") and g.user["last_mode"] != m:
+        execute("UPDATE users SET last_mode = ? WHERE id = ?", (m, g.user["id"]))
+
+
+def module_labels(org):
+    return " + ".join(MODULES[m]["label"] for m in org_modules(org))
 
 
 def login_required(view):
@@ -351,7 +417,20 @@ def inject_globals():
         COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link,
         list_settings=list_settings, LIST_COLUMNS=LIST_COLUMNS, quick_dates=quick_dates(),
         client_brand=g.get("login_brand") or (org_brand() if g.get("user") else None),
+        MODULES=MODULES, module_labels=module_labels, module_home=module_home,
+        my_modules=user_modules() if g.get("user") and g.get("org") else [],
+        cur_module=current_module() if g.get("user") and g.get("org") else "crm",
     )
+
+
+@app.route("/module/<mode>", methods=["POST"])
+@login_required
+def switch_module(mode):
+    """The [ CRM ] [ Cafe ] [ Production ] buttons in the top bar."""
+    if mode not in user_modules():
+        abort(404)
+    set_module(mode)
+    return redirect(module_home(mode))
 
 
 def lead_token(lid):
@@ -461,11 +540,11 @@ def org_brand(org=None):
     keys = org.keys()
     logo = org["brand_logo"] if "brand_logo" in keys else None
     color = org["brand_color"] if "brand_color" in keys else None
-    kind = org["app_type"] if "app_type" in keys else "crm"
-    if kind in ("cafe", "both") and (not logo or not color):
+    mods = org_modules(org)
+    if "cafe" in mods and (not logo or not color):
         st = cafe.get_settings(org["id"])
         logo = logo or st.get("logo") or None
-        if not color and kind == "cafe":
+        if not color and mods == ["cafe"]:
             color = (st.get("theme") or {}).get("primary")
     logo = logo or (org["catalog_logo"] if "catalog_logo" in keys else None)
     color = color if color and HEX_COLOR.match(color) else None
@@ -1034,8 +1113,8 @@ def count_by(column, where, args, limit=None):
 @app.route("/")
 @login_required
 def dashboard():
-    if cafe.current_mode() == "cafe":
-        return redirect(url_for("cafe.home"))
+    if current_module() != "crm":
+        return redirect(module_home(current_module()))
     where, args = lead_scope()
 
     def count(extra="", extra_args=()):
@@ -1425,7 +1504,15 @@ def lead_form_data():
     data["assigned_to"] = request.form.get("assigned_to", type=int)
     data["product_ids"] = int_list(request.form.getlist("product_ids"))
     data["next_follow_up"] = clean(request.form.get("next_follow_up"))
+    data["referral_code"] = clean(request.form.get("referral_code")).upper()[:20]
     return data
+
+
+def save_referral_code(db, lid, data):
+    """Production clients: the unit code of the customer who referred this lead (goes to the production order)."""
+    if "referral_code" in request.form and "prod" in org_modules():
+        db.execute("UPDATE leads SET referral_code = ? WHERE id = ? AND org_id = ?",
+                   (data.get("referral_code") or None, lid, org_id()))
 
 
 def validate_lead(data, lead=None):
@@ -1634,6 +1721,7 @@ def lead_new():
                  *[data[k] for k in cols])).lastrowid
             sync_products(db, lead_id, data["product_ids"], ts)
             schedule_follow_up(db, lead_id, data["next_follow_up"], "", ts)
+            save_referral_code(db, lead_id, data)
             log_activity(lead_id, "Lead created", commit=False)
             db.commit()
             flash(f"Lead '{data['customer_name']}' saved. Created by {g.user['name']}.", "success")
@@ -1655,8 +1743,13 @@ def lead_view(lid):
                         WHERE f.lead_id = ? ORDER BY f.status = 'Pending' DESC, f.due_date""", (lid,))
     activity = query("""SELECT a.*, u.name user_name FROM lead_activity a JOIN users u ON u.id = a.user_id
                         WHERE a.lead_id = ? ORDER BY a.id DESC""", (lid,))
+    prod_order = None
+    if "prod" in user_modules():
+        prod_order = query("""SELECT o.id, o.order_no, s.name stage_name FROM prod_orders o JOIN prod_stages s
+                              ON s.id = o.stage_id WHERE o.lead_id = ? AND o.org_id = ? ORDER BY o.id LIMIT 1""",
+                           (lid, org_id()), one=True)
     return render_template("lead_view.html", lead=lead, products_linked=products_linked, followups=followups,
-                           activity=activity)
+                           activity=activity, prod_order=prod_order)
 
 
 @app.route("/leads/<int:lid>/edit", methods=["GET", "POST"])
@@ -1688,6 +1781,7 @@ def lead_edit(lid):
                        (*[data[k] for k in cols], phone_key(data["phone"] or data["whatsapp"]), g.user["id"], ts,
                         lid, *args))
             changes += sync_products(db, lid, data["product_ids"], ts)
+            save_referral_code(db, lid, data)
             msg = schedule_follow_up(db, lid, data["next_follow_up"], lead["next_follow_up"], ts)
             if msg:
                 changes.append(msg)
@@ -2563,7 +2657,8 @@ def staff_manager_required(view):
 
 
 def save_cafe_perms(uid, role):
-    """Store the cafe role + ticked permissions for a staff account (cafe organizations only)."""
+    """Store the module permissions for a staff account: cafe ticks, production ticks, and whether they use the CRM."""
+    save_prod_perms(uid, role)
     if not cafe.has_cafe():
         return
     if role != STAFF:
@@ -2574,6 +2669,24 @@ def save_cafe_perms(uid, role):
         mine = cafe.user_perms()
         perms = json.dumps([p for p in json.loads(perms) if p in mine])
     execute("UPDATE users SET cafe_role = ?, cafe_perms = ? WHERE id = ? AND org_id = ?", (crole, perms, uid, org_id()))
+
+
+def save_prod_perms(uid, role):
+    mods = org_modules()
+    if role != STAFF:
+        execute("UPDATE users SET prod_role = NULL, prod_perms = NULL, crm_off = 0 WHERE id = ? AND org_id = ?",
+                (uid, org_id()))
+        return
+    if "prod" in mods:
+        prole, perms = production.staff_form_perms()
+        if not is_admin():  # a staff manager can only hand out permissions they have themselves
+            mine = production.user_perms()
+            perms = json.dumps([p for p in json.loads(perms) if p in mine])
+        execute("UPDATE users SET prod_role = ?, prod_perms = ? WHERE id = ? AND org_id = ?",
+                (prole, perms, uid, org_id()))
+    if "crm" in mods and len(mods) > 1 and request.form.get("mods_form"):
+        execute("UPDATE users SET crm_off = ? WHERE id = ? AND org_id = ?",
+                (0 if request.form.get("uses_crm") else 1, uid, org_id()))
 
 
 @app.route("/staff")
@@ -2680,16 +2793,21 @@ def staff_edit(uid):
 
 
 def staff_form_extra(member):
+    mods = org_modules()
+    extra = {"prod_perms": production.staff_form_extra(member) if "prod" in mods else None,
+             "org_mods": mods,
+             "uses_crm": (not request.form.get("mods_form") or bool(request.form.get("uses_crm")))
+             if request.method == "POST" else not (member is not None and member["crm_off"])}
     if not cafe.has_cafe():
-        return {"cafe_perms": None}
+        return dict(extra, cafe_perms=None)
     perms = cafe.user_perms(member) if member is not None and member["role"] == STAFF else set(cafe.ROLE_PRESETS["cashier"])
     role = (member["cafe_role"] if member is not None else None) or "cashier"
     if request.method == "POST":
         role = request.form.get("cafe_role") or role
         perms = set(request.form.getlist("cafe_perm")) if role == "custom" else set(cafe.ROLE_PRESETS.get(role, []))
     allowed = set(cafe.PERM_KEYS) if is_admin() else cafe.user_perms()
-    return {"cafe_perms": {"all": cafe.PERMS, "have": perms, "role": role, "presets": cafe.ROLE_PRESETS,
-                           "labels": cafe.ROLE_PRESET_LABELS, "allowed": allowed}}
+    return dict(extra, cafe_perms={"all": cafe.PERMS, "have": perms, "role": role, "presets": cafe.ROLE_PRESETS,
+                                   "labels": cafe.ROLE_PRESET_LABELS, "allowed": allowed})
 
 
 def password_action(user, back):
@@ -3207,6 +3325,28 @@ def form_app_type():
     return t if t in cafe.APP_TYPES else "crm"
 
 
+def form_modules():
+    """{crm, cafe, prod: 0/1} from the module switches on the organization form (older forms send app_type)."""
+    if request.form.get("mods_form"):
+        mods = {m: 1 if request.form.get("mod_" + m) else 0 for m in MODULE_KEYS}
+    else:
+        t = form_app_type()
+        mods = {"crm": int(t in ("crm", "both")), "cafe": int(t in ("cafe", "both")),
+                "prod": 1 if request.form.get("mod_prod") else 0}
+    return mods
+
+
+def modules_app_type(mods):
+    if mods["crm"] and mods["cafe"]:
+        return "both"
+    return "cafe" if mods["cafe"] else "crm"
+
+
+def save_org_modules(oid, mods):
+    execute("UPDATE organizations SET mod_crm = ?, mod_cafe = ?, mod_prod = ?, app_type = ? WHERE id = ?",
+            (mods["crm"], mods["cafe"], mods["prod"], modules_app_type(mods), oid))
+
+
 @app.route("/admin/organizations/new", methods=["GET", "POST"])
 @super_required
 def admin_org_new():
@@ -3221,6 +3361,9 @@ def admin_org_new():
         elif query("SELECT 1 FROM organizations WHERE code = ?", (data["code"],), one=True):
             errors.append(f"Organization code {data['code']} is already used.")
         errors += validate_user(admin)
+        mods = form_modules()
+        if not any(mods.values()):
+            errors.append("Tick at least one module (CRM, Cafe or Production).")
         if request.form.get("onboarding") == "password":
             problem = password_problem(request.form.get("password"))
             if problem:
@@ -3233,7 +3376,8 @@ def admin_org_new():
                              notes, created_by, created_at, updated_at, app_type)
                              VALUES (?,?, 'client', 'Active', ?,?,?,?,?,?,?,?,?)""",
                           (data["name"], data["code"], data["contact_name"], data["phone"], data["email"],
-                           data["address"], data["notes"], g.user["id"], ts, ts, form_app_type()))
+                           data["address"], data["notes"], g.user["id"], ts, ts, modules_app_type(mods)))
+            save_org_modules(oid, mods)
             crm_db.copy_default_templates(get_db(), oid, g.user["id"], ts)
             get_db().commit()
             uid, link, expires = create_user(oid, admin, request.form.get("onboarding"), request.form.get("password") or "")
@@ -3244,6 +3388,7 @@ def admin_org_new():
                   "They must change the initial password at first login.", "success")
             return redirect(url_for("admin_orgs"))
     data.setdefault("app_type", request.form.get("app_type") or "crm")
+    data["mods"] = form_modules() if request.method == "POST" else {"crm": 1, "cafe": 0, "prod": 0}
     return render_template("admin_org_form.html", data=data, admin=admin, org=None)
 
 
@@ -3252,22 +3397,29 @@ def admin_org_new():
 def admin_org_edit(oid):
     org = org_or_404(oid)
     data = dict(org)
+    data["mods"] = {m: int(m in org_modules(org)) for m in MODULE_KEYS}
     if request.method == "POST":
         data = org_form_data()
+        mods = form_modules()
+        data_mods = mods
         if not data["name"] or not data["code"]:
             flash("Organization name and code are required.", "error")
+        elif not any(mods.values()):
+            flash("Tick at least one module (CRM, Cafe or Production).", "error")
         elif query("SELECT 1 FROM organizations WHERE code = ? AND id != ?", (data["code"], oid), one=True):
             flash(f"Organization code {data['code']} is already used.", "error")
         else:
             execute("""UPDATE organizations SET name=?, code=?, contact_name=?, phone=?, email=?, address=?, notes=?,
                        updated_at=? WHERE id = ?""", (*data.values(), now(), oid))
-            execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ?, app_type = ? WHERE id = ?",
+            execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ? WHERE id = ?",
                     (1 if request.form.get("wa_templates_allowed") else 0,
-                     1 if request.form.get("catalog_allowed") else 0, form_app_type(), oid))
+                     1 if request.form.get("catalog_allowed") else 0, oid))
+            save_org_modules(oid, mods)
             if org["kind"] != "agency":
                 save_branding(oid, org)
             flash("Organization updated.", "success")
             return redirect(url_for("admin_orgs"))
+        data["mods"] = data_mods
     return render_template("admin_org_form.html", data=data, admin=None, org=org)
 
 
@@ -3454,8 +3606,10 @@ def integrity_error(e):
 import sys  # noqa: E402
 
 import cafe  # noqa: E402
+import production  # noqa: E402
 
 cafe.init(sys.modules[__name__])
+production.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

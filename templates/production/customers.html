@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Customers &amp; points{% endblock %}
+{% block content %}
+<h1>Customers &amp; points</h1>
+<form class="filters card" method="get"><input name="q" value="{{ q }}" placeholder="Search name, phone, unit code"><button class="btn btn-sm">Search</button></form>
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Customer</th><th>Phone</th>{% if st.referral %}<th>Unit code</th>{% endif %}<th class="num">Orders</th>{% if st.referral %}<th class="num">Referred</th><th class="num">Points</th><th class="num">Value</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for c in rows %}
+  <tr><td><a href="{{ url_for('prod.customer_view', cid=c.id) }}"><b>{{ c.name }}</b></a>{% if c.address %}<div class="small muted">{{ c.address }}</div>{% endif %}</td>
+    <td>{{ c.phone or c.whatsapp or '' }}</td>{% if st.referral %}<td><b>{{ c.unit_code }}</b></td>{% endif %}
+    <td class="num">{{ c.orders }}</td>{% if st.referral %}<td class="num">{{ c.referred }}</td><td class="num"><b>{{ c.points }}</b></td><td class="num">{{ (c.points * st.point_value)|rs }}</td>{% endif %}</tr>
+  {% else %}<tr><td colspan="7" class="muted">No customers yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

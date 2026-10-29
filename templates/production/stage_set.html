@@ -1,0 +1,43 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Stages · {{ s.name }}{% endblock %}
+{% block content %}
+<h1>Stages · {{ s.name }}</h1>
+<p class="muted">The first stage is the queue (new orders come here). Use ↑ ↓ to change the order. Only this set changes.</p>
+<form method="post" class="card form narrow" id="stage-form">
+  {{ csrf() }}
+  <label>Set name<input name="set_name" value="{{ s.name }}" required></label>
+  <div id="stage-rows">
+    {% for st in stages %}
+    <div class="stage-edit">
+      <span class="se-no">{{ loop.index }}</span>
+      <input type="hidden" name="stage_id" value="{{ st.id }}">
+      <input name="stage_name" value="{{ st.name }}" required aria-label="Stage name">
+      <select name="stage_mark" aria-label="Mark"><option value="">—</option>{% for k, v in MARKS.items() %}<option value="{{ k }}" {{ 'selected' if st.mark == k }}>{{ v }}</option>{% endfor %}</select>
+      <span class="se-btns"><button type="button" class="btn btn-sm" onclick="mv(this,-1)">↑</button><button type="button" class="btn btn-sm" onclick="mv(this,1)">↓</button>
+        {% if st.orders %}<span class="small muted" title="Has orders: cannot be removed">{{ st.orders }} 📦</span>{% else %}<button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.stage-edit').remove();num()">✕</button>{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <button type="button" class="btn btn-sm" onclick="addStage()">+ Add a stage</button>
+  <p class="small muted">Marks: <b>Production starts</b> asks who makes it · <b>Production finished</b> stops the "late" clock · <b>Dispatch</b> asks the GST bill number · <b>Delivered</b> (last stage) shows the warranty page and gives points.</p>
+  {% if not s.is_default %}<label class="check"><input type="checkbox" name="make_default" value="1"> Make this the default set (for products without their own set)</label>{% endif %}
+  <div class="actions"><button class="btn btn-prod">Save stages</button><a class="btn" href="{{ url_for('prod.settings') }}">Back</a></div>
+</form>
+<template id="stage-tpl"><div class="stage-edit"><span class="se-no"></span><input type="hidden" name="stage_id" value=""><input name="stage_name" required placeholder="Stage name" aria-label="Stage name"><select name="stage_mark" aria-label="Mark"><option value="">—</option>{% for k, v in MARKS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select><span class="se-btns"><button type="button" class="btn btn-sm" onclick="mv(this,-1)">↑</button><button type="button" class="btn btn-sm" onclick="mv(this,1)">↓</button><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.stage-edit').remove();num()">✕</button></span></div></template>
+<script>
+function num() { document.querySelectorAll("#stage-rows .se-no").forEach(function (e, i) { e.textContent = i + 1; }); }
+function mv(btn, d) {
+  var row = btn.closest(".stage-edit"), box = row.parentNode;
+  if (d < 0 && row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
+  if (d > 0 && row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
+  num();
+}
+function addStage() {
+  var box = document.getElementById("stage-rows"), last = box.lastElementChild;
+  var node = document.getElementById("stage-tpl").content.firstElementChild.cloneNode(true);
+  var lastMark = last && last.querySelector("select").value;
+  if (last && lastMark === "delivered") box.insertBefore(node, last); else box.appendChild(node);
+  num(); node.querySelector("input[name=stage_name]").focus();
+}
+</script>
+{% endblock %}

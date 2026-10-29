@@ -1,5 +1,5 @@
 REAL VIEW CRM + REAL VIEW CREATIVE STUDIO WEBSITE — PROJECT CONTEXT
-(Paste this into a new Claude chat so it knows the whole project. Last updated: 24 Oct 2026.)
+(Paste this into a new Claude chat so it knows the whole project. Last updated: 29 Oct 2026.)
 
 ======================================================================
 0. HOW TO WORK WITH ME (the owner)
@@ -41,10 +41,11 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py (46 pytest tests, all passing); cafe*.py (cafe module),
+  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (79 pytest tests, all passing); cafe*.py (cafe module),
+  production.py + production_io.py (production module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -234,6 +235,48 @@ Digital Catalogue (built 16 Oct 2026)
   memory, per-client counts and approximate space; warning at 70% (also on the Super Admin dashboard); 'Remove old
   backups' keeps the newest 2.
 - Demo: demo.bat creates "Chai Corner" (cafe_admin / cafe_cashier, password demo1234), menu at /m/chai.
+
+======================================================================
+4C. MODULE SWITCHES + PRODUCTION MODULE (built 29 Oct 2026)
+======================================================================
+- Super Admin → client → Modules: CRM / Cafe / Production tick boxes (organizations.mod_crm / mod_cafe / mod_prod;
+  app_type is kept in step for old code). Existing clients kept their modules; Production starts OFF everywhere.
+  OFF only hides a module, data stays. More than one ON → [ CRM ] [ Cafe ] [ Production ] buttons in the top bar
+  (POST /module/<m>); each module has its own menu and dashboard and a colour line under the menu (CRM blue, Cafe
+  brown, Production orange). The module used last opens after login (users.last_mode).
+- Staff: Production ticks on the staff form (users.prod_role / prod_perms; presets No access / Production staff /
+  Production manager / Custom). No tick = no Production. "Uses the CRM" untick (users.crm_off) = Production-only person.
+  Ticks: view, edit, stage, maker (assign + maker amounts), bill (GST bill no), warranty, points, import, export, settings.
+- Flow (default stage set): Queue → In Production → Ready for Dispatch → Dispatch → Delivered. A lead whose status is in
+  the client's "won" stage (Converted) becomes an order in the Queue by itself (after_request hook on lead saves; never
+  twice per lead). Lead page "📦 Open order", order page "👤 Open lead". Dashboard button brings old converted leads in.
+- Moving into the production stage asks the maker (list or new name), MFG start, expected finish (start + production
+  days), optional maker amount (can be added later). Moving into Dispatch asks GST bill no + bill date (bill made
+  outside, e.g. Tally; bill no unique per client). Delivered = warranty page + referral points. Moving back from
+  Delivered or cancelling takes the points back.
+- Stage sets (Settings): client edits set name, number/names/order of stages, marks (production starts / finished /
+  dispatch / delivered = last). Editing changes only that set; a stage with orders cannot be removed. Each product can
+  use its own set (Production → Products, also production days, warranty months, standard parts list).
+- Orders: one product per order. Fields follow Starway's paper Order Form (customer, address, order date, taken by,
+  product, category, machine type, power source, weight, qty, unit price, details, approved by, customer advances).
+  "Details pending" when price/qty missing.
+- Expected dates: no fixed capacity — the orders really in production are the places; queue (first come first) takes the
+  place that finishes first; nothing in production → one after another from today. Shown in lists, order page, customer
+  link; late = red.
+- Production Sheet (A4 print / PDF): like the paper form; shows ONLY the maker amount (blank line if not entered), never
+  the customer price/advance; blank Date/Amount/Signature table for advances to the maker (not tracked in software).
+- Warranty from the bill date (months per product, editable per order); parts from other companies with their own
+  months + serial no; Warranty page: ending in 30 days / under warranty / expired.
+- Customer link /t/<code>/<token> (no login): stages + expected dispatch; after Delivered the warranty page (days left,
+  parts); unit code, points, value, history, WhatsApp share. Never shows maker details. "New link" stops the old one.
+- Unit code per customer (U + 5 digits, prod_customers). Order with someone's code → code owner gets points when the order
+  is Delivered. Settings: points per referral, new-customer points ON/OFF, ₹ value of 1 point. Redeem = mark money paid
+  (amount, mode, date) → balance down, shown on the link. Manual +/- with reason.
+- Import / Export: "Export all" Excel (Orders, Stage history, Parts warranty, Customers, Points history, Makers, Maker
+  amounts) with date/stage/product filters. Old deliveries: template → upload → preview → Import; go straight to
+  Delivered ("Imported"), same phone = same customer, existing GST bill no skipped, no points, not in the queue estimate.
+  "+ Add old delivery" for one by hand.
+- Switches (Production → Settings): customer link, warranty, part warranties, unit code + points, new-customer points.
 
 ======================================================================
 5. WEBSITE (website/ folder)

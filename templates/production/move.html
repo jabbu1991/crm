@@ -1,0 +1,49 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Order #{{ o.order_no }} → {{ target.name }}{% endblock %}
+{% block content %}
+<h1>Order #{{ o.order_no }} → {{ target.name }}</h1>
+<p class="muted">{{ o.cust_name }} · {{ o.product_name or '—' }} · now in <b>{{ o.stage_name }}</b></p>
+<form method="post" class="card form narrow">
+  {{ csrf() }}<input type="hidden" name="to" value="{{ target.id }}"><input type="hidden" name="confirm" value="1"><input type="hidden" name="next" value="{{ back }}">
+  {% if enter_prod %}
+  <fieldset>
+    <legend>👷 Who makes it?</legend>
+    <label>Manufacturing in-charge *
+      <select name="maker_id" id="maker-sel"><option value="">— choose —</option>
+        {% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if form.maker_id == m.id }}>{{ m.name }}{{ ' · ' ~ m.phone if m.phone }}{{ ' · ' ~ m.work if m.work }}</option>{% endfor %}
+      </select></label>
+    <details {{ 'open' if not makers }}><summary class="small">+ New maker</summary>
+      <div class="row-3"><label>Name<input name="new_maker" placeholder="e.g. Babu"></label><label>Phone<input name="new_maker_phone" type="tel"></label><label>Work<input name="new_maker_work" placeholder="e.g. Welding"></label></div>
+    </details>
+    <div class="row-2">
+      <label>MFG start date<input type="date" name="mfg_start" id="mfg-start" value="{{ form.mfg_start }}"></label>
+      <label>Expected finish date <small class="muted">(start + {{ form.days }} days)</small><input type="date" name="exp_finish" id="exp-finish" value="{{ form.exp_finish }}"></label>
+    </div>
+    {% if pcan('maker') %}<label>Amount to pay the maker (₹) <small class="muted">optional — can be added later</small><input name="maker_amount" inputmode="decimal" value="{{ paise(form.maker_amount) }}"></label>{% endif %}
+    <label>Note for the maker<input name="maker_note" placeholder="optional"></label>
+  </fieldset>
+  {% endif %}
+  {% if is_dispatch %}
+  <fieldset>
+    <legend>🧾 GST bill</legend>
+    <div class="row-2">
+      <label>GST bill no *<input name="bill_no" required value="{{ form.bill_no }}" autocomplete="off"></label>
+      <label>Bill date <small class="muted">(warranty starts)</small><input type="date" name="bill_date" value="{{ form.bill_date }}"></label>
+    </div>
+  </fieldset>
+  {% endif %}
+  <label>Note <small class="muted">(optional)</small><input name="note" value="{{ form.note }}"></label>
+  <div class="actions"><button class="btn btn-prod">Move to {{ target.name }}</button><a class="btn" href="{{ back or url_for('prod.order_view', order_id=o.id) }}">Cancel</a></div>
+</form>
+<script>
+(function () {
+  var s = document.getElementById("mfg-start"), f = document.getElementById("exp-finish"), days = {{ form.days|int }};
+  if (!s || !f) return;
+  var touched = !!f.value;
+  function upd() { if (touched || !s.value) return; var d = new Date(s.value + "T00:00:00"); d.setDate(d.getDate() + days);
+    f.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  f.addEventListener("change", function () { touched = true; });
+  s.addEventListener("change", upd); upd();
+})();
+</script>
+{% endblock %}

@@ -4,6 +4,7 @@
 <div class="page-head">
   <h1>{{ lead.customer_name }} <span class="badge {{ lead.status|badge }}">{{ lead.status }}</span></h1>
   <div class="actions">
+    {% if prod_order %}<a class="btn btn-prod" href="{{ url_for('prod.order_view', order_id=prod_order.id) }}">📦 Open order #{{ prod_order.order_no }} <small>({{ prod_order.stage_name }})</small></a>{% endif %}
     {% if viewing %}<span class="muted">Read-only (Super Admin view)</span>{% else %}<a class="btn btn-primary" href="{{ url_for('lead_edit', lid=lead.id) }}">✏️ Edit lead</a>{% endif %}
     {% if not viewing %}
     <form method="post" action="{{ url_for('lead_delete', lid=lead.id) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Move this lead to the Recycle Bin?">{{ csrf() }}<button class="btn btn-danger">🗑 Delete</button></form>
@@ -28,6 +29,7 @@
       <dt>Buying possibility</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>
       <dt>Priority</dt><dd>{% if lead.priority %}<span class="badge {{ ('p-' ~ lead.priority)|badge }}">{{ lead.priority }}</span>{% else %}—{% endif %}</dd>
       <dt>Source</dt><dd>{{ lead.source or '—' }}</dd>
+      {% if has_prod and lead.referral_code %}<dt>Referral code</dt><dd>{{ lead.referral_code }}</dd>{% endif %}
       <dt>Requirement</dt><dd class="prewrap">{{ lead.requirement or '—' }}</dd>
       <dt>Notes</dt><dd class="prewrap">{{ lead.notes or '—' }}</dd>
     </dl>

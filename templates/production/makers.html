@@ -1,0 +1,40 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Makers{% endblock %}
+{% block content %}
+<h1>👷 Makers</h1>
+<p class="muted">The people who make the products (Manufacturing in-charge). No login needed. Choose one when an order moves to production.</p>
+{% if not viewing %}
+<form method="post" class="card form">
+  {{ csrf() }}
+  <h2>Add a maker</h2>
+  <div class="row-4"><label>Name *<input name="name" required></label><label>Phone<input name="phone" type="tel"></label>
+    <label>Work<input name="work" placeholder="e.g. Fabrication, Welding"></label><label>Note<input name="note"></label></div>
+  <button class="btn btn-prod">Add</button>
+</form>
+{% endif %}
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Name</th><th>Phone</th><th>Work</th><th class="num">Making now</th><th class="num">Orders</th><th class="num">Maker amount (running orders)</th><th></th></tr></thead>
+  <tbody>
+  {% for m in rows %}
+  <tr class="{{ 'inactive' if not m.active }}">
+    <td><b>{{ m.name }}</b>{% if m.note %}<div class="small muted">{{ m.note }}</div>{% endif %}</td>
+    <td>{% if m.phone %}<a href="tel:{{ m.phone }}">{{ m.phone }}</a>{% endif %}</td><td>{{ m.work or '' }}</td>
+    <td class="num">{{ working.get(m.id, 0) }}</td>
+    <td class="num"><a href="{{ url_for('prod.orders', show='all', maker=m.id) }}">{{ m.orders }}</a></td>
+    <td class="num">{{ m.amount|rs }}</td>
+    <td class="nowrap">{% if not viewing %}
+      <details class="inline-details"><summary class="linkbtn">Edit</summary>
+        <form method="post" class="form">{{ csrf() }}<input type="hidden" name="id" value="{{ m.id }}">
+          <label>Name<input name="name" value="{{ m.name }}" required></label><label>Phone<input name="phone" value="{{ m.phone or '' }}"></label>
+          <label>Work<input name="work" value="{{ m.work or '' }}"></label><label>Note<input name="note" value="{{ m.note or '' }}"></label>
+          <button class="btn btn-sm btn-prod">Save</button></form>
+      </details>
+      <form method="post" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ m.id }}"><button class="linkbtn dark" name="action" value="toggle">{{ 'Hide' if m.active else 'Show again' }}</button></form>
+    {% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="muted">No makers yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

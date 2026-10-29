@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import dmy, left_text with context %}
+{% block title %}Warranty{% endblock %}
+{% block content %}
+<h1>🛡 Warranty</h1>
+<div class="prod-tabs">
+  <a class="chip {{ 'on' if show == 'soon' }}" href="{{ url_for('prod.warranty', show='soon') }}">Ending in 30 days</a>
+  <a class="chip {{ 'on' if show == 'active' }}" href="{{ url_for('prod.warranty', show='active') }}">Under warranty</a>
+  <a class="chip {{ 'on' if show == 'expired' }}" href="{{ url_for('prod.warranty', show='expired') }}">Expired</a>
+  <a class="chip {{ 'on' if show == 'all' }}" href="{{ url_for('prod.warranty', show='all') }}">All</a>
+</div>
+{% if show == 'soon' %}<p class="muted small">Good time to call about AMC / service.</p>{% endif %}
+<div class="card table-wrap">
+<table class="table">
+  <thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Bill</th><th>Warranty ends</th>{% if st.parts %}<th>Parts</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for o, w, part_soon in items %}
+  <tr>
+    <td><a href="{{ url_for('prod.order_view', order_id=o.id) }}">#{{ o.order_no }}</a></td>
+    <td><b>{{ o.cust_name }}</b><div class="small">{% if o.cust_phone %}<a href="tel:{{ o.cust_phone }}">{{ o.cust_phone }}</a>{% endif %}</div></td>
+    <td>{{ o.product_name }}</td>
+    <td class="small">{{ o.bill_no or '—' }}<br>{{ dmy(o.bill_date) }}</td>
+    <td>{{ dmy(w.main.end) }}<div class="small">{{ left_text(w.main.left) }}</div></td>
+    {% if st.parts %}<td class="small">{% for x in w.parts %}{{ x.p.name }}{{ ' (' ~ x.p.company ~ ')' if x.p.company }}: {{ left_text(x.left) }}<br>{% else %}—{% endfor %}</td>{% endif %}
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">Nothing here.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

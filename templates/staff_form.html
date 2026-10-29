@@ -51,6 +51,49 @@
     </script>
   </fieldset>
   {% endif %}
+  <input type="hidden" name="mods_form" value="1">
+  {% if org_mods and 'crm' in org_mods and org_mods|length > 1 %}
+  <fieldset class="staff-only" id="crm-access">
+    <legend>💼 CRM</legend>
+    <label class="check"><input type="checkbox" name="uses_crm" value="1" {{ 'checked' if uses_crm }}> Uses the CRM (leads, follow-ups)</label>
+    <p class="muted small">Untick for someone who works only in {{ 'Production' if 'prod' in org_mods else 'the Cafe' }} — they will not see the CRM switch.</p>
+  </fieldset>
+  {% endif %}
+  {% if prod_perms %}
+  <fieldset class="cafe-perms staff-only" id="prod-perms">
+    <legend>🏭 Production permissions <small class="muted">(for staff only; admins have everything)</small></legend>
+    <label>Role
+      <select name="prod_role" id="prod-role">
+        {% for k, v in prod_perms.labels.items() %}<option value="{{ k }}" {{ 'selected' if prod_perms.role == k }}>{{ v }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="checks perm-checks">
+      {% for k, label in prod_perms.all %}
+      <label class="check {{ 'perm-locked' if k not in prod_perms.allowed }}"><input type="checkbox" name="prod_perm" value="{{ k }}" {{ 'checked' if k in prod_perms.have }} {{ 'disabled' if k not in prod_perms.allowed }}> {{ label }}</label>
+      {% endfor %}
+    </div>
+    <p class="muted small">No tick = this person does not see Production. "Production staff" can view orders and move them to the next stage.</p>
+    <script>
+    (function () {
+      var presets = {{ prod_perms.presets|tojson }}, sel = document.getElementById("prod-role"),
+          box = document.getElementById("prod-perms");
+      function boxes() { return box.querySelectorAll("input[name=prod_perm]"); }
+      sel.addEventListener("change", function () {
+        if (!presets[sel.value]) return;
+        boxes().forEach(function (c) { if (!c.disabled) c.checked = presets[sel.value].indexOf(c.value) >= 0; });
+      });
+      boxes().forEach(function (c) { c.addEventListener("change", function () { sel.value = "custom"; }); });
+    })();
+    </script>
+  </fieldset>
+  {% endif %}
+  <script>
+  (function () {
+    var roleSel = document.querySelector("select[name=role]");
+    function showFor() { document.querySelectorAll(".staff-only").forEach(function (b) { b.style.display = roleSel && roleSel.value === "org_admin" ? "none" : ""; }); }
+    if (roleSel) { roleSel.addEventListener("change", showFor); showFor(); }
+  })();
+  </script>
   {% if not member %}
   <fieldset>
     <legend>How will they get access?</legend>

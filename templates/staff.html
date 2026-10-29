@@ -10,7 +10,7 @@
     {% set protected = s.role == 'super_admin' and s.id != g.user.id %}
     <tr class="{{ 'inactive' if not s.active }}">
       <td><b>{{ s.name }}</b>{% if s.designation %}<div class="small muted">{{ s.designation }}</div>{% endif %}</td>
-      <td>{{ s.username }}</td><td>{{ s.email or '' }}</td><td>{{ ROLE_LABELS[s.role] }}{% if has_cafe and s.role == 'staff' %}<div class="small muted">☕ {{ (s.cafe_role or 'cashier')|title }}</div>{% endif %}</td>
+      <td>{{ s.username }}</td><td>{{ s.email or '' }}</td><td>{{ ROLE_LABELS[s.role] }}{% if has_cafe and s.role == 'staff' %}<div class="small muted">☕ {{ (s.cafe_role or 'cashier')|title }}</div>{% endif %}{% if has_prod and s.role == 'staff' %}<div class="small muted">🏭 {{ {'worker': 'Production staff', 'manager': 'Production manager', 'custom': 'Custom'}.get(s.prod_role, 'No Production') }}{{ ' · no CRM' if s.crm_off }}</div>{% endif %}</td>
       <td><span class="badge {{ ('Active' if s.active else 'Inactive')|badge }}">{{ 'Active' if s.active else 'Deactivated' }}</span>
         {% if s.must_change_password %}<div class="small muted">must change password</div>{% endif %}
         {% if s.pending_link %}<div class="small muted">invite/reset link pending</div>{% endif %}</td>

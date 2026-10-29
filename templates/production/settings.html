@@ -1,0 +1,42 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Production settings{% endblock %}
+{% block content %}
+<h1>⚙️ Production settings</h1>
+<div class="grid-2">
+<form method="post" class="card form">
+  {{ csrf() }}
+  <h2>Switches</h2>
+  {% for k, label in switches %}<label class="check"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if st[k] }}> {{ label }}</label>{% endfor %}
+  <h2>Referral points</h2>
+  <div class="row-3">
+    <label>Points for the code owner <small class="muted">(per delivered order)</small><input type="number" min="0" name="referrer_points" value="{{ st.referrer_points }}"></label>
+    <label>Points for the new customer <small class="muted">(if ON above)</small><input type="number" min="0" name="new_points" value="{{ st.new_points }}"></label>
+    <label>Money value of 1 point (₹)<input name="point_value" inputmode="decimal" value="{{ point_value }}"></label>
+  </div>
+  <p class="small muted">Points are given only when the referred order reaches <b>Delivered</b>. Cancelled / not delivered = no points. Old (imported) deliveries give no points.</p>
+  <h2>Defaults</h2>
+  <div class="row-3">
+    <label>Warranty (months)<input type="number" min="0" name="default_warranty" value="{{ st.default_warranty }}"></label>
+    <label>Production days<input type="number" min="1" name="default_days" value="{{ st.default_days }}"></label>
+    <label>Production sheet title<input name="sheet_title" value="{{ st.sheet_title }}"></label>
+  </div>
+  <p class="small muted">Used when a product has no own value (Products page).</p>
+  {% if not viewing %}<button class="btn btn-prod">Save settings</button>{% endif %}
+</form>
+<section class="card">
+  <h2>Stage sets</h2>
+  <p class="small muted">Each product follows one set of stages. Edit names, how many stages, and their order. Editing a set changes only that set.</p>
+  {% for s in sets %}
+  <div class="set-row">
+    <div><b>{{ s.name }}</b>{% if s.is_default %} <span class="badge b-new">default</span>{% endif %}
+      <div class="small muted">{{ s.path }}</div>
+      <div class="small muted">{{ s.orders }} order{{ 's' if s.orders != 1 }} · {{ s.products }} product{{ 's' if s.products != 1 }}</div></div>
+    {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('prod.stage_set', sid=s.id) }}">Edit</a>{% endif %}
+  </div>
+  {% endfor %}
+  {% if not viewing %}
+  <form method="post" action="{{ url_for('prod.stage_set_new') }}" class="inline-form">{{ csrf() }}<input name="name" placeholder="New set name, e.g. Gate automation" required><button class="btn btn-sm">+ New set</button></form>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

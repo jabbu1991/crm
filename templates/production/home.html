@@ -1,0 +1,70 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, dmy, left_text with context %}{% from '_macros.html' import csrf with context %}
+{% block title %}Production{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>🏭 Production</h1>
+  <div class="actions">
+    {% if pcan('edit') and not viewing %}<a class="btn btn-prod btn-big" href="{{ url_for('prod.order_new') }}">+ New Order</a>{% endif %}
+    {% if pcan('view') %}<a class="btn btn-big" href="{{ url_for('prod.orders') }}">📋 All running orders</a>{% endif %}
+  </div>
+</div>
+
+{% if unconverted and not viewing %}
+<div class="card warn-card">
+  <b>{{ unconverted }} lead{{ 's' if unconverted > 1 }} in the CRM {{ 'are' if unconverted > 1 else 'is' }} already "Converted"</b> but not in Production yet.
+  From now on every lead marked Converted comes to the Queue by itself.
+  <form method="post" action="{{ url_for('prod.convert_old_leads') }}" class="inline">{{ csrf() }}<button class="btn btn-sm btn-prod">Add {{ 'them' if unconverted > 1 else 'it' }} to the Queue</button></form>
+</div>
+{% endif %}
+
+{% if pcan('view') %}
+<div class="stats">
+  {% for c in counts %}<a class="stat stage-stat ps-{{ c.mark or 'step' }}" href="{{ url_for('prod.orders', stage=c.name) }}"><b>{{ c.n }}</b><span>{{ c.name }}</span></a>{% endfor %}
+  {% if not counts %}<div class="stat stat-muted"><b>0</b><span>Orders yet</span></div>{% endif %}
+  <a class="stat {{ 'stat-hot' if late }}" href="{{ url_for('prod.orders', show='late') }}"><b>{{ late|length }}</b><span>Late</span></a>
+  <a class="stat {{ 'stat-warn' if pending }}" href="{{ url_for('prod.orders', show='pending') }}"><b>{{ pending|length }}</b><span>Details pending</span></a>
+  {% if st.warranty %}<a class="stat" href="{{ url_for('prod.warranty') }}"><b>{{ soon|length }}</b><span>Warranty ends ≤ 30 days</span></a>{% endif %}
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>🔴 Late <a class="small" href="{{ url_for('prod.orders', show='late') }}">See all</a></h2>
+    {% for o in late[:8] %}
+      <a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}">
+        <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or '—' }}</span>
+        {{ stage_badge(o.stage_name, o.stage_mark) }}
+        <span class="overdue small">due {{ dmy(sched[o.id].finish) }}</span>
+      </a>
+    {% else %}<p class="muted">Nothing late 👍</p>{% endfor %}
+    {% if pending %}
+    <h2>📝 Details pending</h2>
+    {% for o in pending[:8] %}
+      <a class="run-row" href="{{ url_for('prod.order_edit', order_id=o.id) if pcan('edit') else url_for('prod.order_view', order_id=o.id) }}">
+        <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or 'product?' }}</span>
+        {{ stage_badge(o.stage_name, o.stage_mark) }}
+      </a>
+    {% endfor %}
+    {% endif %}
+  </section>
+  <section class="card">
+    {% if st.warranty %}
+    <h2>🛡 Warranty ending soon</h2>
+    {% for o, w in soon[:8] %}
+      <a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}">
+        <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name }}</span>
+        <span class="small">{{ left_text(w.left) }}</span>
+      </a>
+    {% else %}<p class="muted">No warranty ends in the next 30 days.</p>{% endfor %}
+    {% endif %}
+    <h2>Recent updates</h2>
+    <ul class="timeline">
+      {% for r in recent %}<li><a href="{{ url_for('prod.order_view', order_id=r.oid) }}"><b>#{{ r.order_no }}</b> {{ r.cust_name }}</a> → {{ r.stage_name }}{% if r.note %} <span class="muted">· {{ r.note }}</span>{% endif %}
+        <small class="muted">{{ r.user_name or '' }} · {{ r.created_at[:16] }}</small></li>
+      {% else %}<li class="muted">No orders yet. Mark a lead as Converted in the CRM, or add a <a href="{{ url_for('prod.order_new') }}">New Order</a>.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% else %}
+<p class="muted">You don't have permission to see orders. Ask your admin.</p>
+{% endif %}
+{% endblock %}

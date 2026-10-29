@@ -18,23 +18,22 @@
   {% if cafe_mode %}<link rel="stylesheet" href="{{ url_for('static', filename='cafe.css') }}">{% endif %}
   {% if cb and cb.palette %}<style>:root { --primary: {{ cb.palette.primary }}; --primary-dark: {{ cb.palette.primary_dark }}; } .topbar { background: {{ cb.palette.topbar }}; }</style>{% endif %}
 </head>
-<body class="{{ 'cafe-ui' if cafe_mode }}">
+<body class="{{ 'cafe-ui' if cafe_mode }} mod-{{ cur_module }}" style="--mod: {{ MODULES[cur_module].color if g.user else '#2563eb' }}">
 {% if g.user %}
 {% set ep = request.endpoint or '' %}
 <header class="topbar">
   {% if cb %}
-  <a class="brand client-brand" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ cb.name }}">{% if cb.logo %}<img class="brand-logo client-logo" src="{{ url_for('media', name=cb.logo) }}" alt="">{% endif %}<span class="client-name">{{ cb.name }}</span></a>
+  <a class="brand client-brand" href="{{ module_home(cur_module) }}" title="{{ cb.name }}">{% if cb.logo %}<img class="brand-logo client-logo" src="{{ url_for('media', name=cb.logo) }}" alt="">{% endif %}<span class="client-name">{{ cb.name }}</span></a>
   {% else %}
-  <a class="brand" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ brand.product }} by {{ brand.company }}"><img class="brand-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
+  <a class="brand" href="{{ module_home(cur_module) }}" title="{{ brand.product }} by {{ brand.company }}"><img class="brand-logo" src="{{ url_for('static', filename='logo-mark.png') }}" alt="">{{ brand.product.rsplit(' ', 1)[0] }}<span>{{ brand.product.rsplit(' ', 1)[1] if ' ' in brand.product }}</span></a>
   {% endif %}
-  <a class="orgname{{ ' orgname-hidden' if cb }}" href="{{ url_for('cafe.home') if cafe_mode else url_for('dashboard') }}" title="{{ g.org.name }}: dashboard">
+  <a class="orgname{{ ' orgname-hidden' if cb }}" href="{{ module_home(cur_module) }}" title="{{ g.org.name }}: dashboard">
     <span class="org-badge"><span class="org-initial">{{ (g.org.name or '?')[:1]|upper }}</span><span class="org-text">{{ g.org.name }}</span></span>{% if g.org.kind == 'agency' %} <small>agency</small>{% endif %}
   </a>
-  {% if app_type == 'both' and not g.user.must_change_password %}
-  <form method="post" action="{{ url_for('cafe.switch_mode', mode='crm' if cafe_mode else 'cafe') }}" class="mode-switch">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <span class="ms-opt {{ 'on' if not cafe_mode }}">CRM</span><button title="Switch">⇄</button><span class="ms-opt {{ 'on' if cafe_mode }}">☕ Cafe</span>
-  </form>
+  {% if my_modules|length > 1 and not g.user.must_change_password %}
+  <div class="mode-switch" role="group" aria-label="Module">
+    {% for m in my_modules %}<form method="post" action="{{ url_for('switch_module', mode=m) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="ms-opt {{ 'on' if cur_module == m }}" style="--mc: {{ MODULES[m].color }}" title="Open {{ MODULES[m].label }}">{{ MODULES[m].icon }} {{ MODULES[m].label }}</button></form>{% endfor %}
+  </div>
   {% endif %}
   <button class="menu-btn" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">☰</button>
   <div class="userbox">
@@ -42,7 +41,21 @@
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linkbtn">Log out</button></form>
   </div>
 </header>
-{% if not g.user.must_change_password and cafe_mode %}
+{% if not g.user.must_change_password and cur_module == 'prod' %}
+<nav class="mainnav prod-nav">
+  <a href="{{ url_for('prod.home') }}" class="{{ 'active' if ep == 'prod.home' }}">🏭 Dashboard</a>
+  {% if pcan('view') %}<a href="{{ url_for('prod.orders') }}" class="{{ 'active' if ep in ('prod.orders', 'prod.order_view', 'prod.order_edit', 'prod.order_move') }}">📋 Orders</a>{% endif %}
+  {% if pcan('edit') and not viewing %}<a href="{{ url_for('prod.order_new') }}" class="nav-cta {{ 'active' if ep == 'prod.order_new' }}">+ New Order</a>{% endif %}
+  {% if pcan('maker') %}<a href="{{ url_for('prod.makers') }}" class="{{ 'active' if ep == 'prod.makers' }}">👷 Makers</a>{% endif %}
+  {% if pcan('settings') %}<a href="{{ url_for('prod.products') }}" class="{{ 'active' if ep in ('prod.products', 'prod.product_edit') }}">Products</a>{% endif %}
+  {% if pcan('view') %}<a href="{{ url_for('prod.warranty') }}" class="{{ 'active' if ep == 'prod.warranty' }}">🛡 Warranty</a>
+  <a href="{{ url_for('prod.customers') }}" class="{{ 'active' if ep in ('prod.customers', 'prod.customer_view') }}">Customers &amp; Points</a>{% endif %}
+  {% if pcan('import') or pcan('export') %}<a href="{{ url_for('prod.data') }}" class="{{ 'active' if ep.startswith('prod.import') or ep == 'prod.data' }}">⬆⬇ Import / Export</a>{% endif %}
+  {% if pcan('settings') %}<a href="{{ url_for('prod.settings') }}" class="{{ 'active' if ep in ('prod.settings', 'prod.stage_set') }}">⚙️ Settings</a>{% endif %}
+  {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a>{% endif %}
+</nav>
+{% elif not g.user.must_change_password and cafe_mode %}
 <nav class="mainnav cafe-nav">
   <a href="{{ url_for('cafe.home') }}" class="{{ 'active' if ep == 'cafe.home' }}">🏠 Home</a>
   {% if can('bill_create') %}

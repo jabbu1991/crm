@@ -226,32 +226,24 @@ def token(n=12):
 # ---------------------------------------------------------------- organization type & mode
 
 def app_type(org=None):
-    org = org if org is not None else g.get("org")
-    if not org:
-        return "crm"
-    try:
-        t = org["app_type"]
-    except (IndexError, KeyError):
-        t = "crm"
-    return t if t in APP_TYPES else "crm"
+    """'crm', 'cafe' or 'both' (CRM + Cafe), from the module switches the Super Admin set."""
+    mods = H.org_modules(org if org is not None else g.get("org"))
+    if "crm" in mods and "cafe" in mods:
+        return "both"
+    return "cafe" if "cafe" in mods else "crm"
 
 
 def has_cafe(org=None):
-    return app_type(org) in ("cafe", "both")
+    return "cafe" in H.org_modules(org if org is not None else g.get("org"))
 
 
 def has_crm(org=None):
-    return app_type(org) in ("crm", "both")
+    return "crm" in H.org_modules(org if org is not None else g.get("org"))
 
 
 def current_mode():
-    """'crm' or 'cafe' - what the current user is looking at."""
-    t = app_type()
-    if t == "cafe":
-        return "cafe"
-    if t == "both" and session.get("app_mode") == "cafe":
-        return "cafe"
-    return "crm"
+    """'crm' or 'cafe' - what the current user is looking at ('crm' also while in Production)."""
+    return "cafe" if g.get("user") and H.current_module() == "cafe" else "crm"
 
 
 # ---------------------------------------------------------------- permissions
@@ -765,10 +757,10 @@ def cafe_context():
 def switch_mode(mode):
     @H.login_required
     def inner():
-        if app_type() != "both" or mode not in ("crm", "cafe"):
+        if mode not in H.user_modules():
             abort(404)
-        session["app_mode"] = mode
-        return redirect(url_for("cafe.home") if mode == "cafe" else url_for("dashboard"))
+        H.set_module(mode)
+        return redirect(H.module_home(mode))
     return inner()
 
 

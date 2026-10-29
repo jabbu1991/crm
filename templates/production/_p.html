@@ -1,0 +1,33 @@
+{% macro stage_badge(name, mark) -%}
+<span class="badge ps ps-{{ mark or 'step' }}">{{ name }}</span>
+{%- endmacro %}
+
+{# Progress bar of the stages: done ✅ / current 🔄 / to come. #}
+{% macro progress(stages, current_id, reached={}) -%}
+{% set ns = namespace(passed=True) %}
+<ol class="pbar">
+  {% for s in stages %}
+    {% set is_cur = s.id == current_id %}
+    {% if is_cur %}{% set ns.passed = False %}{% endif %}
+    <li class="{{ 'done' if ns.passed and not is_cur else ('cur' if is_cur else 'todo') }}">
+      <span class="pdot">{{ '✓' if ns.passed and not is_cur else ('●' if is_cur else loop.index) }}</span>
+      <span class="pname">{{ s.name }}</span>
+      {% if reached.get(s.name) and (ns.passed or is_cur) %}<span class="pdate">{{ reached[s.name][8:10] }}-{{ reached[s.name][5:7] }}</span>{% endif %}
+    </li>
+  {% endfor %}
+</ol>
+{%- endmacro %}
+
+{# "Next stage ▶" in one tap. When the next stage asks for something (maker / GST bill no) it opens that small form. #}
+{% macro next_btn(o, nxt, needs, back='') -%}
+{% if nxt and pcan('stage') and not viewing and o.status == 'active' %}
+  {% if needs %}<a class="btn btn-sm btn-prod" href="{{ url_for('prod.order_move', order_id=o.id, to=nxt.id, next=back) }}">▶ {{ nxt.name }}</a>
+  {% else %}<form method="post" action="{{ url_for('prod.order_move', order_id=o.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="to" value="{{ nxt.id }}"><input type="hidden" name="next" value="{{ back }}"><button class="btn btn-sm btn-prod" title="Move to {{ nxt.name }}">▶ {{ nxt.name }}</button></form>{% endif %}
+{% endif %}
+{%- endmacro %}
+
+{% macro dmy(d) -%}{% if d %}{% set s = d.isoformat() if d.isoformat is defined else d|string %}{{ s[8:10] }}-{{ s[5:7] }}-{{ s[:4] }}{% else %}—{% endif %}{%- endmacro %}
+
+{% macro left_text(left) -%}
+{% if left is none %}—{% elif left < 0 %}<span class="w-exp">Expired {{ -left }} day{{ 's' if -left != 1 }} ago</span>{% elif left <= 30 %}<span class="w-soon">{{ left }} day{{ 's' if left != 1 }} left</span>{% else %}<span class="w-ok">{{ left }} days left</span>{% endif %}
+{%- endmacro %}

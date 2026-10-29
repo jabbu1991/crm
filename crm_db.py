@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -891,9 +891,235 @@ def _migrate_v13(conn):
         conn.execute("ALTER TABLE organizations ADD COLUMN brand_color TEXT")
 
 
+PRODUCTION_TABLES = """
+CREATE TABLE IF NOT EXISTS prod_settings (
+    org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_by INTEGER REFERENCES users(id),
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS prod_stage_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prod_stages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    set_id INTEGER NOT NULL REFERENCES prod_stage_sets(id),
+    name TEXT NOT NULL,
+    sort INTEGER NOT NULL DEFAULT 0,
+    mark TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prod_makers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    phone TEXT,
+    work TEXT,
+    note TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prod_customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    phone TEXT,
+    whatsapp TEXT,
+    phone_norm TEXT,
+    address TEXT,
+    unit_code TEXT NOT NULL,
+    points INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS prod_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_no INTEGER NOT NULL,
+    lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+    customer_id INTEGER NOT NULL REFERENCES prod_customers(id),
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    product_name TEXT,
+    category TEXT,
+    machine_type TEXT,
+    power_source TEXT,
+    weight TEXT,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price INTEGER,
+    details TEXT,
+    prod_days INTEGER,
+    order_date TEXT NOT NULL,
+    taken_by INTEGER REFERENCES users(id),
+    taken_by_name TEXT,
+    approved_by TEXT,
+    note TEXT,
+    referral_code TEXT,
+    referrer_id INTEGER REFERENCES prod_customers(id),
+    set_id INTEGER NOT NULL REFERENCES prod_stage_sets(id),
+    stage_id INTEGER NOT NULL REFERENCES prod_stages(id),
+    stage_at TEXT,
+    maker_id INTEGER REFERENCES prod_makers(id),
+    maker_amount INTEGER,
+    maker_note TEXT,
+    mfg_start TEXT,
+    exp_finish TEXT,
+    bill_no TEXT,
+    bill_date TEXT,
+    warranty_months INTEGER,
+    delivered_date TEXT,
+    imported INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    cancel_reason TEXT,
+    points_given INTEGER NOT NULL DEFAULT 0,
+    token TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_by INTEGER REFERENCES users(id),
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS prod_advances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_id INTEGER NOT NULL REFERENCES prod_orders(id) ON DELETE CASCADE,
+    pay_date TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    note TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prod_parts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_id INTEGER REFERENCES prod_orders(id) ON DELETE CASCADE,
+    product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    company TEXT,
+    months INTEGER,
+    serial TEXT,
+    sort INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS prod_stage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    order_id INTEGER NOT NULL REFERENCES prod_orders(id) ON DELETE CASCADE,
+    stage_name TEXT NOT NULL,
+    from_name TEXT,
+    note TEXT,
+    user_id INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prod_points (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    customer_id INTEGER NOT NULL REFERENCES prod_customers(id),
+    order_id INTEGER REFERENCES prod_orders(id) ON DELETE SET NULL,
+    change INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    amount INTEGER,
+    pay_mode TEXT,
+    pay_date TEXT,
+    note TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_prod_sets_org ON prod_stage_sets(org_id);
+CREATE INDEX IF NOT EXISTS idx_prod_stages_set ON prod_stages(set_id, sort);
+CREATE INDEX IF NOT EXISTS idx_prod_makers_org ON prod_makers(org_id);
+CREATE INDEX IF NOT EXISTS idx_prod_customers_phone ON prod_customers(org_id, phone_norm);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_prod_customers_code ON prod_customers(org_id, unit_code);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_prod_orders_no ON prod_orders(org_id, order_no);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_prod_orders_token ON prod_orders(token);
+CREATE INDEX IF NOT EXISTS idx_prod_orders_stage ON prod_orders(org_id, stage_id);
+CREATE INDEX IF NOT EXISTS idx_prod_orders_lead ON prod_orders(lead_id);
+CREATE INDEX IF NOT EXISTS idx_prod_orders_customer ON prod_orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_prod_advances_order ON prod_advances(order_id);
+CREATE INDEX IF NOT EXISTS idx_prod_parts_order ON prod_parts(order_id);
+CREATE INDEX IF NOT EXISTS idx_prod_parts_product ON prod_parts(product_id);
+CREATE INDEX IF NOT EXISTS idx_prod_log_order ON prod_stage_log(order_id);
+CREATE INDEX IF NOT EXISTS idx_prod_points_customer ON prod_points(customer_id)
+"""
+
+# Tenant guards for the production tables.
+PRODUCTION_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS trg_prod_stages_tenant BEFORE INSERT ON prod_stages
+WHEN (SELECT org_id FROM prod_stage_sets WHERE id = NEW.set_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: stage/set organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prod_orders_tenant BEFORE INSERT ON prod_orders
+WHEN (SELECT org_id FROM prod_customers WHERE id = NEW.customer_id) IS NOT NEW.org_id
+  OR (SELECT org_id FROM prod_stages WHERE id = NEW.stage_id) IS NOT NEW.org_id
+  OR (NEW.lead_id IS NOT NULL AND (SELECT org_id FROM leads WHERE id = NEW.lead_id) IS NOT NEW.org_id)
+  OR (NEW.product_id IS NOT NULL AND (SELECT org_id FROM products WHERE id = NEW.product_id) IS NOT NEW.org_id)
+  OR (NEW.maker_id IS NOT NULL AND (SELECT org_id FROM prod_makers WHERE id = NEW.maker_id) IS NOT NEW.org_id)
+  OR (NEW.referrer_id IS NOT NULL AND (SELECT org_id FROM prod_customers WHERE id = NEW.referrer_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: production order references another organization'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prod_orders_tenant_upd BEFORE UPDATE ON prod_orders
+WHEN NEW.org_id IS NOT OLD.org_id
+  OR (SELECT org_id FROM prod_customers WHERE id = NEW.customer_id) IS NOT NEW.org_id
+  OR (SELECT org_id FROM prod_stages WHERE id = NEW.stage_id) IS NOT NEW.org_id
+  OR (NEW.product_id IS NOT NULL AND (SELECT org_id FROM products WHERE id = NEW.product_id) IS NOT NEW.org_id)
+  OR (NEW.maker_id IS NOT NULL AND (SELECT org_id FROM prod_makers WHERE id = NEW.maker_id) IS NOT NEW.org_id)
+  OR (NEW.referrer_id IS NOT NULL AND (SELECT org_id FROM prod_customers WHERE id = NEW.referrer_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: invalid production order update'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prod_advances_tenant BEFORE INSERT ON prod_advances
+WHEN (SELECT org_id FROM prod_orders WHERE id = NEW.order_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: advance organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prod_parts_tenant BEFORE INSERT ON prod_parts
+WHEN (NEW.order_id IS NOT NULL AND (SELECT org_id FROM prod_orders WHERE id = NEW.order_id) IS NOT NEW.org_id)
+  OR (NEW.product_id IS NOT NULL AND (SELECT org_id FROM products WHERE id = NEW.product_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: part organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prod_log_tenant BEFORE INSERT ON prod_stage_log
+WHEN (SELECT org_id FROM prod_orders WHERE id = NEW.order_id) IS NOT NEW.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: stage log organization mismatch'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_prod_points_tenant BEFORE INSERT ON prod_points
+WHEN (SELECT org_id FROM prod_customers WHERE id = NEW.customer_id) IS NOT NEW.org_id
+  OR (NEW.order_id IS NOT NULL AND (SELECT org_id FROM prod_orders WHERE id = NEW.order_id) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: points organization mismatch'); END;
+"""
+
+
+def _migrate_v14(conn):
+    """Module switches (CRM / Cafe / Production per client) and the Production module (orders through stages,
+    makers, warranty with part warranties, customer tracking links, unit codes with referral points).
+    Adds only. Every organization keeps exactly the modules it has today; Production starts OFF everywhere."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("organizations", "mod_crm", "INTEGER")
+    add("organizations", "mod_cafe", "INTEGER")
+    add("organizations", "mod_prod", "INTEGER NOT NULL DEFAULT 0")
+    conn.execute("UPDATE organizations SET mod_crm = CASE WHEN app_type IN ('crm', 'both') THEN 1 ELSE 0 END"
+                 " WHERE mod_crm IS NULL")
+    conn.execute("UPDATE organizations SET mod_cafe = CASE WHEN app_type IN ('cafe', 'both') THEN 1 ELSE 0 END"
+                 " WHERE mod_cafe IS NULL")
+    add("users", "prod_role", "TEXT")      # staff only: none / worker / manager / custom
+    add("users", "prod_perms", "TEXT")     # JSON list of ticked production permissions
+    add("users", "crm_off", "INTEGER NOT NULL DEFAULT 0")  # staff who use only Production / Cafe
+    add("users", "last_mode", "TEXT")      # module opened last (crm / cafe / prod)
+    add("leads", "referral_code", "TEXT")  # unit code of the customer who referred this lead (Production)
+    add("products", "prod_days", "INTEGER")
+    add("products", "warranty_months", "INTEGER")
+    add("products", "stage_set_id", "INTEGER")
+    for stmt in _split(PRODUCTION_TABLES):
+        conn.execute(stmt)
+    for stmt in _split_triggers(PRODUCTION_TRIGGERS):
+        conn.execute(stmt)
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14)]
 
 
 def migrate(db_path):

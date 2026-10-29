@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production sheet · Order #{{ o.order_no }} · {{ brand.name }}</title>
+{% set c = (brand.palette.primary if brand.palette else '#1d4ed8') %}
+<style>
+  @page { size: A4; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #111827; margin: 0; background: #e5e7eb; }
+  .page { width: 210mm; min-height: 297mm; margin: 12px auto; background: #fff; padding: 12mm 14mm; }
+  .bar { display: flex; gap: 8px; justify-content: center; padding: 10px; }
+  .bar button, .bar a { font: 600 15px Arial; padding: 9px 18px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #111; text-decoration: none; cursor: pointer; }
+  .bar .main { background: {{ c }}; color: #fff; border-color: {{ c }}; }
+  header { text-align: center; border-bottom: 3px solid {{ c }}; padding-bottom: 8px; margin-bottom: 10px; }
+  header img { max-height: 70px; max-width: 260px; object-fit: contain; }
+  header .org { font-size: 22px; font-weight: 800; color: {{ c }}; }
+  header .addr { font-size: 11px; color: #4b5563; }
+  h1 { font-size: 22px; letter-spacing: 1px; margin: 8px 0 0; color: #111827; }
+  .meta { display: flex; justify-content: space-between; font-size: 13px; margin: 6px 0 12px; }
+  h2 { background: {{ c }}; color: #fff; font-size: 13px; letter-spacing: .5px; text-transform: uppercase; padding: 6px 10px; margin: 14px 0 0; border-radius: 3px; }
+  table.f { width: 100%; border-collapse: collapse; }
+  table.f td { border: 1px solid #cbd5e1; padding: 7px 9px; font-size: 13px; vertical-align: top; }
+  table.f td.l { width: 22%; background: #f1f5f9; font-weight: 700; font-size: 11.5px; color: #334155; text-transform: uppercase; }
+  .write { min-height: 26px; }
+  .details { white-space: pre-wrap; min-height: 60px; }
+  .sign { height: 42px; }
+  .adv td { height: 30px; }
+  .adv th { border: 1px solid #cbd5e1; background: #f1f5f9; font-size: 12px; padding: 6px; }
+  .foot { margin-top: 18px; font-size: 10.5px; color: #6b7280; text-align: center; }
+  @media print { body { background: #fff; } .bar { display: none; } .page { margin: 0; padding: 0; width: auto; min-height: 0; } }
+  @media (max-width: 800px) { .page { width: auto; margin: 0; padding: 14px; min-height: 0; } }
+</style>
+</head>
+<body>
+<div class="bar"><button class="main" onclick="window.print()">🖨 Print / Save as PDF</button><a href="{{ url_for('prod.order_view', order_id=o.id) }}">← Back to the order</a></div>
+<div class="page">
+  <header>
+    {% if brand.logo %}<img src="{{ url_for('media', name=brand.logo) }}" alt="{{ brand.name }}">{% else %}<div class="org">{{ brand.name }}</div>{% endif %}
+    {% if org.address or org.phone %}<div class="addr">{{ org.address or '' }}{{ ' · ' if org.address and org.phone }}{{ org.phone or '' }}</div>{% endif %}
+    <h1>{{ st.sheet_title }}</h1>
+  </header>
+  <div class="meta"><span><b>Order no:</b> #{{ o.order_no }}</span><span><b>Printed:</b> {{ today[8:10] }}-{{ today[5:7] }}-{{ today[:4] }}</span></div>
+
+  <h2>Customer information</h2>
+  <table class="f">
+    <tr><td class="l">Customer name</td><td colspan="3"><b>{{ o.cust_name }}</b></td></tr>
+    <tr><td class="l">Customer address</td><td colspan="3">{{ o.cust_address or '' }}</td></tr>
+    <tr><td class="l">Order taken date</td><td>{{ o.order_date[8:10] }}-{{ o.order_date[5:7] }}-{{ o.order_date[:4] }}</td><td class="l">Order taken by</td><td>{{ o.taken_by_name or '' }}</td></tr>
+  </table>
+
+  <h2>Product details</h2>
+  <table class="f">
+    <tr><td class="l">Product name</td><td><b>{{ o.product_name or '' }}</b>{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</td><td class="l">Product category</td><td>{{ o.category or '' }}</td></tr>
+    <tr><td class="l">Machine type</td><td>{{ o.machine_type or '' }}</td><td class="l">Power source</td><td>{{ o.power_source or '' }}</td></tr>
+    <tr><td class="l">Details</td><td colspan="3" class="details">{{ o.details or '' }}</td></tr>
+  </table>
+
+  <h2>Manufacturing schedule</h2>
+  <table class="f">
+    <tr><td class="l">MFG. start date</td><td class="write">{% if o.mfg_start %}{{ o.mfg_start[8:10] }}-{{ o.mfg_start[5:7] }}-{{ o.mfg_start[:4] }}{% endif %}</td>
+        <td class="l">Expected finish date</td><td class="write">{% if o.exp_finish %}{{ o.exp_finish[8:10] }}-{{ o.exp_finish[5:7] }}-{{ o.exp_finish[:4] }}{% endif %}</td></tr>
+    <tr><td class="l">Manufacturing in-charge</td><td class="write"><b>{{ o.maker_name or '' }}</b>{% if o.maker_phone %} · {{ o.maker_phone }}{% endif %}</td><td class="l">Signature</td><td class="sign"></td></tr>
+    <tr><td class="l">Production days</td><td colspan="3">{{ days }} days</td></tr>
+  </table>
+
+  <h2>Weight &amp; amount</h2>
+  <table class="f">
+    <tr><td class="l">Total weight (approx.)</td><td class="write">{{ o.weight or '' }}</td>
+        <td class="l">Amount to the maker</td><td class="write"><b>{% if show_amount and o.maker_amount is not none %}{{ o.maker_amount|rs }}{% endif %}</b></td></tr>
+  </table>
+
+  <h2>Approval &amp; authorization</h2>
+  <table class="f">
+    <tr><td class="l">Name</td><td><b>{{ o.approved_by or '' }}</b></td><td class="l">Signature</td><td class="sign"></td></tr>
+  </table>
+
+  <h2>Advance payments (to the maker)</h2>
+  <table class="f adv">
+    <tr><th style="width:30%">Date</th><th style="width:35%">Amount</th><th>Signature</th></tr>
+    {% for i in range(4) %}<tr><td></td><td></td><td></td></tr>{% endfor %}
+  </table>
+  {% if o.note %}<p style="font-size:12px"><b>Note:</b> {{ o.note }}</p>{% endif %}
+  <div class="foot">{{ brand.name }} · Order #{{ o.order_no }}</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Import / Export{% endblock %}
+{% block content %}
+<h1>⬆⬇ Import / Export</h1>
+<div class="grid-2">
+  {% if pcan('export') %}
+  <section class="card">
+    <h2>⬇ Export all data</h2>
+    <p class="muted small">One Excel file with sheets: Orders, Stage history, Parts warranty, Customers (unit codes, points), Points history{{ ', Makers and maker amounts' if pcan('maker') }}. {{ count }} orders in total.</p>
+    <form method="get" action="{{ url_for('prod.export_all') }}" class="form">
+      <div class="row-2"><label>Order date from<input type="date" name="from"></label><label>to<input type="date" name="to"></label></div>
+      <div class="row-2">
+        <label>Stage<select name="stage"><option value="">All stages</option>{% for s in stages %}<option>{{ s }}</option>{% endfor %}</select></label>
+        <label>Product<select name="product"><option value="">All products</option>{% for p in products %}<option>{{ p }}</option>{% endfor %}</select></label>
+      </div>
+      <label class="check"><input type="checkbox" name="cancelled" value="1"> Include cancelled orders</label>
+      <button class="btn btn-prod">⬇ Export Excel</button>
+    </form>
+  </section>
+  {% endif %}
+  {% if pcan('import') %}
+  <section class="card">
+    <h2>⬆ Old deliveries (before the software)</h2>
+    <ol class="setup-steps">
+      <li><a href="{{ url_for('prod.import_template') }}">⬇ Download the empty template</a> (Excel)</li>
+      <li>Fill one row per delivered product. Parts (other companies' warranty) go in the "Parts" sheet — optional.</li>
+      <li>Upload it → check the preview → Import.</li>
+    </ol>
+    {% if not viewing %}
+    <form method="post" action="{{ url_for('prod.import_upload') }}" enctype="multipart/form-data" class="form">{{ csrf() }}
+      <label>Excel file (.xlsx)<input type="file" name="sheet" accept=".xlsx" required></label>
+      <button class="btn btn-prod">Upload &amp; preview</button>
+    </form>
+    <p class="small muted">Columns: {{ columns|join(', ') }}. Imported orders go straight to Delivered; warranty counts from the bill date; each customer gets a unit code and a link. Nothing existing is changed.</p>
+    <p><a class="btn btn-sm" href="{{ url_for('prod.order_new', old=1) }}">+ Add one old delivery by hand</a></p>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

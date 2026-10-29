@@ -1,0 +1,26 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ p.name }}{% endblock %}
+{% block content %}
+<h1>{{ p.name }} <small class="muted">· production defaults</small></h1>
+<form method="post" class="card form narrow">
+  {{ csrf() }}
+  <div class="row-3">
+    <label>Production days<input type="number" min="0" name="prod_days" value="{{ p.prod_days or '' }}" placeholder="default {{ st.default_days }}"></label>
+    <label>Warranty (months)<input type="number" min="0" name="warranty_months" value="{{ '' if p.warranty_months is none else p.warranty_months }}" placeholder="default {{ st.default_warranty }}"></label>
+    <label>Stages<select name="stage_set_id"><option value="">Default set</option>{% for s in sets %}<option value="{{ s.id }}" {{ 'selected' if p.stage_set_id == s.id }}>{{ s.name }}{{ ' (default)' if s.is_default }}</option>{% endfor %}</select></label>
+  </div>
+  <fieldset>
+    <legend>Standard parts with their own company warranty</legend>
+    <p class="small muted">Copied into every new order of this product (can be changed on the order, e.g. the serial number).</p>
+    <div id="part-rows">
+      {% for x in parts %}
+      <div class="row-3 part-row"><label>Part<input name="part_name" value="{{ x.name }}"></label><label>Company<input name="part_company" value="{{ x.company or '' }}"></label><label>Warranty months<input type="number" min="0" name="part_months" value="{{ '' if x.months is none else x.months }}"></label><input type="hidden" name="part_serial" value=""></div>
+      {% endfor %}
+      <div class="row-3 part-row"><label>Part<input name="part_name" placeholder="e.g. Motor"></label><label>Company<input name="part_company" placeholder="e.g. Crompton"></label><label>Warranty months<input type="number" min="0" name="part_months"></label><input type="hidden" name="part_serial" value=""></div>
+    </div>
+    <button type="button" class="btn btn-sm" onclick="var b=document.getElementById('part-rows'),r=b.getElementsByClassName('part-row'),c=r[r.length-1].cloneNode(true);c.querySelectorAll('input').forEach(function(i){i.value=''});b.appendChild(c)">+ Another part</button>
+    <p class="small muted">Empty part name = removed.</p>
+  </fieldset>
+  <div class="actions"><button class="btn btn-prod">Save</button><a class="btn" href="{{ url_for('prod.products') }}">Cancel</a></div>
+</form>
+{% endblock %}

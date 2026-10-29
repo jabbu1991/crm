@@ -91,6 +91,7 @@
       <label>Lead source<select name="source"><option value="">—</option>{% for s in with_current(LEAD_SOURCES, data.source) %}<option {{ 'selected' if data.source == s }}>{{ s }}</option>{% endfor %}</select></label>
       <label>Next follow-up date<input type="date" name="next_follow_up" value="{{ data.next_follow_up or '' }}"></label>
     </div>
+    {% if has_prod %}<label>Referral code <small class="muted">(unit code of the customer who sent this lead — optional)</small><input name="referral_code" autocomplete="off" maxlength="20" value="{{ data.referral_code or '' }}" placeholder="e.g. U12345" style="text-transform:uppercase"></label>{% endif %}
     <label>Notes / remarks<textarea autocomplete="off" name="notes" rows="3">{{ data.notes or '' }}</textarea></label>
   </fieldset>
 
