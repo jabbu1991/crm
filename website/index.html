@@ -42,11 +42,11 @@
     <nav class="links">
       <a href="#about">About</a>
       <a href="#services">Services</a>
-      <a href="/careers/">Careers</a>
       <a href="#process">Process</a>
-      <a href="#crm">CRM</a>
+      <a href="/products/">Products</a>
+      <a href="/careers/">Careers</a>
       <a href="#contact">Contact</a>
-      <a class="btn btn-ghost-light crm-login" href="https://crm.realviewcreativestudio.in/login">CRM Login</a>
+      <a class="btn btn-ghost-light crm-login" href="https://crm.realviewcreativestudio.in/login">Login</a>
     </nav>
   </div>
 </header>
@@ -128,33 +128,45 @@
     </div>
   </section>
 
-  <!-- CRM PRODUCT -->
-  <section class="section crm" id="crm" data-track-section="CRM">
-    <div class="wrap crm-inner">
-      <div>
-        <p class="kicker light">Our product</p>
-        <h2>Real View CRM</h2>
-        <p class="big light">Every enquiry from your ads, WhatsApp and walk-ins in one place. Your team enters leads from any phone, and you see them by state, by product and by staff member.</p>
-        <ul class="ticks">
-          <li>Separate, private workspace for your business</li>
-          <li>Individual logins for each staff member</li>
-          <li>State-wise and product-wise lead reports</li>
-          <li>Follow-up reminders so no enquiry is missed</li>
-        </ul>
-        <div class="hero-cta">
-          <a class="btn btn-primary wa-link" id="crm-demo" data-wa-text="I'd like a demo of Real View CRM" data-track-label="Book a CRM demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a CRM demo</a>
-          <a class="btn btn-ghost-light" href="https://crm.realviewcreativestudio.in/login">CRM Login</a>
-        </div>
+  <!-- PRODUCTS (full pages are /products/...) -->
+  <section class="section" id="products" data-track-section="Products">
+    <div class="wrap">
+      <p class="kicker">Our products</p>
+      <h2>Software for growing businesses</h2>
+      <p class="big">Simple, phone-friendly software we build and run ourselves. Use one, or switch them on together.</p>
+      <div class="cards products">
+        <article class="card product-card">
+          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3 3 0 0 1 0 6M18 14c2 .6 3 2.6 3 6"/></svg></span>
+          <span class="tag">Lead management</span>
+          <h3>Real View CRM</h3>
+          <p>Every enquiry from ads, WhatsApp, calls and walk-ins in one place, with follow-up reminders and staff-wise reports.</p>
+          <div class="product-actions">
+            <a class="btn btn-primary" href="/products/crm/">Learn more</a>
+            <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of Real View CRM" data-demo="CRM Demo" data-track-label="Book a CRM demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+          </div>
+        </article>
+        <article class="card product-card">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10"/></svg></span>
+          <span class="tag">Production &amp; orders</span>
+          <h3>Real View Order Tracker</h3>
+          <p>For made-to-order businesses: queue, production stages, makers, GST bill, warranty and a tracking link for each customer.</p>
+          <div class="product-actions">
+            <a class="btn btn-primary" href="/products/order-tracker/">Learn more</a>
+            <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of Real View Order Tracker" data-demo="Order Tracker Demo" data-track-label="Book a Order Tracker demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+          </div>
+        </article>
+        <article class="card product-card">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2.2 0-4 2.5-4 6v4h4"/></svg></span>
+          <span class="tag">Restaurants &amp; cafes</span>
+          <h3>Restaurant Management Software</h3>
+          <p>Fast billing with KOT and GST, a QR digital menu, online orders with alerts, customer points and daily profit reports.</p>
+          <div class="product-actions">
+            <a class="btn btn-primary" href="/products/restaurant-management-software/">Learn more</a>
+            <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of the Restaurant Management Software" data-demo="Restaurant Software Demo" data-track-label="Book a Restaurant Software demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+          </div>
+        </article>
       </div>
-      <div class="crm-mock" aria-hidden="true">
-        <div class="mock-bar"><i></i><i></i><i></i></div>
-        <div class="mock-body">
-          <div class="mock-stats"><div><b>128</b>Leads</div><div><b>34</b>Hot</div><div><b>12</b>Follow-ups</div></div>
-          <div class="mock-row"><span>Kerala</span><em style="width:90%"></em></div>
-          <div class="mock-row"><span>Tamil Nadu</span><em style="width:55%"></em></div>
-          <div class="mock-row"><span>Karnataka</span><em style="width:30%"></em></div>
-        </div>
-      </div>
+      <p class="more-link"><a href="/products/">See all products →</a></p>
     </div>
   </section>
 
@@ -202,6 +214,8 @@
             <option>Brochures and Catalogues</option>
             <option>Campaigns and Business Communication</option>
             <option>Real View CRM</option>
+            <option>Real View Order Tracker</option>
+            <option>Restaurant Management Software</option>
           </select>
         </label>
         <label>Message<textarea name="message" rows="4"></textarea></label>
@@ -218,7 +232,7 @@
   <div class="wrap footer-inner">
     <div class="logo small"><img class="logo-mark" src="assets/logo-mark.png" alt="" width="42" height="42"><span class="logo-text"><b>Real View</b><small>Creative Studio</small></span></div>
     <p>Creative, branding and marketing agency · Kerala, India</p>
-    <p>© <span id="year">2026</span> Real View Creative Studio · <a href="/careers/">Careers</a> · <a href="https://crm.realviewcreativestudio.in/login">CRM Login</a></p>
+    <p>© <span id="year">2026</span> Real View Creative Studio · <a href="/products/">Products</a> · <a href="/careers/">Careers</a> · <a href="/privacy/">Privacy Policy</a> · <a href="https://crm.realviewcreativestudio.in/login">Login</a></p>
     <p class="cookie-note">This website uses cookies and the Meta Pixel to measure our ads.</p>
   </div>
 </footer>

@@ -317,7 +317,13 @@ Digital Catalogue (built 16 Oct 2026)
 ======================================================================
 5. WEBSITE (website/ folder)
 ======================================================================
-- One static page: home, about, services (7), process, CRM product section, Careers, Contact.
+- Pages: home (about, services (7), process, "Our products" cards, careers teaser, contact), /careers/, /products/
+  (overview), /products/crm/, /products/order-tracker/ ("Real View Order Tracker" = the Production module),
+  /products/restaurant-management-software/ (= the Cafe module), /privacy/ (also used for the Google OAuth consent
+  screen). Each product page: own title/description/keywords, Open Graph, JSON-LD (SoftwareApplication, FAQPage,
+  Breadcrumb), Who it is for, Features, How it works, FAQ, "Book a demo" (WhatsApp text per product, Meta Schedule event
+  "<Product> Demo" via data-demo). Product names are website-only; inside the CRM the menus still say CRM/Cafe/Production.
+- /campaign/ photo tool REMOVED 30 Oct; /campaign/ now only redirects to the home page (noindex).
 - Brand: blue -> cyan gradient "R" logo, Montserrat/Inter fonts.
 - Contact form -> opens WhatsApp with details + saves a lead in the CRM.
 - "Careers with us" form (name, place, WhatsApp, services they can offer) -> WhatsApp only.

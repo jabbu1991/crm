@@ -28,9 +28,14 @@ document.querySelectorAll("a[data-wa-text]").forEach(function (a) {
 var year = document.getElementById("year");
 if (year) year.textContent = new Date().getFullYear();
 
-// "Book a CRM demo" opens WhatsApp (a normal link) and counts as Schedule.
-var demo = document.getElementById("crm-demo");
-if (demo) demo.addEventListener("click", function () { pixel().once("schedule", "Schedule", {content_name: "CRM Demo"}); });
+// "Book a demo" buttons open WhatsApp (a normal link) and count as Schedule, once per product.
+// Each button carries data-demo="<Product> Demo" (e.g. "CRM Demo", "Order Tracker Demo").
+document.querySelectorAll("a[data-demo]").forEach(function (a) {
+  a.addEventListener("click", function () {
+    var name = a.getAttribute("data-demo");
+    pixel().once("schedule:" + name, "Schedule", {content_name: name});
+  });
+});
 
 // Enquiry form: save to the CRM (if online) and open WhatsApp ---------------
 var form = document.getElementById("enquiry");
