@@ -44,6 +44,7 @@
 {% if not g.user.must_change_password and cur_module == 'prod' %}
 <nav class="mainnav prod-nav">
   <a href="{{ url_for('prod.home') }}" class="{{ 'active' if ep == 'prod.home' }}">🏭 Dashboard</a>
+  {% if pcan('view') %}<a href="{{ url_for('prod.board') }}" class="{{ 'active' if ep == 'prod.board' }}">🗂 Board</a>{% endif %}
   {% if pcan('view') %}<a href="{{ url_for('prod.orders') }}" class="{{ 'active' if ep in ('prod.orders', 'prod.order_view', 'prod.order_edit', 'prod.order_move') }}">📋 Orders</a>{% endif %}
   {% if pcan('edit') and not viewing %}<a href="{{ url_for('prod.order_new') }}" class="nav-cta {{ 'active' if ep == 'prod.order_new' }}">+ New Order</a>{% endif %}
   {% if pcan('maker') %}<a href="{{ url_for('prod.makers') }}" class="{{ 'active' if ep == 'prod.makers' }}">👷 Makers</a>{% endif %}

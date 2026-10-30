@@ -571,3 +571,40 @@ def test_order_taker_pages(pw):
     assert r.status_code == 302 and r.headers["Location"].endswith(f"/production/order-takers/{sid}")
     # a CRM-only client has no such page
     assert pw["only"].get("/production/order-takers").status_code == 404
+
+
+# ---------------------------------------------------------------- board
+
+def test_board_columns_drag_and_filters(pw):
+    star = pw["star"]
+    star.post("/production/orders/new", {"name": "Board A", "phone": "9000001201", "product_name": "Pump"})
+    star.post("/production/orders/new", {"name": "Board B", "phone": "9000001202", "product_name": "Gate"})
+    a, b = [o["id"] for o in orders(pw, "STAR")]
+    html = star.get("/production/board").text
+    assert 'data-stage="Queue"' in html and 'data-stage="In Production"' in html
+    assert 'data-stage="Delivered"' not in html               # hidden by default
+    # drop on "In Production" asks the maker; drop on Ready (no form needed when coming from production) moves
+    r = star.post(f"/production/orders/{a}/move", {"to_name": "In Production", "next": "/production/board"})
+    assert "Who makes it?" in r.text
+    star.post(f"/production/orders/{a}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
+                                               "new_maker": "Babu", "next": "/production/board"})
+    r = star.post(f"/production/orders/{a}/move", {"to_name": "ready for dispatch", "next": "/production/board"})
+    assert "→ Ready for Dispatch" in r.text and "Production board" in r.text
+    r = star.post(f"/production/orders/{a}/move", {"to_name": "No Such Stage", "next": "/production/board"})
+    assert "has no stage called" in r.text
+    # filters
+    assert "Board B" in star.get("/production/board?product=Gate").text
+    assert "Board A" not in star.get("/production/board?product=Gate").text
+    mid = orders(pw, "STAR")[0]["maker_id"]
+    page = star.get(f"/production/board?maker={mid}").text
+    assert "Board A" in page and "Board B" not in page
+    # columns: Admin only, for everyone
+    r = star.post("/production/board/columns", {"col": ["Queue", "Delivered"]})
+    assert "saved for everyone" in r.text
+    html = star.get("/production/board").text
+    assert 'data-stage="Delivered"' in html and 'data-stage="In Production"' not in html
+    assert "Tick at least one" in star.post("/production/board/columns", {}).text
+    worker = make_staff(star, "bworker", prod_role="manager")
+    assert worker.post("/production/board/columns", {"col": ["Queue"]}).status_code == 403
+    wh = worker.get("/production/board").text
+    assert 'data-stage="Delivered"' in wh and "⚙️ Columns" not in wh

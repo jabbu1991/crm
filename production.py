@@ -80,6 +80,7 @@ DEFAULT_SETTINGS = {
     "default_warranty": 12,    # months
     "default_days": 10,        # production days when the product has none
     "sheet_title": "PRODUCTION ORDER",
+    "board_columns": None,     # stage names shown on the Board (Admin); None = all except Delivered
 }
 
 
@@ -721,6 +722,79 @@ def convert_old_leads():
     return redirect(url_for("prod.home"))
 
 
+# ---------------------------------------------------------------- board (all stages in one window)
+
+def board_columns(oid=None):
+    """[(name, mark)] of every stage name in use (all sets), in stage order."""
+    return [(r["name"], r["mark"]) for r in H.query(
+        """SELECT name, MAX(mark) mark, MIN(sort) sort FROM prod_stages WHERE org_id = ? AND active = 1
+           GROUP BY name ORDER BY MIN(sort), name""", (oid or H.org_id(),))]
+
+
+def visible_columns(cols, st):
+    chosen = st.get("board_columns")
+    if chosen is None:  # default: everything except Delivered
+        last = {c[0] for c in cols if c[1] == "delivered"}
+        return [c for c in cols if c[0] not in last] or cols
+    keep = [c for c in cols if c[0] in chosen]
+    return keep or cols
+
+
+@bp.route("/production/board")
+@prod_view("view")
+def board():
+    oid = H.org_id()
+    st = get_settings()
+    cols = board_columns(oid)
+    shown = visible_columns(cols, st)
+    a = request.args
+    where, args = ["o.status = 'active'"], []
+    if a.get("product"):
+        where.append("o.product_name = ?")
+        args.append(a.get("product"))
+    if a.get("maker", type=int):
+        where.append("o.maker_id = ?")
+        args.append(a.get("maker", type=int))
+    rows = order_rows(oid, "AND " + " AND ".join(where), args, order_by="s.sort, " + QUEUE_ORDER)
+    week_ago = (today_date() - timedelta(days=7)).isoformat()
+    sched = schedule(oid)
+    cards = {name: [] for name, _ in shown}
+    for o in rows:
+        if o["stage_name"] not in cards:
+            continue
+        ph = phase(o)
+        if ph == "delivered" and (o["delivered_date"] or "") < week_ago:
+            continue  # Delivered column: last 7 days only
+        if o["imported"] and ph != "delivered":
+            continue
+        nxt = next_stage(o)
+        cards[o["stage_name"]].append({"o": o, "ph": ph, "sc": sched.get(o["id"]), "nxt": nxt,
+                                       "needs": needs_form(o, nxt) if nxt else False})
+    products = [r[0] for r in H.query("SELECT DISTINCT product_name FROM prod_orders WHERE org_id = ? AND"
+                                      " status = 'active' AND product_name != '' ORDER BY product_name", (oid,))]
+    makers_ = H.query("SELECT id, name FROM prod_makers WHERE org_id = ? ORDER BY name", (oid,))
+    return render_template("production/board.html", cols=cols, shown=shown, cards=cards, products=products,
+                           makers=makers_, args=a, chosen={c[0] for c in shown})
+
+
+@bp.route("/production/board/columns", methods=["POST"])
+@prod_view("view")
+def board_columns_save():
+    """Admin: which stages show on the Board, for everyone in the company."""
+    if not H.is_admin():
+        abort(403)
+    names = [c[0] for c in board_columns()]
+    picked = [n for n in request.form.getlist("col") if n in names]
+    if not picked:
+        flash("Tick at least one stage.", "error")
+    else:
+        st = dict(get_settings())
+        st["board_columns"] = picked
+        save_settings(st)
+        flash("Board columns saved for everyone.", "success")
+    return redirect(url_for("prod.board"))
+
+
 # ---------------------------------------------------------------- orders list
 
 @bp.route("/production/orders")
@@ -1036,7 +1110,16 @@ def order_move(order_id):
         return redirect(url_for("prod.order_view", order_id=order_id))
     stages = set_stages(o["set_id"])
     to = request.values.get("to", type=int)
-    target = next((s for s in stages if s["id"] == to), None) if to else next_stage(o)
+    to_name = (request.values.get("to_name") or "").strip()
+    if to_name:  # dropped on a Board column (columns are stage names)
+        target = next((s for s in stages if s["name"].lower() == to_name.lower()), None)
+        if target is None:
+            flash(f"Order #{o['order_no']} has no stage called '{to_name}' (its product uses another stage set).", "error")
+            back = request.values.get("next") or ""
+            return redirect(back if back.startswith("/") and not back.startswith("//") else
+                            url_for("prod.order_view", order_id=order_id))
+    else:
+        target = next((s for s in stages if s["id"] == to), None) if to else next_stage(o)
     if target is None or target["id"] == o["stage_id"]:
         return redirect(url_for("prod.order_view", order_id=order_id))
     mk = marks_of(o["set_id"])

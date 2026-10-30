@@ -41,7 +41,7 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (83 pytest tests, all passing); cafe*.py (cafe module),
+  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (84 pytest tests, all passing); cafe*.py (cafe module),
   production.py + production_io.py (production module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
@@ -291,6 +291,12 @@ Digital Catalogue (built 16 Oct 2026)
 - Order takers: /production/order-takers (Admin: everyone, "this month" + total) and /production/order-takers/<user>
   (12-month table of orders taken by order date + delivered, tap a month for its orders; NO amounts). Staff see only their
   own page ("🧑‍💼 My orders" in the Production menu, "📦 My orders" in the CRM menu for staff without Production access).
+- Board (30 Oct): Production → 🗂 Board (/production/board) = every stage as a column (stage names across all sets), cards
+  with order no, customer, product, maker, expected date (late red), queue position, 📌, advance date, ▶ next button.
+  Drag a card to another column (mouse; phone press-and-hold 0.35 s) → POST /move with to_name; stages that ask for the
+  maker / GST bill open their small form; moving back asks to confirm. Filters: product, maker. ⚙️ Columns (Admin only,
+  company-wide, prod_settings.board_columns): tick / untick stages; default = all except Delivered; Delivered shows the last
+  7 days only.
 
 ======================================================================
 5. WEBSITE (website/ folder)

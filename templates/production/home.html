@@ -5,7 +5,8 @@
   <h1>🏭 Production</h1>
   <div class="actions">
     {% if pcan('edit') and not viewing %}<a class="btn btn-prod btn-big" href="{{ url_for('prod.order_new') }}">+ New Order</a>{% endif %}
-    {% if pcan('view') %}<a class="btn btn-big" href="{{ url_for('prod.orders') }}">📋 All running orders</a>{% endif %}
+    {% if pcan('view') %}<a class="btn btn-big" href="{{ url_for('prod.board') }}">🗂 Board</a>
+    <a class="btn btn-big" href="{{ url_for('prod.orders') }}">📋 All running orders</a>{% endif %}
   </div>
 </div>
 

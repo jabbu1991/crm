@@ -19,7 +19,7 @@
   {% if stage %}<input type="hidden" name="stage" value="{{ stage }}">{% endif %}{% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
   <input name="q" value="{{ q }}" placeholder="Search name, phone, order no, bill no, unit code">
   {% if products %}<select name="product"><option value="">All products</option>{% for p in products %}<option {{ 'selected' if args.get('product') == p }}>{{ p }}</option>{% endfor %}</select>{% endif %}
-  {% if makers %}<select name="maker"><option value="">All makers</option>{% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if args.get('maker', type=int) == m.id }}>{{ m.name }}</option>{% endfor %}</select>{% endif %}
+  {% if makers %}<select name="maker"><option value="">All makers</option>{% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if (args.get('maker') or 0)|int == m.id }}>{{ m.name }}</option>{% endfor %}</select>{% endif %}
   <button class="btn btn-sm">Search</button>
 </form>
 

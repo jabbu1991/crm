@@ -1,0 +1,137 @@
+{% extends 'base.html' %}{% from 'production/_p.html' import dmy with context %}{% from '_macros.html' import csrf with context %}
+{% block title %}Production board{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>🗂 Production board</h1>
+  <div class="actions">
+    {% if is_admin() and not viewing %}<button type="button" class="btn" onclick="document.getElementById('col-box').toggleAttribute('hidden')">⚙️ Columns</button>{% endif %}
+    {% if pcan('edit') and not viewing %}<a class="btn btn-prod" href="{{ url_for('prod.order_new') }}">+ New Order</a>{% endif %}
+  </div>
+</div>
+
+{% if is_admin() and not viewing %}
+<form method="post" action="{{ url_for('prod.board_columns_save') }}" class="card form" id="col-box" hidden>
+  {{ csrf() }}
+  <b>Stages shown on the board</b> <span class="small muted">(for everyone in the company — untick to hide)</span>
+  <div class="checks">
+    {% for name, mark in cols %}<label class="check"><input type="checkbox" name="col" value="{{ name }}" {{ 'checked' if name in chosen }}> {{ name }}{{ ' (last 7 days)' if mark == 'delivered' }}</label>{% endfor %}
+  </div>
+  <button class="btn btn-prod btn-sm">Save</button>
+</form>
+{% endif %}
+
+<form class="filters card board-filters" method="get">
+  <select name="product" onchange="this.form.submit()"><option value="">All products</option>{% for p in products %}<option {{ 'selected' if args.get('product') == p }}>{{ p }}</option>{% endfor %}</select>
+  <select name="maker" onchange="this.form.submit()"><option value="">All makers</option>{% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if (args.get('maker') or 0)|int == m.id }}>{{ m.name }}</option>{% endfor %}</select>
+  {% if args.get('product') or args.get('maker') %}<a class="small" href="{{ url_for('prod.board') }}">✕ Clear</a>{% endif %}
+  {% if pcan('stage') and not viewing %}<span class="small muted board-hint">Drag a card to another column (phone: press and hold), or tap ▶.</span>{% endif %}
+</form>
+
+<div class="board" id="board">
+  {% for name, mark in shown %}
+  <section class="bcol ps-col-{{ mark or 'step' }}" data-stage="{{ name }}" data-index="{{ loop.index0 }}">
+    <header class="bcol-head"><span>{{ name }}</span><b>{{ cards[name]|length }}</b></header>
+    {% if mark == 'delivered' %}<div class="small muted bcol-note">Last 7 days</div>{% endif %}
+    <div class="bcol-body">
+      {% for c in cards[name] %}{% set o = c.o %}
+      <article class="bcard {{ 'late' if c.sc and c.sc.late }}" data-id="{{ o.id }}" data-col="{{ loop.index0 }}" data-move="{{ url_for('prod.order_move', order_id=o.id) }}">
+        <a class="bcard-main" href="{{ url_for('prod.order_view', order_id=o.id) }}" draggable="false">
+          <div class="bcard-top">
+            {% if c.sc and c.sc.pos %}<span class="qpos">{{ c.sc.pos }}</span>{% endif %}
+            <span class="po-no">#{{ o.order_no }}</span>
+            {% if o.pinned_at and c.ph == 'queue' %}<span class="badge pin-badge">📌</span>{% endif %}
+          </div>
+          <div class="bcard-name">{{ o.cust_name }}</div>
+          <div class="bcard-sub">{{ o.product_name or 'Product not set' }}{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</div>
+          <div class="bcard-meta small">
+            {% if o.maker_name and c.ph in ('working', 'ready') %}<span>👷 {{ o.maker_name }}</span>{% endif %}
+            {% if c.sc and c.ph in ('queue', 'working') %}<span class="{{ 'overdue' if c.sc.late else '' }}">🚚 ~{{ dmy(c.sc.finish) }}{{ ' late' if c.sc.late }}</span>
+            {% elif c.ph == 'ready' %}<span class="w-ok">Ready ✓</span>
+            {% elif c.ph == 'delivered' %}<span>📦 {{ dmy(o.delivered_date) }}</span>
+            {% elif o.bill_no %}<span>🧾 {{ o.bill_no }}</span>{% endif %}
+            {% if c.ph == 'queue' %}<span class="{{ 'w-ok' if o.first_adv else 'muted' }}">{{ ('₹ adv ' ~ dmy(o.first_adv)) if o.first_adv else 'no advance' }}</span>{% endif %}
+          </div>
+        </a>
+        {% if c.nxt and pcan('stage') and not viewing %}
+          {% if c.needs %}<a class="btn btn-sm btn-prod bcard-next" href="{{ url_for('prod.order_move', order_id=o.id, to=c.nxt.id, next=request.full_path) }}">▶ {{ c.nxt.name }}</a>
+          {% else %}<form method="post" action="{{ url_for('prod.order_move', order_id=o.id) }}">{{ csrf() }}<input type="hidden" name="to" value="{{ c.nxt.id }}"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn btn-sm btn-prod bcard-next">▶ {{ c.nxt.name }}</button></form>{% endif %}
+        {% endif %}
+      </article>
+      {% else %}<p class="muted small bcol-empty">—</p>{% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+
+{% if pcan('stage') and not viewing %}
+<form method="post" id="drop-form" hidden>{{ csrf() }}<input type="hidden" name="to_name"><input type="hidden" name="next" value="{{ request.full_path }}"></form>
+<script>
+/* Drag a card to another column. Mouse: drag at once. Phone: press and hold ~0.35 s, then drag.
+   Dropping sends the card to that stage; when the stage asks for something (maker / GST bill no) its small form opens. */
+(function () {
+  var board = document.getElementById("board"), form = document.getElementById("drop-form");
+  var drag = null, holdTimer = null, start = null, ghost = null, overCol = null, moved = false;
+  function colAt(x, y) { var el = document.elementFromPoint(x, y); return el && el.closest ? el.closest(".bcol") : null; }
+  function begin(card, x, y) {
+    drag = card; moved = false;
+    var r = card.getBoundingClientRect();
+    ghost = card.cloneNode(true); ghost.classList.add("bghost");
+    ghost.style.width = r.width + "px"; ghost.style.left = (x - r.width / 2) + "px"; ghost.style.top = (y - 20) + "px";
+    document.body.appendChild(ghost); card.classList.add("dragging"); document.body.classList.add("board-dragging");
+    if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+  }
+  function move(x, y) {
+    if (!drag) return;
+    moved = true;
+    ghost.style.left = (x - ghost.offsetWidth / 2) + "px"; ghost.style.top = (y - 20) + "px";
+    var c = colAt(x, y);
+    if (overCol && overCol !== c) overCol.classList.remove("drop-on");
+    overCol = c; if (c && c !== drag.closest(".bcol")) c.classList.add("drop-on");
+    var br = board.getBoundingClientRect();   // scroll the board sideways near its edges
+    if (x > br.right - 40) board.scrollLeft += 18; else if (x < br.left + 40) board.scrollLeft -= 18;
+  }
+  function end(x, y) {
+    if (!drag) return;
+    var card = drag, from = card.closest(".bcol"), to = moved ? colAt(x, y) : null;
+    ghost.remove(); ghost = null; card.classList.remove("dragging"); document.body.classList.remove("board-dragging");
+    if (overCol) overCol.classList.remove("drop-on");
+    drag = null; overCol = null;
+    if (!to || to === from) return;
+    if (+to.dataset.index < +from.dataset.index && !confirm("Move order back to " + to.dataset.stage + "?")) return;
+    form.action = card.dataset.move; form.elements.to_name.value = to.dataset.stage; form.submit();
+  }
+  function cancelHold() { clearTimeout(holdTimer); holdTimer = null; }
+  // mouse
+  board.addEventListener("mousedown", function (e) {
+    var card = e.target.closest(".bcard"); if (!card || e.button !== 0 || e.target.closest("button, form, .bcard-next")) return;
+    start = {x: e.clientX, y: e.clientY, card: card}; e.preventDefault();
+  });
+  document.addEventListener("mousemove", function (e) {
+    if (start && !drag && Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 6) begin(start.card, e.clientX, e.clientY);
+    move(e.clientX, e.clientY);
+  });
+  document.addEventListener("mouseup", function (e) {
+    var wasDrag = !!drag; end(e.clientX, e.clientY); start = null;
+    if (wasDrag) { var stop = function (ev) { ev.preventDefault(); ev.stopPropagation(); document.removeEventListener("click", stop, true); }; document.addEventListener("click", stop, true); setTimeout(function () { document.removeEventListener("click", stop, true); }, 50); }
+  });
+  // touch: press and hold, then drag
+  board.addEventListener("touchstart", function (e) {
+    var card = e.target.closest(".bcard"); if (!card || e.target.closest("button, form, .bcard-next")) return;
+    var t = e.touches[0]; start = {x: t.clientX, y: t.clientY};
+    holdTimer = setTimeout(function () { begin(card, start.x, start.y); }, 350);
+  }, {passive: true});
+  board.addEventListener("touchmove", function (e) {
+    var t = e.touches[0];
+    if (drag) { e.preventDefault(); move(t.clientX, t.clientY); return; }
+    if (start && Math.abs(t.clientX - start.x) + Math.abs(t.clientY - start.y) > 10) cancelHold();
+  }, {passive: false});
+  board.addEventListener("touchend", function (e) {
+    cancelHold();
+    if (drag) { e.preventDefault(); var t = e.changedTouches[0]; end(t.clientX, t.clientY); }
+    start = null;
+  });
+  board.addEventListener("contextmenu", function (e) { if (e.target.closest(".bcard")) e.preventDefault(); });
+})();
+</script>
+{% endif %}
+{% endblock %}
