@@ -32,6 +32,10 @@ services:
         value: "1"
       - key: CRM_ENQUIRY_ORIGINS        # the website's contact form may post leads here
         value: https://realviewcreativestudio.in,https://www.realviewcreativestudio.in,https://realview-website.onrender.com
+      - key: GOOGLE_CLIENT_ID           # daily backups to Google Drive (Super Admin > Backups)
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
 
 # The website (website/) runs as a separate free Render Static Site named
 # realview-website, created by hand: publish directory `website`, build command `echo done`.

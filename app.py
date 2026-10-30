@@ -3605,11 +3605,13 @@ def integrity_error(e):
 
 import sys  # noqa: E402
 
+import backup_drive  # noqa: E402
 import cafe  # noqa: E402
 import production  # noqa: E402
 
 cafe.init(sys.modules[__name__])
 production.init(sys.modules[__name__])
+backup_drive.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

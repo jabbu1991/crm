@@ -41,11 +41,11 @@ Contact on website: WhatsApp +91 85472 75320.
 - Python 3.12, Flask, SQLite (single file), gunicorn (1 worker, 4 threads), Pillow (image shrinking).
 - Files: app.py (all routes), crm_db.py (schema + migrations), crm_constants.py (lists),
   templates/*.html (Jinja), static/style.css, static/catalog.css, website/ (static site),
-  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (84 pytest tests, all passing); cafe*.py (cafe module),
+  render.yaml, requirements.txt, tests/test_crm.py + tests/test_cafe.py + tests/test_production.py (88 pytest tests, all passing); cafe*.py (cafe module),
   production.py + production_io.py (production module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day, v16 = finished day set by hand). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day, v16 = finished day set by hand, v17 = Google Drive backup log). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -297,6 +297,22 @@ Digital Catalogue (built 16 Oct 2026)
   maker / GST bill open their small form; moving back asks to confirm. Filters: product, maker. ⚙️ Columns (Admin only,
   company-wide, prod_settings.board_columns): tick / untick stages; default = all except Delivered; Delivered shows the last
   7 days only.
+
+======================================================================
+4D. DAILY BACKUP TO GOOGLE DRIVE (built 30 Oct 2026, backup_drive.py)
+======================================================================
+- Super Admin > 🗄 Backups (/admin/backups). Every night 02:00 India time (background thread, checks every 10 min; up to
+  3 retries in 2 h after a failure) + "Back up now": consistent SQLite copy uploaded as
+  "Real View CRM Backups/Database/crm-YYYY-MM-DD.db" (manual: crm-YYYY-MM-DD-HHMM.db); only NEW photos uploaded to
+  "Photos/" (table backup_uploaded); database copies older than 30 days deleted. No ZIP, no password (owner's choice).
+- Google account: jabbummiracle@gmail.com (owner's choice), OAuth scope drive.file (the CRM sees only its own files).
+  Needs Render env GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (Google Cloud OAuth client, Web, redirect URI
+  https://crm.realviewcreativestudio.in/admin/backups/google/callback; consent screen published "In production" so the
+  token does not expire after 7 days). Refresh token kept in google_drive.json next to the DB (not in the DB).
+- Log in table backup_log (shown on the page in India time). Red box on Super Admin pages if not connected, last run
+  failed, or no success in 36 h. "Download the database now" gives a fresh copy without Google (audited).
+- Planned next: move the Render service from Oregon to Singapore (new service + copy data + move domain, at night after
+  the cafe closes; keep the old service a week for rollback).
 
 ======================================================================
 5. WEBSITE (website/ folder)

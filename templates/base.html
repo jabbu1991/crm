@@ -56,7 +56,7 @@
   {% if pcan('import') or pcan('export') %}<a href="{{ url_for('prod.data') }}" class="{{ 'active' if ep.startswith('prod.import') or ep == 'prod.data' }}">⬆⬇ Import / Export</a>{% endif %}
   {% if pcan('settings') %}<a href="{{ url_for('prod.settings') }}" class="{{ 'active' if ep in ('prod.settings', 'prod.stage_set') }}">⚙️ Settings</a>{% endif %}
   {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password and cafe_mode %}
 <nav class="mainnav cafe-nav">
@@ -76,7 +76,7 @@
   {% if can('settings_edit') %}<a href="{{ url_for('cafe.settings') }}" class="{{ 'active' if ep == 'cafe.settings' }}">Settings</a>
   <a href="{{ url_for('cafe.design') }}" class="{{ 'active' if ep == 'cafe.design' }}">🎨 Menu Design</a>{% endif %}
   {% if is_admin() or can('staff_manage') %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password %}
 <nav class="mainnav">
@@ -99,8 +99,8 @@
   <a href="{{ url_for('recycle_bin') }}" class="{{ 'active' if ep == 'recycle_bin' }}">🗑 Recycle Bin</a>
   {% endif %}
   {% if is_super() %}
-  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' }}">Client Organizations</a>
-  <a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a>
+  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') }}">Client Organizations</a>
+  <a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a>
   {% endif %}
 </nav>
 {% endif %}
@@ -112,6 +112,7 @@
 </div>
 {% endif %}
 <main class="container">
+  {% if is_super() and not viewing %}{% set ba = backup_alert() %}{% if ba and ep not in ('admin_backups',) %}<div class="flash flash-error">🗄 {{ ba }} <a href="{{ url_for('admin_backups') }}">Open Backups</a></div>{% endif %}{% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
   {% endwith %}

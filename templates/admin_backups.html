@@ -1,0 +1,51 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>🗄 Backups</h1>
+  <div class="actions">
+    {% if connected and not running %}<form method="post" action="{{ url_for('admin_backups_run') }}" class="inline">{{ csrf() }}<button class="btn btn-primary">⬆ Back up now</button></form>{% endif %}
+    <a class="btn" href="{{ url_for('admin_backups_download') }}">⬇ Download the database now</a>
+  </div>
+</div>
+<p class="muted">Every night at {{ '%02d'|format(hour) }}:00 (India time) the whole database is copied to your Google Drive as one file, and new photos are added. Database copies older than {{ keep }} days are removed from Drive. No ZIP — plain files in the folder <b>Real View CRM Backups</b> (Database / Photos).</p>
+{% if running %}<div class="flash flash-warning">⏳ A backup is running now. Refresh this page in a minute.</div>{% endif %}
+
+<div class="grid-2">
+<section class="card">
+  <h2>Google Drive</h2>
+  {% if connected %}
+    <p>✅ Connected{% if st.account %} to <b>{{ st.account }}</b>{% endif %}{% if st.connected_at %} <span class="muted small">since {{ st.connected_at|ist }}{{ ' by ' ~ st.connected_by if st.connected_by }}</span>{% endif %}</p>
+    <p class="small muted">The CRM can see and change only the backup files it created — nothing else in your Drive.</p>
+    <p class="small">Photos on Drive: <b>{{ photos }}</b> of {{ total_photos }} on the server{{ ' (the rest go up with the next backup)' if photos < total_photos }}.</p>
+    <form method="post" action="{{ url_for('admin_backups_disconnect') }}" class="inline" onsubmit="return confirm('Stop the daily backups? Files already on Drive stay there.')">{{ csrf() }}<button class="btn btn-sm">Disconnect</button></form>
+  {% elif keys_set %}
+    <p>Not connected yet.</p>
+    <form method="post" action="{{ url_for('admin_backups_connect') }}">{{ csrf() }}<button class="btn btn-primary">🔗 Connect Google Drive</button></form>
+    <p class="small muted">Sign in with the Google account that should keep the backups and press Allow.</p>
+  {% else %}
+    <p><b>One-time setup (about 10 minutes):</b> the server needs a free Google "OAuth client".</p>
+    <ol class="setup-steps small">
+      <li>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> with your Google account → create a project, e.g. "Real View CRM".</li>
+      <li>APIs &amp; Services → Library → <b>Google Drive API</b> → Enable.</li>
+      <li>OAuth consent screen: External, app name "Real View CRM", your email; scope <code>.../auth/drive.file</code>; then <b>Publish app</b> (In production) so the access does not expire after 7 days.</li>
+      <li>Credentials → Create credentials → OAuth client ID → Web application. Authorised redirect URI:<br><code>{{ redirect_uri }}</code></li>
+      <li>Copy the Client ID and Client secret into Render → realview-crm → Environment as <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> → Save (the CRM restarts).</li>
+      <li>Come back here and press <b>Connect Google Drive</b>.</li>
+    </ol>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>Last backups</h2>
+  <div class="table-wrap"><table class="table compact">
+    <thead><tr><th>When</th><th>Type</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for r in log %}<tr><td class="small nowrap">{{ r.started_at|ist }}</td><td class="small">{{ 'Nightly' if r.kind == 'auto' else 'By hand' }}</td>
+      <td class="small">{% if r.ok %}<span class="w-ok">✅</span> {{ r.message }}{% elif r.message == 'running' and not r.finished_at %}⏳ running{% else %}<span class="w-exp">❌ {{ r.message }}</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No backups yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p class="small muted">"Download the database now" gives you a copy straight away, without Google. Keep it somewhere safe: it holds every client's data.</p>
+</section>
+</div>
+{% endblock %}
