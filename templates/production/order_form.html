@@ -18,6 +18,8 @@
     <div class="row-3">
       <label>Order taken date<input type="date" name="order_date" value="{{ d.order_date or '' }}"></label>
       <label>Order taken by<select name="taken_by"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if d.taken_by == u.id }}>{{ u.name }}</option>{% endfor %}</select></label>
+      <label>Count in month (date) <small class="muted">optional — empty = Dispatch month</small><input type="date" name="taker_month" value="{{ d.taker_month if d.taker_month and d.taker_month|length == 10 else '' }}"></label>
+      {% if pcan('incentive') %}<label>Incentive (₹) <small class="muted">optional</small><input name="taker_amount" inputmode="decimal" value="{{ d.taker_amount|pstr if d.taker_amount is not none and d.taker_amount != 'keep' else '' }}"></label>{% endif %}
       {% if st.referral %}<label>Referral code <small class="muted">(optional)</small><input name="referral_code" value="{{ d.referral_code or '' }}" maxlength="20" placeholder="e.g. U12345" style="text-transform:uppercase" {{ 'readonly' if order and order.points_given }}></label>{% endif %}
     </div>
   </fieldset>

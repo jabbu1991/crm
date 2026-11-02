@@ -309,14 +309,13 @@ Digital Catalogue (built 16 Oct 2026)
 - Production tick "takers" (2 Nov): Order takers page for everyone + 12-month report (no amounts). In the Production
   manager preset; preset roles (worker/manager) now always follow the current preset list.
 
-- Payments + month (2 Nov, v19, production_pay.py, table prod_pay kind maker|taker): order page "Payments to the maker"
-  and "Order taker incentive" (prod_orders.taker_amount typed by Admin) — several payments (date, amount, mode, note),
-  status Not paid / Part paid / Paid; "Counts in <month>" set by hand (maker_month / taker_month, YYYY-MM, kept on stage
-  moves; empty = automatic: maker = Ready-for-Dispatch month, taker = order date). Maker / order-taker pages: month table
-  with Amount / Paid / Balance, tick orders -> "Move to month" or "Settle selected" (pays each balance). Makers list and
-  Order takers list show the balance to pay. Excel export: "Maker payments" / "Order taker payments" sheets.
-  Order history never shows these amounts. Ticks: 'maker' for maker money, new 'incentive' for order-taker incentives
-  (not in the manager preset).
+- Count-in month + amounts (2 Nov, simplified the same evening at the owner's request; production_pay.py = month
+  helpers only): makers — "Count in month (date)" on the move-to-production form and "Change maker / amount" (stored in
+  prod_orders.maker_month); empty = month it reached Ready for Dispatch. Order takers — "Count in month (date)" and
+  optional "Incentive (₹)" (taker_amount, 'incentive' tick) on the order form (stored in taker_month); empty = Dispatch
+  (GST bill) month once dispatched, before that the order date. Maker / taker pages: month table = count + total amount
+  (no paid/unpaid, no settle — removed). Excel: "Counts in month" in Maker amounts + "Order takers" sheet.
+  Table prod_pay (v19) exists but is unused.
 - Customer page after delivery (2 Nov): Production settings "Warranty on the customer page" = date (default: "Under
   warranty · valid till …", no countdown) / status / hide / countdown; Thank-you message; Google review link; "See our
   other products" (catalogue on); "Need help?" WhatsApp + Call (org phone); Care tips per product (products.care_tips,

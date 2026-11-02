@@ -230,28 +230,19 @@ def export_all():
         _sheet(wb, "Makers", ["Name", "Phone", "Work", "Orders", "Total maker amount", "Active", "Note"],
                [[m["name"], m["phone"], m["work"], m["n"], _rs(m["t"]), "Yes" if m["active"] else "No", m["note"]]
                 for m in mk], [22, 14, 18, 8, 14, 7, 30])
+        import production_pay as PP
         mrows = [[o["order_no"], o["maker_name"], o["product_name"], o["cust_name"], o["mfg_start"], o["exp_finish"],
-                  _rs(o["maker_amount"]), o["stage_name"]] for o in rows if o["maker_id"]]
+                  _rs(o["maker_amount"]), o["stage_name"], PP.month_label(PP.maker_month(o))]
+                 for o in rows if o["maker_id"]]
         _sheet(wb, "Maker amounts", ["Order no", "Maker", "Product", "Customer", "MFG start", "Expected finish",
-                                     "Maker amount", "Stage"], mrows, [9, 20, 26, 24, 11, 14, 12, 18])
-    import production_pay as PP
-    ids = {o["id"]: o for o in rows}
-    for kind, perm, title, who in (("maker", "maker", "Maker payments", "Maker"),
-                                    ("taker", "incentive", "Order taker payments", "Order taker")):
-        if not can(perm):
-            continue
-        pays = H.query("SELECT * FROM prod_pay WHERE org_id = ? AND kind = ? ORDER BY pay_date, id", (oid, kind))
-        prow = []
-        for x in pays:
-            o = ids.get(x["order_id"])
-            if not o:
-                continue
-            mon = PP.maker_month(o) if kind == "maker" else PP.taker_month(o)
-            prow.append([o["order_no"], o["maker_name"] if kind == "maker" else o["taken_by_name"], o["cust_name"],
-                         _rs(PP.due_amount(o, kind)), PP.month_label(mon), x["pay_date"], _rs(x["amount"]),
-                         x["mode"], x["note"]])
-        _sheet(wb, title, ["Order no", who, "Customer", "Amount", "Counts in month", "Paid on", "Paid amount", "Mode",
-                           "Note"], prow, [9, 20, 24, 12, 14, 11, 12, 12, 24])
+                                     "Maker amount", "Stage", "Counts in month"], mrows, [9, 20, 26, 24, 11, 14, 12, 18, 14])
+    if can("takers") or H.is_admin():
+        import production_pay as PP
+        trows = [[o["order_no"], o["taken_by_name"], o["product_name"], o["cust_name"], o["order_date"],
+                  PP.month_label(PP.taker_month(o))] + ([_rs(o["taker_amount"])] if can("incentive") else [])
+                 for o in rows if o["taken_by"] or o["taken_by_name"]]
+        _sheet(wb, "Order takers", ["Order no", "Order taken by", "Product", "Customer", "Order date", "Counts in month"]
+               + (["Incentive"] if can("incentive") else []), trows, [9, 20, 26, 24, 11, 14, 12])
     H.audit("Production data exported (Excel)", f"{len(rows)} orders")
     return _xlsx_response(wb, f"{_slug()}-production-{today()}.xlsx")
 

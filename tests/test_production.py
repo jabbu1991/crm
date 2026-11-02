@@ -650,85 +650,71 @@ def test_order_takers_tick_for_staff(pw):
     assert lead.get(f"/production/order-takers/{aid}").status_code == 200
 
 
-# ---------------------------------------------------------------- payments to makers / order takers
+# ---------------------------------------------------------------- count-in month + amounts (makers / order takers)
 
-def test_maker_and_taker_payments_and_months(pw):
+def test_count_in_month_and_amounts(pw):
     star = pw["star"]
     db = pw["db"]
     aid = db().execute("SELECT id FROM users WHERE username = 'star_admin'").fetchone()[0]
-    for i, nm in enumerate(("Pay One", "Pay Two")):
-        star.post("/production/orders/new", {"name": nm, "phone": f"900000130{i}", "product_name": "Pump",
-                                             "taken_by": str(aid)})
-    o1, o2 = [o["id"] for o in orders(pw, "STAR")]
-    for oid_ in (o1, o2):
-        star.post(f"/production/orders/{oid_}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
-                                                      "new_maker": "Babu", "maker_amount": "2500"})
-    mid = orders(pw, "STAR")[0]["maker_id"]
     this_m = date.today().isoformat()[:7]
-    # still in production: not counted yet; set the month by hand (paid early)
-    assert "<b>#1</b>" not in star.get(f"/production/makers/{mid}?month={this_m}").text
-    star.post(f"/production/orders/{o1}/month/maker", {"month": "2026-01"})
-    assert orders(pw, "STAR")[0]["maker_month"] == "2026-01"
-    # a later stage move keeps the month set by hand
-    star.post(f"/production/orders/{o1}/move", {"to": stage_id(pw, "STAR", "Ready for Dispatch")})
-    assert orders(pw, "STAR")[0]["maker_month"] == "2026-01"
-    jan = star.get(f"/production/makers/{mid}?month=2026-01").text
-    assert "<b>#1</b>" in jan and "Not paid" in jan
-    # part payment, then the order page shows the balance
-    star.post(f"/production/orders/{o1}/pay/maker", {"pay_date": "2026-01-20", "amount": "1000", "mode": "Cash"})
-    page = star.get(f"/production/orders/{o1}").text
-    assert "Part paid" in page and "₹1,500" in page
-    # bulk: move order 2 into January, then settle both
-    star.post("/production/pay/bulk/maker", {"ids": [str(o2)], "action": "move", "month": "2026-01",
-                                             "next": f"/production/makers/{mid}"})
-    r = star.post("/production/pay/bulk/maker", {"ids": [str(o1), str(o2)], "action": "settle",
-                                                 "pay_date": "2026-01-31", "mode": "UPI",
-                                                 "next": f"/production/makers/{mid}?month=2026-01"})
-    assert "2 orders settled" in r.text
-    paid = db().execute("SELECT SUM(amount) FROM prod_pay WHERE kind = 'maker'").fetchone()[0]
-    assert paid == 500000
-    assert "🟢 Paid" in star.get(f"/production/makers/{mid}?month=2026-01").text
-    # delete a payment
-    pid = db().execute("SELECT id FROM prod_pay WHERE order_id = ? ORDER BY id LIMIT 1", (o1,)).fetchone()[0]
-    star.post(f"/production/orders/{o1}/pay/maker/{pid}/delete", {})
-    assert db().execute("SELECT COUNT(*) FROM prod_pay WHERE order_id = ?", (o1,)).fetchone()[0] == 1
-    # order taker incentive
-    star.post(f"/production/orders/{o2}/incentive", {"taker_amount": "300"})
-    star.post(f"/production/orders/{o2}/month/taker", {"month": "2025-12"})
-    tp = star.get(f"/production/order-takers/{aid}?month=2025-12").text
-    assert "Pay Two" in tp and "Not paid" in tp and "₹300" in tp
-    star.post(f"/production/orders/{o2}/pay/taker", {"pay_date": "2026-01-05", "amount": "300", "mode": "Cash"})
-    assert "🟢 Paid" in star.get(f"/production/order-takers/{aid}?month=2025-12").text
-    # the customer link never shows money for makers / takers
-    tok = db().execute("SELECT token, order_no FROM prod_orders WHERE id = ?", (o2,)).fetchone()
-    pub = pw["star"].get(f"/t/STAR/{tok['token']}").text
-    assert "Babu" not in pub and "2,500" not in pub and "Incentive" not in pub
+    # order taker: date chosen on the new-order form + incentive
+    star.post("/production/orders/new", {"name": "Month One", "phone": "9000001300", "product_name": "Pump",
+                                         "taken_by": str(aid), "taker_month": "2026-01-15", "taker_amount": "300"})
+    star.post("/production/orders/new", {"name": "Month Two", "phone": "9000001301", "product_name": "Pump",
+                                         "taken_by": str(aid), "order_date": "2026-02-10"})
+    o1, o2 = [o["id"] for o in orders(pw, "STAR")]
+    assert orders(pw, "STAR")[0]["taker_month"] == "2026-01-15" and orders(pw, "STAR")[0]["taker_amount"] == 30000
+    jan = star.get(f"/production/order-takers/{aid}?month=2026-01").text
+    assert "Month One" in jan and "₹300" in jan
+    # no date: order date until dispatched, then the Dispatch (bill) month
+    assert "Month Two" in star.get(f"/production/order-takers/{aid}?month=2026-02").text
+    star.post(f"/production/orders/{o2}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
+                                                "new_maker": "Babu", "maker_amount": "2500",
+                                                "maker_month": "2025-12-20"})
+    star.post(f"/production/orders/{o2}/move", {"to": stage_id(pw, "STAR", "Dispatch"), "confirm": "1",
+                                                "bill_no": "GST/1", "bill_date": "2026-03-05"})
+    assert "Month Two" in star.get(f"/production/order-takers/{aid}?month=2026-03").text
+    assert "Month Two" not in star.get(f"/production/order-takers/{aid}?month=2026-02").text
+    # maker: the date chosen when assigning wins over Ready for Dispatch
+    mid = orders(pw, "STAR")[1]["maker_id"]
+    dec = star.get(f"/production/makers/{mid}?month=2025-12").text
+    assert "<b>#2</b>" in dec and "₹2,500" in dec
+    # change it later on the order page; empty = automatic (Ready for Dispatch month)
+    star.post(f"/production/orders/{o2}/maker-amount", {"maker_id": str(mid), "maker_amount": "2600", "maker_month": ""})
+    assert "<b>#2</b>" in star.get(f"/production/makers/{mid}?month={this_m}").text
+    star.post(f"/production/orders/{o2}/maker-amount", {"maker_id": str(mid), "maker_amount": "", "maker_month": "2026-02-01"})
+    feb = star.get(f"/production/makers/{mid}?month=2026-02").text
+    assert "<b>#2</b>" in feb and orders(pw, "STAR")[1]["maker_amount"] is None   # amount is optional
+    # editing the order keeps / changes the order-taker date
+    o = orders(pw, "STAR")[0]
+    star.post(f"/production/orders/{o1}/edit", {"name": "Month One", "phone": "9000001300", "product_name": "Pump",
+                                                "taken_by": str(aid), "order_date": o["order_date"], "quantity": "1",
+                                                "taker_month": "2026-04-02", "taker_amount": "350"})
+    o = orders(pw, "STAR")[0]
+    assert o["taker_month"] == "2026-04-02" and o["taker_amount"] == 35000
+    # the customer link never shows maker / incentive money
+    pub = Browser().get(f"/t/star/{o['token']}").text
+    assert "Babu" not in pub and "350" not in pub
 
 
-def test_payment_permissions(pw):
+def test_incentive_needs_the_tick(pw):
     star = pw["star"]
     worker = make_staff(star, "work9")
     db = pw["db"]
     sid = db().execute("SELECT id FROM users WHERE username = 'work9'").fetchone()[0]
     star.post("/production/orders/new", {"name": "Perm Order", "phone": "9000001400", "product_name": "Pump",
-                                         "taken_by": str(sid)})
+                                         "taken_by": str(sid), "taker_amount": "250"})
+    c = db()
+    c.execute("UPDATE users SET prod_role = 'manager', prod_perms = '[]' WHERE id = ?", (sid,))
+    c.commit()
     o = orders(pw, "STAR")[0]["id"]
-    star.post(f"/production/orders/{o}/incentive", {"taker_amount": "250"})
-    # production manager: maker money yes, incentives no
-    db_ = db()
-    db_.execute("UPDATE users SET prod_role = 'manager', prod_perms = '[]' WHERE id = ?", (sid,))
-    db_.commit()
-    page = worker.get(f"/production/orders/{o}").text
-    assert "🧑‍💼 Order taker incentive" not in page
-    assert worker.post(f"/production/orders/{o}/pay/taker", {"amount": "10"}).status_code == 403
+    assert "Incentive" not in worker.get(f"/production/orders/{o}/edit").text
     assert "₹" not in worker.get(f"/production/order-takers/{sid}").text
-    # with the incentive tick
-    db_.execute("UPDATE users SET prod_role = 'custom', prod_perms = '[\"view\", \"incentive\"]' WHERE id = ?", (sid,))
-    db_.commit()
-    assert "🧑‍💼 Order taker incentive" in worker.get(f"/production/orders/{o}").text
+    c.execute("UPDATE users SET prod_role = 'custom', prod_perms = '[\"view\", \"edit\", \"incentive\"]' WHERE id = ?",
+              (sid,))
+    c.commit()
     assert "₹250" in worker.get(f"/production/order-takers/{sid}").text
-    assert worker.post(f"/production/orders/{o}/pay/maker", {"amount": "10"}).status_code == 403
-
+    assert "Incentive" in worker.get(f"/production/orders/{o}/edit").text
 
 
 def test_customer_page_extras(pw):

@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, progress, next_btn, dmy, left_text with context %}{% from '_macros.html' import csrf with context %}{% from 'production/_paybox.html' import pay_box with context %}
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, progress, next_btn, dmy, left_text with context %}{% from '_macros.html' import csrf with context %}
 {% block title %}Order #{{ o.order_no }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -60,6 +60,8 @@
       {% if o.referral_code %}<dt>Referred by</dt><dd>{% if o.referrer_name %}{{ o.referrer_name }} ({{ o.referrer_code }}){% else %}{{ o.referral_code }} <span class="muted">(not found)</span>{% endif %}{{ ' · points given ✓' if o.points_given }}</dd>{% endif %}{% endif %}
       <dt>Order date</dt><dd>{{ dmy(o.order_date) }}</dd>
       <dt>Order taken by</dt><dd>{% if o.taken_by and (pcan('takers') or o.taken_by == g.user.id) %}<a href="{{ url_for('prod.taker_page', uid=o.taken_by) }}">{{ o.taken_by_name or '—' }}</a>{% else %}{{ o.taken_by_name or '—' }}{% endif %}</dd>
+      {% if o.taker_month %}<dt>Order taker month</dt><dd>{{ month_label(o.taker_month) }}</dd>{% endif %}
+      {% if pcan('incentive') and o.taker_amount is not none %}<dt>Incentive</dt><dd>{{ o.taker_amount|rs }}</dd>{% endif %}
       {% if o.approved_by %}<dt>Approved by</dt><dd>{{ o.approved_by }}</dd>{% endif %}
     </dl>
     <h2>Product</h2>
@@ -86,34 +88,20 @@
         <dt>Expected finish</dt><dd>{{ dmy(o.exp_finish) }}</dd>
         {% if pcan('maker') %}<dt>Amount to maker</dt><dd>{{ o.maker_amount|rs if o.maker_amount is not none else 'not entered' }}</dd>{% endif %}
         {% if o.maker_note %}<dt>Note</dt><dd>{{ o.maker_note }}</dd>{% endif %}
-        {% if done %}<dt>Production finished</dt><dd><b>{{ dmy(done) }}</b> <span class="small muted">(counts in {{ done.strftime('%b %Y') }} for {{ o.maker_name }}{{ ', set by hand' if o.finished_manual }})</span></dd>{% endif %}
+        {% if done %}<dt>Production finished</dt><dd><b>{{ dmy(done) }}</b></dd>{% endif %}
+        <dt>Counts in month</dt><dd>{% if maker_mon %}<b>{{ month_label(maker_mon) }}</b>{% else %}<span class="muted">when it reaches Ready for Dispatch</span>{% endif %}{{ ' <span class="small muted">(date chosen)</span>'|safe if o.maker_month }}</dd>
       </dl>
-      {% if pcan('maker') and not viewing and (done or ph in ('ready', 'dispatched', 'delivered')) %}
-      <details><summary class="small">✏️ Change production finished date</summary>
-        <form method="post" action="{{ url_for('prod.order_finished', order_id=o.id) }}" class="inline-form">{{ csrf() }}
-          <input type="date" name="finished" value="{{ done.isoformat() if done else today }}" required><button class="btn btn-sm btn-prod">Save</button></form>
-      </details>{% endif %}
       {% if pcan('maker') and not viewing %}
       <details><summary class="small">Change maker / amount</summary>
         <form method="post" action="{{ url_for('prod.order_maker_amount', order_id=o.id) }}" class="form">{{ csrf() }}
           <div class="row-2"><label>Maker<select name="maker_id">{% for m in makers %}<option value="{{ m.id }}" {{ 'selected' if m.id == o.maker_id }}>{{ m.name }}</option>{% endfor %}</select></label>
-          <label>Amount to maker (₹)<input name="maker_amount" inputmode="decimal" value="{{ o.maker_amount|pstr }}"></label></div>
+          <label>Amount to maker (₹) <small class="muted">optional</small><input name="maker_amount" inputmode="decimal" value="{{ o.maker_amount|pstr }}"></label></div>
+          <label>Count in month (date) <small class="muted">optional — empty = the month it reaches Ready for Dispatch</small><input type="date" name="maker_month" value="{{ o.maker_month if o.maker_month and o.maker_month|length == 10 else '' }}"></label>
           <button class="btn btn-sm btn-prod">Save</button>
         </form>
       </details>{% endif %}
-      {% if pay.maker %}<h3>💸 Payments to the maker</h3>{{ pay_box(o, 'maker', pay.maker) }}{% endif %}
       {% else %}<p class="muted">Assigned when the order moves to production.</p>{% endif %}
     </section>
-
-    {% if pay.taker and o.taken_by %}
-    <section class="card">
-      <h2>🧑‍💼 Order taker incentive</h2>
-      <p class="small">{{ o.taken_by_name or '—' }}</p>
-      {% if not viewing %}<form method="post" action="{{ url_for('prod.order_incentive', order_id=o.id) }}" class="inline-form">{{ csrf() }}
-        <label class="inline-label">Incentive (₹) <input name="taker_amount" inputmode="decimal" value="{{ o.taker_amount|pstr }}" size="8"></label><button class="btn btn-sm">Save</button></form>{% endif %}
-      {{ pay_box(o, 'taker', pay.taker) }}
-    </section>
-    {% endif %}
 
     {% if st.warranty %}
     <section class="card">

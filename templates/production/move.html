@@ -20,6 +20,7 @@
       <label>Expected finish date <small class="muted">(start + {{ form.days }} days)</small><input type="date" name="exp_finish" id="exp-finish" value="{{ form.exp_finish }}"></label>
     </div>
     {% if pcan('maker') %}<label>Amount to pay the maker (₹) <small class="muted">optional — can be added later</small><input name="maker_amount" inputmode="decimal" value="{{ paise(form.maker_amount) }}"></label>{% endif %}
+    <label>Count in month (date) <small class="muted">optional — empty = the month it reaches Ready for Dispatch</small><input type="date" name="maker_month"></label>
     <label>Note for the maker<input name="maker_note" placeholder="optional"></label>
   </fieldset>
   {% endif %}

@@ -47,7 +47,7 @@ PERMS = [
     ("import", "Import old deliveries"),
     ("export", "Export data (Excel)"),
     ("takers", "Order takers: everyone's orders and monthly report (no amounts)"),
-    ("incentive", "Order taker incentives: amounts and payments"),
+    ("incentive", "Order taker incentive amounts (see and enter)"),
     ("settings", "Production settings (stages, products, points)"),
 ]
 PERM_KEYS = [k for k, _ in PERMS]
@@ -885,6 +885,8 @@ def order_form_data():
     d["prod_days"] = int_in(f.get("prod_days"), None, 0, 3650) if (f.get("prod_days") or "").strip() else None
     d["order_date"] = H.valid_date(clean(f.get("order_date"))) if f.get("order_date") else today()
     d["taken_by"] = f.get("taken_by", type=int)
+    d["taker_month"] = H.valid_date(clean(f.get("taker_month"), 10)) if f.get("taker_month") else ""
+    d["taker_amount"] = money_in(f.get("taker_amount")) if "taker_amount" in f else "keep"
     d["warranty_months"] = int_in(f.get("warranty_months"), None, 0, 600) if (f.get("warranty_months") or "").strip() else None
     d["bill_no"] = clean(f.get("bill_no"), 60)
     d["bill_date"] = H.valid_date(clean(f.get("bill_date"))) if f.get("bill_date") else ""
@@ -990,7 +992,7 @@ def order_new():
     d = {k: "" for k in ORDER_TEXT}
     d.update(quantity=1, order_date=today(), taken_by=g.user["id"], advances=[], parts=[], product_id=None,
              unit_price=None, maker_amount=None, prod_days=None, warranty_months=None, bill_no="", bill_date="",
-             delivered_date="")
+             delivered_date="", taker_month="", taker_amount=None)
     if request.method == "POST":
         d = order_form_data()
         errors = validate_order(d, old_delivery=old_delivery)
@@ -1009,6 +1011,10 @@ def order_new():
             new_id = create_order(db, H.org_id(), dict(d, **extra), imported=old_delivery, ts=ts,
                                   note="Old delivery added by hand" if old_delivery else "Order created")
             save_children(db, new_id, d, ts, parts=parts_given)
+            db.execute("UPDATE prod_orders SET taker_month = ?, taker_amount = ? WHERE id = ?",
+                       (d["taker_month"] or None,
+                        d["taker_amount"] if can("incentive") and d["taker_amount"] not in ("keep", "bad") else None,
+                        new_id))
             db.commit()
             flash("Old delivery saved." if old_delivery else "Order saved in the Queue.", "success")
             return redirect(url_for("prod.order_view", order_id=new_id))
@@ -1045,6 +1051,9 @@ def order_edit(order_id):
                         H.scalar("SELECT name FROM users WHERE id = ?", (d["taken_by"],)) if d["taken_by"] else ""),
                     "approved_by": d["approved_by"], "note": d["note"], "referral_code": d["referral_code"] or None,
                     "referrer_id": referrer_id if not o["points_given"] else o["referrer_id"]}
+            cols["taker_month"] = d["taker_month"] or None
+            if can("incentive") and d["taker_amount"] not in ("keep", "bad"):
+                cols["taker_amount"] = d["taker_amount"]
             if can("bill"):
                 cols.update(bill_no=d["bill_no"] or None, bill_date=d["bill_date"] or None)
             if o["imported"]:
@@ -1097,7 +1106,7 @@ def order_view(order_id):
                                                                               wa_track_text(o)),
                            w=warranty_info(o, parts), st=get_settings(), makers=makers, ph=phase(o),
                            pending=details_pending(o), adv_total=sum(a["amount"] for a in advances), done=done_date(o),
-                           mk=marks_of(o["set_id"]), pay=production_pay.order_ctx(o))
+                           mk=marks_of(o["set_id"]), maker_mon=production_pay.maker_month(o))
 
 
 def maker_from_form(db, ts):
@@ -1172,7 +1181,8 @@ def order_move(order_id):
             sets.update(maker_id=mid, mfg_start=start,
                         exp_finish=finish or (to_date(start) + timedelta(days=days)).isoformat(),
                         maker_amount=amt if can("maker") else o["maker_amount"],
-                        maker_note=clean(f.get("maker_note"), 300) or o["maker_note"])
+                        maker_note=clean(f.get("maker_note"), 300) or o["maker_note"],
+                        maker_month=H.valid_date(clean(f.get("maker_month"), 10)) or o["maker_month"])
         if is_dispatch:
             bill_no = clean(f.get("bill_no"), 60) or (o["bill_no"] or "")
             bill_date = H.valid_date(clean(f.get("bill_date"))) or o["bill_date"] or today()
@@ -1242,8 +1252,9 @@ def order_maker_amount(order_id):
     else:
         db = H.get_db()
         mid = maker_from_form(db, _now()) or o["maker_id"]
-        db.execute("UPDATE prod_orders SET maker_amount = ?, maker_id = ?, updated_by = ?, updated_at = ? WHERE id = ?"
-                   " AND org_id = ?", (amt, mid, g.user["id"], _now(), order_id, H.org_id()))
+        month = H.valid_date(clean(request.form.get("maker_month"), 10)) if request.form.get("maker_month") else None
+        db.execute("UPDATE prod_orders SET maker_amount = ?, maker_id = ?, maker_month = ?, updated_by = ?, updated_at = ?"
+                   " WHERE id = ? AND org_id = ?", (amt, mid, month, g.user["id"], _now(), order_id, H.org_id()))
         db.commit()
         flash("Maker details saved.", "success")
     return redirect(url_for("prod.order_view", order_id=order_id))
@@ -1372,20 +1383,23 @@ def takers():
     this_m = today()[:7]
     rows = H.query("""SELECT u.id, u.name, u.designation, u.active,
                         (SELECT COUNT(*) FROM prod_orders o WHERE o.taken_by = u.id AND o.status = 'active') total,
-                        (SELECT COUNT(*) FROM prod_orders o WHERE o.taken_by = u.id AND o.status = 'active'
-                           AND COALESCE(o.taker_month, substr(o.order_date, 1, 7)) = ?) this_month
-                      FROM users u WHERE u.org_id = ? ORDER BY total DESC, u.name COLLATE NOCASE""", (this_m, oid))
+                        0 this_month
+                      FROM users u WHERE u.org_id = ? ORDER BY total DESC, u.name COLLATE NOCASE""", (oid,))
     import production_pay as PP
-    bal = PP.balances(oid, "taker") if can("incentive") else None
+    per = {}
+    for o in order_rows(oid, "AND o.status = 'active' AND o.taken_by IS NOT NULL"):
+        if PP.taker_month(o) == this_m:
+            per[o["taken_by"]] = per.get(o["taken_by"], 0) + 1
+    rows = [dict(r, this_month=per.get(r["id"], 0)) for r in rows]
     return render_template("production/takers.html", rows=[r for r in rows if r["total"] or r["active"]],
-                           this_m=this_m, bal=bal)
+                           this_m=this_m)
 
 
 @bp.route("/production/order-takers/<int:uid>")
 @taker_view
 def taker_page(uid):
-    """One person: orders taken per month (by order date, or the month set by hand) and, for a month, which orders.
-    Incentive amounts and payments only for people with the 'incentive' tick."""
+    """One person: orders per month (date chosen by hand, otherwise the Dispatch date once dispatched, else the order
+    date) and, for a month, which orders. Incentive amounts only for people with the 'incentive' tick."""
     import production_pay as PP
     if not can("takers") and uid != g.user["id"]:
         abort(403)
@@ -1394,30 +1408,27 @@ def taker_page(uid):
     rows = order_rows(oid, "AND o.taken_by = ? AND o.status = 'active'", (uid,),
                       order_by="COALESCE(o.taker_month, substr(o.order_date, 1, 7)) DESC, o.order_date DESC, o.id DESC")
     money = can("incentive")
-    paid = PP.paid_totals(oid, "taker", [o["id"] for o in rows]) if money else {}
     months = last_months()
-    table = {k: {"month": k, "orders": 0, "delivered": 0, "amount": 0, "paid": 0, "balance": 0} for k in months}
-    items = [{"o": o, "month": PP.taker_month(o), "paid": paid.get(o["id"], 0), "dl": phase(o) == "delivered"}
-             for o in rows]
-    totals = PP.summarise(items, "taker") if money else None
+    table = {k: {"month": k, "orders": 0, "delivered": 0, "amount": 0} for k in months}
+    items = [{"o": o, "month": PP.taker_month(o), "dl": phase(o) == "delivered"} for o in rows]
     delivered = 0
+    total_amount = 0
     for i in items:
         delivered += i["dl"]
+        total_amount += i["o"]["taker_amount"] or 0
         if i["month"] in table:
             r = table[i["month"]]
             r["orders"] += 1
             r["delivered"] += i["dl"]
-            if money:
-                r["amount"] += i["due"] or 0
-                r["paid"] += i["paid"]
-                r["balance"] += i["balance"]
+            r["amount"] += i["o"]["taker_amount"] or 0
     month = request.args.get("month") or ""
     if re.fullmatch(r"\d{4}-\d{2}", month):
         items = [i for i in items if i["month"] == month]
     else:
         month = ""
     return render_template("production/taker.html", u=u, table=[table[k] for k in months], items=items,
-                           total=len(rows), delivered=delivered, month=month, phase=phase, money=money, totals=totals)
+                           total=len(rows), delivered=delivered, month=month, phase=phase, money=money,
+                           total_amount=total_amount)
 
 
 # ---------------------------------------------------------------- makers
@@ -1456,25 +1467,21 @@ def makers():
     for o in order_rows(oid, "AND o.status = 'active' AND o.maker_id IS NOT NULL"):
         if phase(o) == "working":
             now_working[o["maker_id"]] = now_working.get(o["maker_id"], 0) + 1
-    import production_pay as PP
-    return render_template("production/makers.html", rows=rows, working=now_working, total=working,
-                           bal=PP.balances(oid, "maker"))
+    return render_template("production/makers.html", rows=rows, working=now_working, total=working)
 
 
 @bp.route("/production/makers/<int:mid>")
 @prod_view("maker")
 def maker_view(mid):
-    """One maker: totals, a month-wise table (an order counts in the month set by hand, otherwise the month its
-    production finished = reached Ready for Dispatch) with amount / paid / balance, and the orders (tap a month to see
-    only that month; tick orders to move them to another month or to pay their balance)."""
+    """One maker: totals, a month-wise table (an order counts in the month of the date chosen by hand, otherwise the
+    month it reached Ready for Dispatch) with the total maker amount, and the orders (tap a month to see that month)."""
     import production_pay as PP
     oid = H.org_id()
     m = H.query("SELECT * FROM prod_makers WHERE id = ? AND org_id = ?", (mid, oid), one=True) or abort(404)
     rows = order_rows(oid, "AND o.maker_id = ? AND o.status = 'active'", (mid,),
                       order_by="COALESCE(o.maker_month, substr(o.finished_at, 1, 7), '9999') DESC, o.mfg_start DESC, o.id DESC")
-    paid = PP.paid_totals(oid, "maker", [o["id"] for o in rows])
     months = last_months()
-    table = {k: {"month": k, "finished": 0, "amount": 0, "paid": 0, "balance": 0, "started": 0} for k in months}
+    table = {k: {"month": k, "finished": 0, "amount": 0, "started": 0} for k in months}
     t = today_date()
     making = finished = 0
     items = []
@@ -1495,22 +1502,21 @@ def maker_view(mid):
             late_by = (fin - exp).days
         elif not fin and exp and ph == "working":
             late_by = (t - exp).days if t > exp else None
-        items.append({"o": o, "fin": fin, "month": mon, "late_by": late_by, "ph": ph, "paid": paid.get(o["id"], 0)})
-    totals = PP.summarise(items, "maker")
+        items.append({"o": o, "fin": fin, "month": mon, "late_by": late_by, "ph": ph})
+    total_amount = 0
     for i in items:
+        total_amount += i["o"]["maker_amount"] or 0
         if i["month"] in table:
             r = table[i["month"]]
             r["finished"] += 1
-            r["amount"] += i["due"] or 0
-            r["paid"] += i["paid"]
-            r["balance"] += i["balance"]
+            r["amount"] += i["o"]["maker_amount"] or 0
     month = request.args.get("month") or ""
     if re.fullmatch(r"\d{4}-\d{2}", month):
         items = [i for i in items if i["month"] == month]
     else:
         month = ""
     return render_template("production/maker.html", m=m, table=[table[k] for k in months], items=items,
-                           making=making, finished=finished, total=len(rows), totals=totals, month=month)
+                           making=making, finished=finished, total=len(rows), total_amount=total_amount, month=month)
 
 
 # ---------------------------------------------------------------- products (production defaults)
