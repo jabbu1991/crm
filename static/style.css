@@ -466,3 +466,29 @@ body.board-dragging { cursor: grabbing; user-select: none; }
 .lf-table .lf-group td { background: #f1f5f9; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #475569; }
 .lf-table td:first-child { width: 38%; }
 .lf-table input[type=checkbox] { width: 20px; height: 20px; }
+/* Production: payments to makers / order takers */
+.pay-st { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pay-unpaid { background: #fee2e2; color: #b91c1c; }
+.pay-part { background: #ffedd5; color: #c2410c; }
+.pay-paid { background: #dcfce7; color: #15803d; }
+.pay-over { background: #ede9fe; color: #6d28d9; }
+.pay-none { background: #f1f5f9; color: #64748b; }
+.paybox { border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+.paybox-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.paybox details { margin-top: 6px; }
+.pay-row { display: flex; align-items: center; gap: 10px; }
+.pay-row > input[type=checkbox] { width: 20px; height: 20px; flex: none; }
+.pay-row .run-main { flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.pay-amt { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+.pay-bulk { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; margin-bottom: 10px; background: #fff7ed; border-color: #fed7aa; }
+.pay-bulk .pb-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pay-bulk select, .pay-bulk input[type=date] { padding: 6px 8px; }
+.stat-bad b { color: #b91c1c; }
+.grid-2 > * { min-width: 0; }
+@media (max-width: 760px) {
+  .month-table th, .month-table td { padding: 6px 5px; font-size: 13px; }
+  .month-table .col-started { display: none; }
+  .pay-bulk select, .pay-bulk input[type=date] { max-width: 100%; }
+  .pay-bulk .pb-row { width: 100%; }
+  .pay-bulk .pb-row select, .pay-bulk .pb-row input[type=date] { flex: 1; min-width: 0; }
+}

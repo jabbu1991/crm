@@ -1,0 +1,30 @@
+{# Tick orders on a maker / order-taker page, then move them to another month or pay their balance. #}
+{% macro bulk_bar(kind, fid) -%}
+{% if not viewing %}
+<form id="{{ fid }}" method="post" action="{{ url_for('prod.pay_bulk', kind=kind) }}" class="card pay-bulk">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+  <label class="check"><input type="checkbox" class="pb-all"> Select all</label>
+  <span class="pb-count small muted">0 ticked</span>
+  <div class="pb-row">
+    <select name="month" aria-label="Month"><option value="">Automatic month</option>{% for k, lab in months_options() %}<option value="{{ k }}">{{ lab }}</option>{% endfor %}</select>
+    <button class="btn btn-sm" name="action" value="move">↔ Move to month</button>
+  </div>
+  <div class="pb-row">
+    <input type="date" name="pay_date" value="{{ today }}" aria-label="Payment date">
+    <select name="mode" aria-label="Payment mode">{% for m in pay_modes %}<option>{{ m }}</option>{% endfor %}</select>
+    <button class="btn btn-sm btn-prod" name="action" value="settle" onclick="return confirm('Pay the full balance of every ticked order?')">✅ Settle selected</button>
+  </div>
+</form>
+<script>
+(function () {
+  var f = document.getElementById("{{ fid }}");
+  function boxes() { return document.querySelectorAll("input[form={{ fid }}][name=ids]"); }
+  function count() { var n = 0; boxes().forEach(function (b) { n += b.checked; }); f.querySelector(".pb-count").textContent = n + " ticked"; }
+  f.querySelector(".pb-all").addEventListener("change", function () { var on = this.checked; boxes().forEach(function (b) { b.checked = on; }); count(); });
+  document.addEventListener("change", function (e) { if (e.target.name === "ids") count(); });
+})();
+</script>
+{% endif %}
+{%- endmacro %}
+
+{% macro pay_badge(state) -%}<span class="pay-st pay-{{ state }}">{{ pay_state_label[state] }}</span>{%- endmacro %}

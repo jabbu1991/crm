@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, dmy with context %}
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, dmy with context %}{% from 'production/_paybulk.html' import bulk_bar, pay_badge with context %}
 {% block title %}{{ m.name }} · Maker{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -10,36 +10,45 @@
   <div class="stat"><b>{{ total }}</b><span>All orders</span></div>
   <div class="stat stat-warn"><b>{{ making }}</b><span>Making now</span></div>
   <div class="stat stat-good"><b>{{ finished }}</b><span>Finished</span></div>
-  <div class="stat"><b>{{ total_amount|rs0 }}</b><span>Maker amount (finished)</span></div>
+  <div class="stat"><b>{{ totals.due|rs0 }}</b><span>Maker amount</span></div>
+  <div class="stat stat-good"><b>{{ totals.paid|rs0 }}</b><span>Paid</span></div>
+  <div class="stat {{ 'stat-bad' if totals.balance }}"><b>{{ totals.balance|rs0 }}</b><span>Balance to pay</span></div>
 </div>
 <div class="grid-2">
   <section class="card">
     <h2>Month by month</h2>
-    <p class="small muted">An order counts in the month its production finished (reached Ready for Dispatch). Tap a month to see its orders.</p>
+    <p class="small muted">An order counts in the month production finished (reached Ready for Dispatch), or in the month you set by hand (📌). Tap a month to see its orders.</p>
+    <div class="table-wrap">
     <table class="table compact month-table">
-      <thead><tr><th>Month</th><th class="num">Finished</th><th class="num">Maker amount</th><th class="num">Started</th></tr></thead>
+      <thead><tr><th>Month</th><th class="num">Machines</th><th class="num">Amount</th><th class="num">Paid</th><th class="num">Balance</th><th class="num col-started">Started</th></tr></thead>
       <tbody>
       {% for r in table %}
         <tr class="{{ 'on' if month == r.month }}">
-          <td><a href="{{ url_for('prod.maker_view', mid=m.id, month=r.month) }}">{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][r.month[5:]|int - 1] }} {{ r.month[:4] }}</a></td>
+          <td><a href="{{ url_for('prod.maker_view', mid=m.id, month=r.month) }}">{{ month_label(r.month) }}</a></td>
           <td class="num {{ 'zero' if not r.finished }}"><b>{{ r.finished }}</b></td>
           <td class="num {{ 'zero' if not r.amount }}">{{ r.amount|rs0 }}</td>
-          <td class="num {{ 'zero' if not r.started }}">{{ r.started }}</td>
+          <td class="num {{ 'zero' if not r.paid }}">{{ r.paid|rs0 }}</td>
+          <td class="num {{ 'zero' if not r.balance }}">{% if r.balance %}<b class="w-exp">{{ r.balance|rs0 }}</b>{% else %}{{ r.balance|rs0 }}{% endif %}</td>
+          <td class="num col-started {{ 'zero' if not r.started }}">{{ r.started }}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
+    </div>
   </section>
   <section class="card">
-    <h2>{% if month %}Finished in {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month[5:]|int - 1] }} {{ month[:4] }} <a class="small" href="{{ url_for('prod.maker_view', mid=m.id) }}">Show all</a>{% else %}Orders{% endif %}</h2>
+    <h2>{% if month %}Counted in {{ month_label(month) }} <a class="small" href="{{ url_for('prod.maker_view', mid=m.id) }}">Show all</a>{% else %}Orders{% endif %}</h2>
+    {% if items %}{{ bulk_bar('maker', 'pbm') }}{% endif %}
     {% for i in items %}{% set o = i.o %}
-      <a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}">
-        <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or '—' }}
+      <div class="run-row pay-row">
+        {% if not viewing %}<input type="checkbox" name="ids" value="{{ o.id }}" form="pbm" aria-label="Tick order {{ o.order_no }}">{% endif %}
+        <a class="run-main" href="{{ url_for('prod.order_view', order_id=o.id) }}"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or '—' }}
           <span class="po-sub">Start {{ dmy(o.mfg_start) }}{% if i.fin %} · finished {{ dmy(i.fin) }}{% endif %}
-          {% if i.late_by is not none %}{% if i.late_by > 0 %} · <span class="w-exp">{{ i.late_by }} day{{ 's' if i.late_by != 1 }} late</span>{% elif i.fin %} · <span class="w-ok">on time</span>{% endif %}{% endif %}</span></span>
+          {% if i.month %} · counts in {{ month_label(i.month) }}{{ ' 📌' if o.maker_month }}{% endif %}
+          {% if i.late_by is not none %}{% if i.late_by > 0 %} · <span class="w-exp">{{ i.late_by }} day{{ 's' if i.late_by != 1 }} late</span>{% elif i.fin %} · <span class="w-ok">on time</span>{% endif %}{% endif %}</span></a>
         {% if not i.fin %}{{ stage_badge(o.stage_name, o.stage_mark) }}{% endif %}
-        <b>{{ o.maker_amount|rs0 if o.maker_amount is not none else '—' }}</b>
-      </a>
+        <span class="pay-amt"><b>{{ o.maker_amount|rs0 if o.maker_amount is not none else '—' }}</b>{{ pay_badge(i.state) }}{% if i.state == 'part' %}<small class="muted">bal {{ i.balance|rs0 }}</small>{% endif %}</span>
+      </div>
     {% else %}<p class="muted">No orders{{ ' in this month' if month }}.</p>{% endfor %}
   </section>
 </div>

@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1174,9 +1174,36 @@ def _migrate_v18(conn):
         updated_at TEXT)""")
 
 
+def _migrate_v19(conn):
+    """Production: payments to makers and order takers, the month an order counts in (set by hand), the order
+    taker's incentive amount, and care tips per product for the customer page. Adds only."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("prod_orders", "maker_month", "TEXT")     # YYYY-MM chosen by hand; NULL = automatic
+    add("prod_orders", "taker_month", "TEXT")     # YYYY-MM chosen by hand; NULL = order date
+    add("prod_orders", "taker_amount", "INTEGER")  # order taker's incentive, paise
+    add("products", "care_tips", "TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS prod_pay (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL REFERENCES organizations(id),
+        order_id INTEGER NOT NULL REFERENCES prod_orders(id),
+        kind TEXT NOT NULL CHECK (kind IN ('maker', 'taker')),
+        pay_date TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        mode TEXT,
+        note TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_pay_order ON prod_pay(order_id, kind)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_prod_pay_tenant BEFORE INSERT ON prod_pay
+        WHEN (SELECT org_id FROM prod_orders WHERE id = NEW.order_id) IS NOT NEW.org_id
+        BEGIN SELECT RAISE(ABORT, 'tenant: payment organization mismatch'); END""")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19)]
 
 
 def migrate(db_path):

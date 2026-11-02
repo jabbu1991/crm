@@ -14,7 +14,7 @@
 {% endif %}
 <div class="card table-wrap">
 <table class="table">
-  <thead><tr><th>Name</th><th>Phone</th><th>Work</th><th class="num">Making now</th><th class="num">Orders</th><th class="num">Maker amount (running orders)</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Phone</th><th>Work</th><th class="num">Making now</th><th class="num">Orders</th><th class="num">Maker amount (all orders)</th><th class="num">Balance to pay</th><th></th></tr></thead>
   <tbody>
   {% for m in rows %}
   <tr class="{{ 'inactive' if not m.active }}">
@@ -23,6 +23,7 @@
     <td class="num">{{ working.get(m.id, 0) }}</td>
     <td class="num"><a href="{{ url_for('prod.orders', show='all', maker=m.id) }}">{{ m.orders }}</a></td>
     <td class="num">{{ m.amount|rs }}</td>
+    <td class="num">{% set b = bal.get(m.id, 0) %}{% if b %}<b class="w-exp">{{ b|rs }}</b>{% else %}<span class="w-ok">—</span>{% endif %}</td>
     <td class="nowrap">{% if not viewing %}
       <details class="inline-details"><summary class="linkbtn">Edit</summary>
         <form method="post" class="form">{{ csrf() }}<input type="hidden" name="id" value="{{ m.id }}">

@@ -9,6 +9,7 @@
     <label>Warranty (months)<input type="number" min="0" name="warranty_months" value="{{ '' if p.warranty_months is none else p.warranty_months }}" placeholder="default {{ st.default_warranty }}"></label>
     <label>Stages<select name="stage_set_id"><option value="">Default set</option>{% for s in sets %}<option value="{{ s.id }}" {{ 'selected' if p.stage_set_id == s.id }}>{{ s.name }}{{ ' (default)' if s.is_default }}</option>{% endfor %}</select></label>
   </div>
+  <label>Care tips for the customer <small class="muted">(optional — shown on the customer page after delivery)</small><textarea name="care_tips" rows="4" maxlength="2000" placeholder="e.g. Check the oil level once a month. Keep the motor dry. Grease the hinges every 3 months.">{{ p.care_tips or '' }}</textarea></label>
   <fieldset>
     <legend>Standard parts with their own company warranty</legend>
     <p class="small muted">Copied into every new order of this product (can be changed on the order, e.g. the serial number).</p>

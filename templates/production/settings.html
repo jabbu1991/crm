@@ -21,6 +21,14 @@
     <label>Production sheet title<input name="sheet_title" value="{{ st.sheet_title }}"></label>
   </div>
   <p class="small muted">Used when a product has no own value (Products page).</p>
+  <h2>Customer page after delivery</h2>
+  <label>Warranty on the customer page
+    <select name="warranty_view">{% for k, lab in warranty_views %}<option value="{{ k }}" {{ 'selected' if st.warranty_view == k }}>{{ lab }}</option>{% endfor %}</select></label>
+  <p class="small muted">Only changes what the customer sees. Your Warranty page always shows the exact dates and days left.</p>
+  <label>Thank-you message <small class="muted">(optional)</small><textarea name="thanks_text" rows="3" maxlength="500" placeholder="Thank you for choosing us! For any help with your machine, message us on WhatsApp.">{{ st.thanks_text }}</textarea></label>
+  <label>Google review link <small class="muted">(optional, starts with https://)</small><input name="review_url" value="{{ st.review_url }}" placeholder="https://g.page/r/…/review"></label>
+  <label class="check"><input type="checkbox" name="catalog_link" value="1" {{ 'checked' if st.catalog_link }}> Show "See our other products" (when the Digital catalogue is on)</label>
+  <p class="small muted">Care tips are written per product (Production → Products → Edit).</p>
   {% if not viewing %}<button class="btn btn-prod">Save settings</button>{% endif %}
 </form>
 <section class="card">

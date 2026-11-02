@@ -309,6 +309,19 @@ Digital Catalogue (built 16 Oct 2026)
 - Production tick "takers" (2 Nov): Order takers page for everyone + 12-month report (no amounts). In the Production
   manager preset; preset roles (worker/manager) now always follow the current preset list.
 
+- Payments + month (2 Nov, v19, production_pay.py, table prod_pay kind maker|taker): order page "Payments to the maker"
+  and "Order taker incentive" (prod_orders.taker_amount typed by Admin) — several payments (date, amount, mode, note),
+  status Not paid / Part paid / Paid; "Counts in <month>" set by hand (maker_month / taker_month, YYYY-MM, kept on stage
+  moves; empty = automatic: maker = Ready-for-Dispatch month, taker = order date). Maker / order-taker pages: month table
+  with Amount / Paid / Balance, tick orders -> "Move to month" or "Settle selected" (pays each balance). Makers list and
+  Order takers list show the balance to pay. Excel export: "Maker payments" / "Order taker payments" sheets.
+  Order history never shows these amounts. Ticks: 'maker' for maker money, new 'incentive' for order-taker incentives
+  (not in the manager preset).
+- Customer page after delivery (2 Nov): Production settings "Warranty on the customer page" = date (default: "Under
+  warranty · valid till …", no countdown) / status / hide / countdown; Thank-you message; Google review link; "See our
+  other products" (catalogue on); "Need help?" WhatsApp + Call (org phone); Care tips per product (products.care_tips,
+  Production > Products > Edit). Extras show only when filled.
+
 ======================================================================
 4D. DAILY BACKUP TO GOOGLE DRIVE (built 30 Oct 2026, backup_drive.py)
 ======================================================================

@@ -35,6 +35,9 @@
   .btn.alt { background: #fff; color: #111; border: 1px solid #d1d5db; }
   .foot { text-align: center; font-size: 12px; color: #9ca3af; margin: 18px 0; }
   .pts td:first-child { font-weight: 700; }
+  .center { text-align: center; } .prewrap { white-space: pre-line; }
+  .thanks p { margin: 0; font-size: 16px; } .w-line { font-size: 16px; margin: 0 0 10px; }
+  .btn + .btn { margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -47,29 +50,60 @@
     {% if cancelled %}<p class="exp">This order was cancelled.</p>{% endif %}
   </div>
 
-  {% if delivered and w and w.main and not cancelled %}
+  {% if delivered and not cancelled and st.thanks_text %}
+  <div class="card thanks"><p>🙏 {{ st.thanks_text }}</p></div>
+  {% endif %}
+
+  {% set wv = st.warranty_view %}
+  {% if delivered and not cancelled %}
   <div class="card">
-    <h2>🛡 Warranty</h2>
+    <h2>📦 Your machine</h2>
+    {% if w and w.main and wv == 'countdown' %}
     <div class="w-main">
       {% if w.main.expired %}<div class="w-days exp">Warranty ended</div><div class="muted">on {{ w.main.end.strftime('%d-%m-%Y') }}</div>
       {% else %}<div class="w-days {{ 'soon' if w.main.left <= 30 }}">{{ w.main.left }}</div><div class="muted">days of warranty left</div>{% endif %}
     </div>
+    {% elif w and w.main and wv == 'date' %}
+    <p class="w-line">{% if w.main.expired %}🛡 Warranty period: until {{ w.main.end.strftime('%d-%m-%Y') }}{% else %}✅ Under warranty · valid till <b>{{ w.main.end.strftime('%d-%m-%Y') }}</b>{% endif %}</p>
+    {% elif w and w.main and wv == 'status' %}
+    <p class="w-line">{% if w.main.expired %}🛡 Warranty period completed{% else %}✅ Under warranty{% endif %}</p>
+    {% endif %}
     <table>
+      <tr><td class="muted">Product</td><td><b>{{ o.product_name or '—' }}</b>{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</td></tr>
+      {% if o.delivered_date %}<tr><td class="muted">Delivered</td><td>{{ o.delivered_date[8:10] }}-{{ o.delivered_date[5:7] }}-{{ o.delivered_date[:4] }}</td></tr>{% endif %}
+      {% if o.bill_no %}<tr><td class="muted">GST bill no</td><td>{{ o.bill_no }}</td></tr>{% endif %}
+      {% if st.referral %}<tr><td class="muted">Unit code</td><td><b>{{ o.unit_code }}</b></td></tr>{% endif %}
+      {% if w and w.main and wv == 'countdown' %}
       <tr><td class="muted">Warranty</td><td><b>{{ w.main.months }} months</b></td></tr>
       <tr><td class="muted">From (bill date)</td><td>{{ w.main.start.strftime('%d-%m-%Y') }}</td></tr>
       <tr><td class="muted">Until</td><td><b>{{ w.main.end.strftime('%d-%m-%Y') }}</b></td></tr>
-      {% if o.bill_no %}<tr><td class="muted">GST bill no</td><td>{{ o.bill_no }}</td></tr>{% endif %}
-      {% if o.delivered_date %}<tr><td class="muted">Delivered</td><td>{{ o.delivered_date[8:10] }}-{{ o.delivered_date[5:7] }}-{{ o.delivered_date[:4] }}</td></tr>{% endif %}
+      {% endif %}
     </table>
-    {% if w.parts %}
+    {% if w and w.parts and wv in ('countdown', 'date') %}
     <h2 style="margin-top:14px">Parts — their makers' warranty</h2>
     <table>
       <tr><th>Part</th><th>Company</th><th>Until</th></tr>
       {% for x in w.parts %}<tr><td>{{ x.p.name }}{% if x.p.serial %}<div class="small muted">S/N {{ x.p.serial }}</div>{% endif %}</td><td>{{ x.p.company or '—' }}</td>
-        <td>{% if x.end %}{{ x.end.strftime('%d-%m-%Y') }}<div class="small {{ 'exp' if x.expired else ('soon' if x.left <= 30 else 'ok') }}">{{ 'ended' if x.expired else (x.left ~ ' days left') }}</div>{% else %}—{% endif %}</td></tr>{% endfor %}
+        <td>{% if x.end %}{{ x.end.strftime('%d-%m-%Y') }}{% if wv == 'countdown' %}<div class="small {{ 'exp' if x.expired else ('soon' if x.left <= 30 else 'ok') }}">{{ 'ended' if x.expired else (x.left ~ ' days left') }}</div>{% endif %}{% else %}—{% endif %}</td></tr>{% endfor %}
     </table>
     {% endif %}
   </div>
+
+  {% if care %}
+  <div class="card">
+    <h2>🛠 Care tips</h2>
+    <p class="prewrap small">{{ care }}</p>
+  </div>
+  {% endif %}
+
+  {% if help_wa or org.phone %}
+  <div class="card center">
+    <h2>Need help with your machine?</h2>
+    <p class="small muted">We are happy to help.</p>
+    <p>{% if help_wa %}<a class="btn" href="{{ help_wa }}" target="_blank" rel="noopener">🟢 WhatsApp us</a>{% endif %}
+      {% if org.phone %}<a class="btn alt" href="tel:{{ org.phone }}">📞 Call</a>{% endif %}</p>
+  </div>
+  {% endif %}
   {% endif %}
 
   <div class="card">
@@ -106,7 +140,15 @@
   </div>
   {% endif %}
 
-  {% if org.phone %}<p style="text-align:center"><a class="btn alt" href="tel:{{ org.phone }}">📞 Call {{ brand.name }}</a></p>{% endif %}
+  {% if delivered and not cancelled and st.review_url %}
+  <div class="card center">
+    <h2>⭐ Happy with {{ brand.name }}?</h2>
+    <p class="small muted">A short Google review helps us a lot.</p>
+    <p><a class="btn alt" href="{{ st.review_url }}" target="_blank" rel="noopener">⭐ Write a review</a></p>
+  </div>
+  {% endif %}
+  {% if catalog %}<p style="text-align:center"><a class="btn alt" href="{{ catalog }}">📒 See our other products</a></p>{% endif %}
+  {% if org.phone and not delivered %}<p style="text-align:center"><a class="btn alt" href="tel:{{ org.phone }}">📞 Call {{ brand.name }}</a></p>{% endif %}
   <div class="foot">Powered by Real View CRM</div>
 </div>
 </body>

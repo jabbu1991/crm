@@ -30,6 +30,7 @@ def init(host):
     host.app.register_blueprint(bp)
     host.app.jinja_env.globals["pcan"] = lambda p: can(p)
     host.app.jinja_env.globals["warranty_info"] = warranty_info
+    production_pay.init_templates(host.app)
     host.app.after_request(sync_after_lead_change)
 
 
@@ -46,13 +47,14 @@ PERMS = [
     ("import", "Import old deliveries"),
     ("export", "Export data (Excel)"),
     ("takers", "Order takers: everyone's orders and monthly report (no amounts)"),
+    ("incentive", "Order taker incentives: amounts and payments"),
     ("settings", "Production settings (stages, products, points)"),
 ]
 PERM_KEYS = [k for k, _ in PERMS]
 ROLE_PRESETS = {
     "none": [],
     "worker": ["view", "stage"],
-    "manager": [k for k in PERM_KEYS if k != "settings"],
+    "manager": [k for k in PERM_KEYS if k not in ("settings", "incentive")],
 }
 ROLE_LABELS = {"none": "No Production access", "worker": "Production staff", "manager": "Production manager",
                "custom": "Custom"}
@@ -82,7 +84,16 @@ DEFAULT_SETTINGS = {
     "default_days": 10,        # production days when the product has none
     "sheet_title": "PRODUCTION ORDER",
     "board_columns": None,     # stage names shown on the Board (Admin); None = all except Delivered
+    # Customer page after delivery
+    "warranty_view": "date",   # date: "Under warranty · valid till …" | status: no date | hide | countdown: days left
+    "thanks_text": "",         # thank-you message on the customer page (shown only when filled)
+    "review_url": "",          # Google review link (shown only when filled)
+    "catalog_link": True,      # "See our other products" when the Digital catalogue is on
 }
+WARRANTY_VIEWS = [("date", "Under warranty + valid-till date (no countdown)"),
+                  ("status", "Only \"Under warranty\" (no dates)"),
+                  ("hide", "Do not show the warranty"),
+                  ("countdown", "Big countdown of days left")]
 
 
 def _now():
@@ -1086,7 +1097,7 @@ def order_view(order_id):
                                                                               wa_track_text(o)),
                            w=warranty_info(o, parts), st=get_settings(), makers=makers, ph=phase(o),
                            pending=details_pending(o), adv_total=sum(a["amount"] for a in advances), done=done_date(o),
-                           mk=marks_of(o["set_id"]))
+                           mk=marks_of(o["set_id"]), pay=production_pay.order_ctx(o))
 
 
 def maker_from_form(db, ts):
@@ -1362,39 +1373,51 @@ def takers():
     rows = H.query("""SELECT u.id, u.name, u.designation, u.active,
                         (SELECT COUNT(*) FROM prod_orders o WHERE o.taken_by = u.id AND o.status = 'active') total,
                         (SELECT COUNT(*) FROM prod_orders o WHERE o.taken_by = u.id AND o.status = 'active'
-                           AND substr(o.order_date, 1, 7) = ?) this_month
+                           AND COALESCE(o.taker_month, substr(o.order_date, 1, 7)) = ?) this_month
                       FROM users u WHERE u.org_id = ? ORDER BY total DESC, u.name COLLATE NOCASE""", (this_m, oid))
+    import production_pay as PP
+    bal = PP.balances(oid, "taker") if can("incentive") else None
     return render_template("production/takers.html", rows=[r for r in rows if r["total"] or r["active"]],
-                           this_m=this_m)
+                           this_m=this_m, bal=bal)
 
 
 @bp.route("/production/order-takers/<int:uid>")
 @taker_view
 def taker_page(uid):
-    """One person: orders taken per month (by order date, no amounts) and, for a month, which orders."""
+    """One person: orders taken per month (by order date, or the month set by hand) and, for a month, which orders.
+    Incentive amounts and payments only for people with the 'incentive' tick."""
+    import production_pay as PP
     if not can("takers") and uid != g.user["id"]:
         abort(403)
     oid = H.org_id()
     u = H.query("SELECT id, name, designation FROM users WHERE id = ? AND org_id = ?", (uid, oid), one=True) or abort(404)
-    rows = order_rows(oid, "AND o.taken_by = ? AND o.status = 'active'", (uid,), order_by="o.order_date DESC, o.id DESC")
+    rows = order_rows(oid, "AND o.taken_by = ? AND o.status = 'active'", (uid,),
+                      order_by="COALESCE(o.taker_month, substr(o.order_date, 1, 7)) DESC, o.order_date DESC, o.id DESC")
+    money = can("incentive")
+    paid = PP.paid_totals(oid, "taker", [o["id"] for o in rows]) if money else {}
     months = last_months()
-    table = {k: {"month": k, "orders": 0, "delivered": 0} for k in months}
+    table = {k: {"month": k, "orders": 0, "delivered": 0, "amount": 0, "paid": 0, "balance": 0} for k in months}
+    items = [{"o": o, "month": PP.taker_month(o), "paid": paid.get(o["id"], 0), "dl": phase(o) == "delivered"}
+             for o in rows]
+    totals = PP.summarise(items, "taker") if money else None
     delivered = 0
-    for o in rows:
-        k = (o["order_date"] or "")[:7]
-        dl = phase(o) == "delivered"
-        delivered += dl
-        if k in table:
-            table[k]["orders"] += 1
-            table[k]["delivered"] += dl
+    for i in items:
+        delivered += i["dl"]
+        if i["month"] in table:
+            r = table[i["month"]]
+            r["orders"] += 1
+            r["delivered"] += i["dl"]
+            if money:
+                r["amount"] += i["due"] or 0
+                r["paid"] += i["paid"]
+                r["balance"] += i["balance"]
     month = request.args.get("month") or ""
-    items = rows
     if re.fullmatch(r"\d{4}-\d{2}", month):
-        items = [o for o in rows if (o["order_date"] or "")[:7] == month]
+        items = [i for i in items if i["month"] == month]
     else:
         month = ""
     return render_template("production/taker.html", u=u, table=[table[k] for k in months], items=items,
-                           total=len(rows), delivered=delivered, month=month, phase=phase)
+                           total=len(rows), delivered=delivered, month=month, phase=phase, money=money, totals=totals)
 
 
 # ---------------------------------------------------------------- makers
@@ -1433,42 +1456,36 @@ def makers():
     for o in order_rows(oid, "AND o.status = 'active' AND o.maker_id IS NOT NULL"):
         if phase(o) == "working":
             now_working[o["maker_id"]] = now_working.get(o["maker_id"], 0) + 1
-    return render_template("production/makers.html", rows=rows, working=now_working, total=working)
+    import production_pay as PP
+    return render_template("production/makers.html", rows=rows, working=now_working, total=working,
+                           bal=PP.balances(oid, "maker"))
 
 
 @bp.route("/production/makers/<int:mid>")
 @prod_view("maker")
 def maker_view(mid):
-    """One maker: totals, a month-wise table (an order counts in the month its production finished = reached
-    Ready for Dispatch), and the orders (tap a month to see only that month)."""
+    """One maker: totals, a month-wise table (an order counts in the month set by hand, otherwise the month its
+    production finished = reached Ready for Dispatch) with amount / paid / balance, and the orders (tap a month to see
+    only that month; tick orders to move them to another month or to pay their balance)."""
+    import production_pay as PP
     oid = H.org_id()
     m = H.query("SELECT * FROM prod_makers WHERE id = ? AND org_id = ?", (mid, oid), one=True) or abort(404)
     rows = order_rows(oid, "AND o.maker_id = ? AND o.status = 'active'", (mid,),
-                      order_by="COALESCE(o.finished_at, '9999') DESC, o.mfg_start DESC, o.id DESC")
+                      order_by="COALESCE(o.maker_month, substr(o.finished_at, 1, 7), '9999') DESC, o.mfg_start DESC, o.id DESC")
+    paid = PP.paid_totals(oid, "maker", [o["id"] for o in rows])
+    months = last_months()
+    table = {k: {"month": k, "finished": 0, "amount": 0, "paid": 0, "balance": 0, "started": 0} for k in months}
     t = today_date()
-    months = []
-    y, mo = t.year, t.month
-    for _ in range(12):
-        months.append(f"{y:04d}-{mo:02d}")
-        mo -= 1
-        if mo == 0:
-            y, mo = y - 1, 12
-    table = {k: {"month": k, "finished": 0, "amount": 0, "started": 0} for k in months}
     making = finished = 0
-    total_amount = 0
     items = []
     for o in rows:
         ph = phase(o)
         fin = done_date(o)
+        mon = PP.maker_month(o)
         if ph == "working":
             making += 1
         if fin:
             finished += 1
-            total_amount += o["maker_amount"] or 0
-            k = fin.isoformat()[:7]
-            if k in table:
-                table[k]["finished"] += 1
-                table[k]["amount"] += o["maker_amount"] or 0
         st_ = to_date(o["mfg_start"])
         if st_ and st_.isoformat()[:7] in table:
             table[st_.isoformat()[:7]]["started"] += 1
@@ -1478,14 +1495,22 @@ def maker_view(mid):
             late_by = (fin - exp).days
         elif not fin and exp and ph == "working":
             late_by = (t - exp).days if t > exp else None
-        items.append({"o": o, "fin": fin, "late_by": late_by, "ph": ph})
+        items.append({"o": o, "fin": fin, "month": mon, "late_by": late_by, "ph": ph, "paid": paid.get(o["id"], 0)})
+    totals = PP.summarise(items, "maker")
+    for i in items:
+        if i["month"] in table:
+            r = table[i["month"]]
+            r["finished"] += 1
+            r["amount"] += i["due"] or 0
+            r["paid"] += i["paid"]
+            r["balance"] += i["balance"]
     month = request.args.get("month") or ""
     if re.fullmatch(r"\d{4}-\d{2}", month):
-        items = [i for i in items if i["fin"] and i["fin"].isoformat()[:7] == month]
+        items = [i for i in items if i["month"] == month]
     else:
         month = ""
     return render_template("production/maker.html", m=m, table=[table[k] for k in months], items=items,
-                           making=making, finished=finished, total=len(rows), total_amount=total_amount, month=month)
+                           making=making, finished=finished, total=len(rows), totals=totals, month=month)
 
 
 # ---------------------------------------------------------------- products (production defaults)
@@ -1528,11 +1553,11 @@ def product_edit(pid):
         if sid and not H.scalar("SELECT 1 FROM prod_stage_sets WHERE id = ? AND org_id = ?", (sid, oid)):
             sid = None
         db = H.get_db()
-        db.execute("""UPDATE products SET prod_days = ?, warranty_months = ?, stage_set_id = ?, updated_at = ?
-                      WHERE id = ? AND org_id = ?""",
+        db.execute("""UPDATE products SET prod_days = ?, warranty_months = ?, stage_set_id = ?, care_tips = ?,
+                      updated_at = ? WHERE id = ? AND org_id = ?""",
                    (int_in(f.get("prod_days"), None, 0, 3650) if (f.get("prod_days") or "").strip() else None,
                     int_in(f.get("warranty_months"), None, 0, 600) if (f.get("warranty_months") or "").strip() else None,
-                    sid, _now(), pid, oid))
+                    sid, clean(f.get("care_tips"), 2000) or None, _now(), pid, oid))
         db.execute("DELETE FROM prod_parts WHERE product_id = ?", (pid,))
         db.executemany("INSERT INTO prod_parts (org_id, product_id, name, company, months, serial, sort) VALUES (?,?,?,?,?,?,?)",
                        [(oid, pid, x["name"], x["company"], x["months"], "", x["sort"]) for x in parts_from_form()])
@@ -1675,6 +1700,12 @@ def settings():
         st["default_warranty"] = int_in(f.get("default_warranty"), 12, 0, 600)
         st["default_days"] = int_in(f.get("default_days"), 10, 1, 3650)
         st["sheet_title"] = clean(f.get("sheet_title"), 60) or DEFAULT_SETTINGS["sheet_title"]
+        if f.get("warranty_view") in dict(WARRANTY_VIEWS):
+            st["warranty_view"] = f.get("warranty_view")
+        st["thanks_text"] = clean(f.get("thanks_text"), 500)
+        url = clean(f.get("review_url"), 300)
+        st["review_url"] = url if re.match(r"https?://", url) else ""
+        st["catalog_link"] = bool(f.get("catalog_link"))
         save_settings(st)
         flash("Production settings saved.", "success")
         return redirect(url_for("prod.settings"))
@@ -1685,7 +1716,7 @@ def settings():
                       FROM prod_stage_sets s WHERE s.org_id = ? ORDER BY s.is_default DESC, s.name""", (H.org_id(),))
     import cafe
     return render_template("production/settings.html", st=st, switches=SWITCHES, sets=sets,
-                           point_value=cafe.paise_str(st["point_value"]))
+                           point_value=cafe.paise_str(st["point_value"]), warranty_views=WARRANTY_VIEWS)
 
 
 @bp.route("/production/stage-sets/new", methods=["POST"])
@@ -1784,3 +1815,4 @@ class _Host:
 host = _Host()
 
 import production_io  # noqa: E402,F401
+import production_pay  # noqa: E402,F401

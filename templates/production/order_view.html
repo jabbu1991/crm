@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, progress, next_btn, dmy, left_text with context %}{% from '_macros.html' import csrf with context %}
+{% extends 'base.html' %}{% from 'production/_p.html' import stage_badge, progress, next_btn, dmy, left_text with context %}{% from '_macros.html' import csrf with context %}{% from 'production/_paybox.html' import pay_box with context %}
 {% block title %}Order #{{ o.order_no }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -59,7 +59,7 @@
       {% if st.referral %}<dt>Unit code</dt><dd><b>{{ o.unit_code }}</b> · {{ o.cust_points }} points</dd>
       {% if o.referral_code %}<dt>Referred by</dt><dd>{% if o.referrer_name %}{{ o.referrer_name }} ({{ o.referrer_code }}){% else %}{{ o.referral_code }} <span class="muted">(not found)</span>{% endif %}{{ ' · points given ✓' if o.points_given }}</dd>{% endif %}{% endif %}
       <dt>Order date</dt><dd>{{ dmy(o.order_date) }}</dd>
-      <dt>Order taken by</dt><dd>{% if o.taken_by and (is_admin() or o.taken_by == g.user.id) %}<a href="{{ url_for('prod.taker_page', uid=o.taken_by) }}">{{ o.taken_by_name or '—' }}</a>{% else %}{{ o.taken_by_name or '—' }}{% endif %}</dd>
+      <dt>Order taken by</dt><dd>{% if o.taken_by and (pcan('takers') or o.taken_by == g.user.id) %}<a href="{{ url_for('prod.taker_page', uid=o.taken_by) }}">{{ o.taken_by_name or '—' }}</a>{% else %}{{ o.taken_by_name or '—' }}{% endif %}</dd>
       {% if o.approved_by %}<dt>Approved by</dt><dd>{{ o.approved_by }}</dd>{% endif %}
     </dl>
     <h2>Product</h2>
@@ -101,8 +101,19 @@
           <button class="btn btn-sm btn-prod">Save</button>
         </form>
       </details>{% endif %}
+      {% if pay.maker %}<h3>💸 Payments to the maker</h3>{{ pay_box(o, 'maker', pay.maker) }}{% endif %}
       {% else %}<p class="muted">Assigned when the order moves to production.</p>{% endif %}
     </section>
+
+    {% if pay.taker and o.taken_by %}
+    <section class="card">
+      <h2>🧑‍💼 Order taker incentive</h2>
+      <p class="small">{{ o.taken_by_name or '—' }}</p>
+      {% if not viewing %}<form method="post" action="{{ url_for('prod.order_incentive', order_id=o.id) }}" class="inline-form">{{ csrf() }}
+        <label class="inline-label">Incentive (₹) <input name="taker_amount" inputmode="decimal" value="{{ o.taker_amount|pstr }}" size="8"></label><button class="btn btn-sm">Save</button></form>{% endif %}
+      {{ pay_box(o, 'taker', pay.taker) }}
+    </section>
+    {% endif %}
 
     {% if st.warranty %}
     <section class="card">

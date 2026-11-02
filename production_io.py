@@ -60,10 +60,20 @@ def public_track(code, tok):
         from urllib.parse import quote
         share = "https://wa.me/?text=" + quote(
             f"I bought from {brand['name']}. Order with my code {o['unit_code']} 🎁 — call {org['phone'] or ''}".strip(" —"))
+    care = ""
+    if o["product_id"]:
+        care = H.scalar("SELECT care_tips FROM products WHERE id = ? AND org_id = ?", (o["product_id"], org["id"])) or ""
+    catalog = url_for("catalog_page", code=org["code"]) if st["catalog_link"] and H.catalog_published(org) else ""
+    digits = re.sub(r"\D", "", org["phone"] or "")
+    help_wa = ""
+    if len(digits) >= 10:
+        from urllib.parse import quote
+        help_wa = f"https://wa.me/{('91' + digits) if len(digits) == 10 else digits}?text=" + quote(
+            f"Hi, I need help with my {o['product_name'] or 'machine'} (order #{o['order_no']}, unit code {o['unit_code']}).")
     return render_template("production/public.html", o=o, org=org, st=st, stages=stages, reached=reached,
                            w=warranty_info(o, parts) if st["warranty"] else None, ph=ph, sched=sched, ledger=ledger,
                            value=value, brand=brand, share=share, cancelled=o["status"] != "active",
-                           delivered=ph == "delivered")
+                           delivered=ph == "delivered", care=care, catalog=catalog, help_wa=help_wa)
 
 
 # ---------------------------------------------------------------- Excel helpers
@@ -224,6 +234,24 @@ def export_all():
                   _rs(o["maker_amount"]), o["stage_name"]] for o in rows if o["maker_id"]]
         _sheet(wb, "Maker amounts", ["Order no", "Maker", "Product", "Customer", "MFG start", "Expected finish",
                                      "Maker amount", "Stage"], mrows, [9, 20, 26, 24, 11, 14, 12, 18])
+    import production_pay as PP
+    ids = {o["id"]: o for o in rows}
+    for kind, perm, title, who in (("maker", "maker", "Maker payments", "Maker"),
+                                    ("taker", "incentive", "Order taker payments", "Order taker")):
+        if not can(perm):
+            continue
+        pays = H.query("SELECT * FROM prod_pay WHERE org_id = ? AND kind = ? ORDER BY pay_date, id", (oid, kind))
+        prow = []
+        for x in pays:
+            o = ids.get(x["order_id"])
+            if not o:
+                continue
+            mon = PP.maker_month(o) if kind == "maker" else PP.taker_month(o)
+            prow.append([o["order_no"], o["maker_name"] if kind == "maker" else o["taken_by_name"], o["cust_name"],
+                         _rs(PP.due_amount(o, kind)), PP.month_label(mon), x["pay_date"], _rs(x["amount"]),
+                         x["mode"], x["note"]])
+        _sheet(wb, title, ["Order no", who, "Customer", "Amount", "Counts in month", "Paid on", "Paid amount", "Mode",
+                           "Note"], prow, [9, 20, 24, 12, 14, 11, 12, 12, 24])
     H.audit("Production data exported (Excel)", f"{len(rows)} orders")
     return _xlsx_response(wb, f"{_slug()}-production-{today()}.xlsx")
 

@@ -78,7 +78,7 @@ def stage_id(W, code, name):
 def test_migration_keeps_modules_and_production_starts_off(pw):
     c = pw["db"]()
     rows = {r["code"]: r for r in c.execute("SELECT * FROM organizations")}
-    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 18
+    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 19
     assert rows["STAR"]["mod_crm"] == 1 and rows["STAR"]["mod_prod"] == 1 and rows["STAR"]["mod_cafe"] == 0
     assert rows["ONLY"]["mod_prod"] == 0 and rows["ONLY"]["app_type"] == "crm"
     assert rows["FACT"]["mod_crm"] == 0 and rows["FACT"]["mod_prod"] == 1
@@ -228,8 +228,24 @@ def test_full_flow_maker_bill_warranty_points(pw):
     page = Browser().get(f"/t/star/{o['token']}").text
     days_left = (date.fromisoformat(bill_day).replace(year=date.fromisoformat(bill_day).year + 1)
                  - timedelta(days=1) - date.today()).days
-    assert "days of warranty left" in page and f">{days_left}<" in page
-    assert "Motor" in page and "Crompton" in page and "GST/26/101" in page
+    end_day = (date.fromisoformat(bill_day).replace(year=date.fromisoformat(bill_day).year + 1) - timedelta(days=1))
+    # default: "Under warranty · valid till <date>", no countdown of days
+    assert "Under warranty" in page and end_day.strftime("%d-%m-%Y") in page and "days of warranty left" not in page
+    assert "Motor" in page and "Crompton" in page and "GST/26/101" in page and "days left" not in page
+    # other choices in Production settings
+    st_ = dict(production.DEFAULT_SETTINGS)
+    for view, must, never in (("countdown", f">{days_left}<", None), ("status", "Under warranty", end_day.strftime("%d-%m-%Y")),
+                              ("hide", "Your machine", "Under warranty")):
+        c0 = pw["db"]()
+        st_["warranty_view"] = view
+        import json as _json
+        c0.execute("INSERT OR REPLACE INTO prod_settings (org_id, data) VALUES (?, ?)", (pw["oid"]("STAR"), _json.dumps(st_)))
+        c0.commit()
+        pg = Browser().get(f"/t/star/{o['token']}").text
+        assert must in pg and (never is None or never not in pg), view
+    c0.execute("INSERT OR REPLACE INTO prod_settings (org_id, data) VALUES (?, ?)",
+               (pw["oid"]("STAR"), _json.dumps(dict(production.DEFAULT_SETTINGS))))
+    c0.commit()
     assert "Babu" not in page and "3,500" not in page
     # moving back from Delivered takes the points back
     star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "Dispatch")})
@@ -562,11 +578,11 @@ def test_order_taker_pages(pw):
     html = star.get("/production/order-takers").text
     assert "Sales9" in html and "Order takers" in html
     page = star.get(f"/production/order-takers/{sid}?month=2026-05").text
-    assert "By Sales Old" in page and "By Sales<" not in page and "₹" not in page
+    assert "By Sales Old" in page and "By Sales<" not in page and "Incentive" in page   # Admin sees incentives
     # staff: own page only (also from the CRM menu), never others'
     assert "📦 My orders" in sales.get("/").text
     mine = sales.get(f"/production/order-takers/{sid}").text
-    assert "By Sales" in mine and "By Admin" not in mine
+    assert "By Sales" in mine and "By Admin" not in mine and "₹" not in mine
     assert sales.get(f"/production/order-takers/{aid}").status_code == 403
     r = sales.get("/production/order-takers")
     assert r.status_code == 302 and r.headers["Location"].endswith(f"/production/order-takers/{sid}")
@@ -632,3 +648,113 @@ def test_order_takers_tick_for_staff(pw):
     db.execute("UPDATE users SET prod_role = 'manager', prod_perms = '[\"view\"]' WHERE id = ?", (sid,))
     db.commit()
     assert lead.get(f"/production/order-takers/{aid}").status_code == 200
+
+
+# ---------------------------------------------------------------- payments to makers / order takers
+
+def test_maker_and_taker_payments_and_months(pw):
+    star = pw["star"]
+    db = pw["db"]
+    aid = db().execute("SELECT id FROM users WHERE username = 'star_admin'").fetchone()[0]
+    for i, nm in enumerate(("Pay One", "Pay Two")):
+        star.post("/production/orders/new", {"name": nm, "phone": f"900000130{i}", "product_name": "Pump",
+                                             "taken_by": str(aid)})
+    o1, o2 = [o["id"] for o in orders(pw, "STAR")]
+    for oid_ in (o1, o2):
+        star.post(f"/production/orders/{oid_}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
+                                                      "new_maker": "Babu", "maker_amount": "2500"})
+    mid = orders(pw, "STAR")[0]["maker_id"]
+    this_m = date.today().isoformat()[:7]
+    # still in production: not counted yet; set the month by hand (paid early)
+    assert "<b>#1</b>" not in star.get(f"/production/makers/{mid}?month={this_m}").text
+    star.post(f"/production/orders/{o1}/month/maker", {"month": "2026-01"})
+    assert orders(pw, "STAR")[0]["maker_month"] == "2026-01"
+    # a later stage move keeps the month set by hand
+    star.post(f"/production/orders/{o1}/move", {"to": stage_id(pw, "STAR", "Ready for Dispatch")})
+    assert orders(pw, "STAR")[0]["maker_month"] == "2026-01"
+    jan = star.get(f"/production/makers/{mid}?month=2026-01").text
+    assert "<b>#1</b>" in jan and "Not paid" in jan
+    # part payment, then the order page shows the balance
+    star.post(f"/production/orders/{o1}/pay/maker", {"pay_date": "2026-01-20", "amount": "1000", "mode": "Cash"})
+    page = star.get(f"/production/orders/{o1}").text
+    assert "Part paid" in page and "₹1,500" in page
+    # bulk: move order 2 into January, then settle both
+    star.post("/production/pay/bulk/maker", {"ids": [str(o2)], "action": "move", "month": "2026-01",
+                                             "next": f"/production/makers/{mid}"})
+    r = star.post("/production/pay/bulk/maker", {"ids": [str(o1), str(o2)], "action": "settle",
+                                                 "pay_date": "2026-01-31", "mode": "UPI",
+                                                 "next": f"/production/makers/{mid}?month=2026-01"})
+    assert "2 orders settled" in r.text
+    paid = db().execute("SELECT SUM(amount) FROM prod_pay WHERE kind = 'maker'").fetchone()[0]
+    assert paid == 500000
+    assert "🟢 Paid" in star.get(f"/production/makers/{mid}?month=2026-01").text
+    # delete a payment
+    pid = db().execute("SELECT id FROM prod_pay WHERE order_id = ? ORDER BY id LIMIT 1", (o1,)).fetchone()[0]
+    star.post(f"/production/orders/{o1}/pay/maker/{pid}/delete", {})
+    assert db().execute("SELECT COUNT(*) FROM prod_pay WHERE order_id = ?", (o1,)).fetchone()[0] == 1
+    # order taker incentive
+    star.post(f"/production/orders/{o2}/incentive", {"taker_amount": "300"})
+    star.post(f"/production/orders/{o2}/month/taker", {"month": "2025-12"})
+    tp = star.get(f"/production/order-takers/{aid}?month=2025-12").text
+    assert "Pay Two" in tp and "Not paid" in tp and "₹300" in tp
+    star.post(f"/production/orders/{o2}/pay/taker", {"pay_date": "2026-01-05", "amount": "300", "mode": "Cash"})
+    assert "🟢 Paid" in star.get(f"/production/order-takers/{aid}?month=2025-12").text
+    # the customer link never shows money for makers / takers
+    tok = db().execute("SELECT token, order_no FROM prod_orders WHERE id = ?", (o2,)).fetchone()
+    pub = pw["star"].get(f"/t/STAR/{tok['token']}").text
+    assert "Babu" not in pub and "2,500" not in pub and "Incentive" not in pub
+
+
+def test_payment_permissions(pw):
+    star = pw["star"]
+    worker = make_staff(star, "work9")
+    db = pw["db"]
+    sid = db().execute("SELECT id FROM users WHERE username = 'work9'").fetchone()[0]
+    star.post("/production/orders/new", {"name": "Perm Order", "phone": "9000001400", "product_name": "Pump",
+                                         "taken_by": str(sid)})
+    o = orders(pw, "STAR")[0]["id"]
+    star.post(f"/production/orders/{o}/incentive", {"taker_amount": "250"})
+    # production manager: maker money yes, incentives no
+    db_ = db()
+    db_.execute("UPDATE users SET prod_role = 'manager', prod_perms = '[]' WHERE id = ?", (sid,))
+    db_.commit()
+    page = worker.get(f"/production/orders/{o}").text
+    assert "🧑‍💼 Order taker incentive" not in page
+    assert worker.post(f"/production/orders/{o}/pay/taker", {"amount": "10"}).status_code == 403
+    assert "₹" not in worker.get(f"/production/order-takers/{sid}").text
+    # with the incentive tick
+    db_.execute("UPDATE users SET prod_role = 'custom', prod_perms = '[\"view\", \"incentive\"]' WHERE id = ?", (sid,))
+    db_.commit()
+    assert "🧑‍💼 Order taker incentive" in worker.get(f"/production/orders/{o}").text
+    assert "₹250" in worker.get(f"/production/order-takers/{sid}").text
+    assert worker.post(f"/production/orders/{o}/pay/maker", {"amount": "10"}).status_code == 403
+
+
+
+def test_customer_page_extras(pw):
+    star = pw["star"]
+    pid = pw["db"]().execute("SELECT id FROM products WHERE org_id = ? LIMIT 1", (pw["oid"]("STAR"),)).fetchone()
+    star.post("/production/products", {"name": "Care Pump", "prod_days": "5", "warranty_months": "12"})
+    prod = pw["db"]().execute("SELECT id FROM products WHERE name = 'Care Pump'").fetchone()[0]
+    star.post(f"/production/products/{prod}", {"prod_days": "5", "warranty_months": "12",
+                                                "care_tips": "Check the oil level once a month."})
+    star.post("/production/settings", {"customer_link": "1", "warranty": "1", "referral": "1", "referrer_points": "1",
+                                       "new_points": "0", "point_value": "500", "default_warranty": "12",
+                                       "default_days": "10", "sheet_title": "X", "warranty_view": "date",
+                                       "thanks_text": "Thank you for choosing Starway!",
+                                       "review_url": "https://g.page/r/abc/review"})
+    star.post("/production/orders/new", {"name": "Care Cust", "phone": "9000001500", "product_id": str(prod),
+                                         "product_name": "Care Pump"})
+    o = orders(pw, "STAR")[-1]
+    tok = o["token"]
+    before = Browser().get(f"/t/star/{tok}").text
+    assert "Thank you for choosing Starway" not in before and "Care tips" not in before   # only after delivery
+    star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "Delivered"), "confirm": "1",
+                                                     "new_maker": "Babu", "bill_no": "GST/9/1",
+                                                     "bill_date": date.today().isoformat()})
+    c = pw["db"]()
+    c.execute("UPDATE organizations SET phone = '9847012345' WHERE code = 'STAR'")
+    c.commit()
+    page = Browser().get(f"/t/star/{tok}").text
+    assert "Thank you for choosing Starway" in page and "Write a review" in page and "Check the oil level" in page
+    assert "Need help" in page and "wa.me/919847012345" in page

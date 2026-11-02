@@ -1,0 +1,34 @@
+{# Payments to the maker / order taker on the order page. p = pay[kind] from production_pay.order_ctx. #}
+{% macro pay_box(o, kind, p) -%}
+<div class="paybox">
+  <div class="paybox-head">
+    <span class="pay-st pay-{{ p.state }}">{{ pay_state_label[p.state] }}</span>
+    <span class="small">Amount <b>{{ p.due|rs if p.due is not none else '—' }}</b> · paid <b>{{ p.paid|rs }}</b>{% if p.balance %} · balance <b class="w-exp">{{ p.balance|rs }}</b>{% endif %}</span>
+  </div>
+  {% if p.pays %}
+  <table class="table compact"><tbody>
+    {% for x in p.pays %}<tr><td>{{ x.pay_date[8:10] }}-{{ x.pay_date[5:7] }}-{{ x.pay_date[:4] }}</td><td class="num"><b>{{ x.amount|rs }}</b></td><td class="small">{{ x.mode or '' }}{{ ' · ' ~ x.note if x.note }}<div class="muted">{{ x.by_name or '' }}</div></td>
+      <td>{% if not viewing %}<form method="post" action="{{ url_for('prod.order_pay_delete', order_id=o.id, kind=kind, pay_id=x.id) }}" onsubmit="return confirm('Remove this payment?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linkbtn" title="Remove">✕</button></form>{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+  {% if not viewing %}
+  <details><summary class="small">+ Add payment</summary>
+    <form method="post" action="{{ url_for('prod.order_pay', order_id=o.id, kind=kind) }}" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row-3"><label>Date<input type="date" name="pay_date" value="{{ today }}" required></label>
+        <label>Amount (₹)<input name="amount" inputmode="decimal" required value="{{ p.balance|pstr if p.balance else '' }}"></label>
+        <label>Mode<select name="mode">{% for m in pay_modes %}<option>{{ m }}</option>{% endfor %}</select></label></div>
+      <label>Note<input name="note" maxlength="200" placeholder="e.g. advance, balance"></label>
+      <button class="btn btn-sm btn-prod">Save payment</button>
+    </form>
+  </details>
+  <details><summary class="small">📅 Counts in {{ p.month_label or '—' }}{{ ' 📌 set by hand' if p.manual }} — change month</summary>
+    <form method="post" action="{{ url_for('prod.order_month', order_id=o.id, kind=kind) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select name="month"><option value="">Automatic{{ ' (Ready for Dispatch month)' if kind == 'maker' else ' (order date)' }}</option>{% for k, lab in months_options() %}<option value="{{ k }}" {{ 'selected' if p.manual and p.month == k }}>{{ lab }}</option>{% endfor %}</select>
+      <button class="btn btn-sm">Save</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{%- endmacro %}
