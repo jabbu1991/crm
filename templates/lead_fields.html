@@ -1,0 +1,30 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Lead form fields{% endblock %}
+{% block content %}
+<div class="page-head"><h1>✏️ Lead form fields</h1><a class="btn" href="{{ back_url }}">← Back</a></div>
+<form method="post" class="card form narrow lf-form">
+  {{ csrf() }}
+  <p class="muted">Give the headings and fields of the lead form your own names for <b>{{ org.name }}</b>. The new name shows everywhere: the lead form, the lead page, lead lists, filters and the CSV export (import accepts the new names too). Leave a name empty to keep the standard one.</p>
+  <p class="muted small">Untick <b>Show</b> to take a field off the lead form, lists and filters. Nothing is deleted: leads keep their values, a hidden field's old value still shows on the lead page, and ticking it again brings it back.</p>
+  {% set ns = namespace(group='') %}
+  <table class="table compact lf-table">
+    <thead><tr><th>Standard name</th><th>Your name</th><th class="center">Show</th></tr></thead>
+    <tbody>
+    {% for key, std, can_hide, group in FIELDS %}
+      {% if group != ns.group %}{% set ns.group = group %}<tr class="lf-group"><td colspan="3">{{ group }}</td></tr>{% endif %}
+      <tr>
+        <td><label for="lf-{{ key }}">{{ std }}</label></td>
+        <td><input id="lf-{{ key }}" name="label_{{ key }}" value="{{ cfg.labels.get(key, '') }}" placeholder="{{ std }}" maxlength="{{ max_len }}" autocomplete="off"></td>
+        <td class="center">{% if can_hide %}<input type="checkbox" name="show_{{ key }}" value="1" {{ '' if key in cfg.hidden else 'checked' }} aria-label="Show {{ std }}">{% else %}<span class="muted small" title="Always shown">always</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if not viewing %}
+  <div class="actions">
+    <button class="btn btn-primary">Save</button>
+    <button class="btn" name="reset" value="1" onclick="return confirm('Go back to the standard names and show every field?')">Reset to standard</button>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

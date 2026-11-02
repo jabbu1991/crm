@@ -14,7 +14,7 @@
 </div>
 <div class="card table-wrap desktop-only lt-wrap">
 <table class="table">
-  <thead><tr><th>Due</th><th>Customer</th><th>Phone</th><th>WhatsApp</th><th>Lead status</th><th>Task</th><th>Notes</th><th>Next follow-up</th><th>Assigned</th>{% if view == 'done' %}<th>Result</th>{% else %}<th></th>{% endif %}<th></th></tr></thead>
+  <thead><tr><th>Due</th><th>Customer</th><th>{{ fl('phone', 'Phone') }}</th><th>{{ fl('whatsapp', 'WhatsApp') }}</th><th>{{ fl('status') }}</th><th>Task</th><th>{{ fl('notes', 'Notes') }}</th><th>{{ fl('next_follow_up', 'Next follow-up') }}</th><th>{{ fl('assigned', 'Assigned') }}</th>{% if view == 'done' %}<th>Result</th>{% else %}<th></th>{% endif %}<th></th></tr></thead>
   <tbody>
   {% for f in rows %}
     {% set L = dict(id=f.lead_id, customer_name=f.customer_name, company_name=f.company_name, phone=f.phone, whatsapp=f.whatsapp, status=f.lead_status, product_names=f.product_names, notes=f.lead_notes, next_follow_up=f.lead_next) %}

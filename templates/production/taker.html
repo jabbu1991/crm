@@ -3,8 +3,8 @@
 {% block content %}
 {% set MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
 <div class="page-head">
-  <h1>🧑‍💼 {{ 'My orders' if u.id == g.user.id and not is_admin() else u.name }}</h1>
-  {% if is_admin() %}<div class="actions"><a class="btn" href="{{ url_for('prod.takers') }}">← All order takers</a></div>{% endif %}
+  <h1>🧑‍💼 {{ 'My orders' if u.id == g.user.id and not pcan('takers') else u.name }}</h1>
+  {% if pcan('takers') %}<div class="actions"><a class="btn" href="{{ url_for('prod.takers') }}">← All order takers</a></div>{% endif %}
 </div>
 <div class="stats">
   <div class="stat"><b>{{ total }}</b><span>Orders taken</span></div>

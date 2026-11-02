@@ -13,31 +13,31 @@
 </div>
 <div class="grid-2">
   <section class="card">
-    <h2>Customer</h2>
+    <h2>{{ fl('sec_customer', 'Customer') }}</h2>
     <dl class="details">
-      <dt>Company</dt><dd>{{ lead.company_name or '—' }}</dd>
-      <dt>Phone</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% else %}—{% endif %}</dd>
-      <dt>WhatsApp</dt><dd>{% if lead.whatsapp %}{{ wa_link(lead) }}{% else %}—{% endif %}</dd>
-      <dt>Email</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}—{% endif %}</dd>
-      <dt>Place</dt><dd>{{ lead.place or '—' }}</dd>
-      <dt>District</dt><dd>{{ lead.district or '—' }}</dd>
-      <dt>State</dt><dd>{% if lead.state %}<a href="{{ url_for('state_view', state=lead.state) }}">{{ lead.state }}</a>{% else %}—{% endif %}</dd>
-      <dt>Country</dt><dd>{{ lead.country or '—' }}</dd>
+      {% if not fhidden('company') or lead.company_name %}<dt>{{ fl('company', 'Company') }}</dt><dd>{{ lead.company_name or '—' }}</dd>{% endif %}
+      <dt>{{ fl('phone', 'Phone') }}</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% else %}—{% endif %}</dd>
+      {% if not fhidden('whatsapp') or lead.whatsapp %}<dt>{{ fl('whatsapp', 'WhatsApp') }}</dt><dd>{% if lead.whatsapp %}{{ wa_link(lead) }}{% else %}—{% endif %}</dd>{% endif %}
+      {% if not fhidden('email') or lead.email %}<dt>{{ fl('email', 'Email') }}</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}—{% endif %}</dd>{% endif %}
+      {% if not fhidden('place') or lead.place %}<dt>{{ fl('place', 'Place') }}</dt><dd>{{ lead.place or '—' }}</dd>{% endif %}
+      {% if not fhidden('district') or lead.district %}<dt>{{ fl('district') }}</dt><dd>{{ lead.district or '—' }}</dd>{% endif %}
+      {% if not fhidden('state') or lead.state %}<dt>{{ fl('state') }}</dt><dd>{% if lead.state %}<a href="{{ url_for('state_view', state=lead.state) }}">{{ lead.state }}</a>{% else %}—{% endif %}</dd>{% endif %}
+      {% if not fhidden('country') %}<dt>{{ fl('country') }}</dt><dd>{{ lead.country or '—' }}</dd>{% endif %}
     </dl>
-    <h2>Qualification</h2>
+    <h2>{{ fl('sec_qual', 'Qualification') }}</h2>
     <dl class="details">
-      <dt>Buying possibility</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>
-      <dt>Priority</dt><dd>{% if lead.priority %}<span class="badge {{ ('p-' ~ lead.priority)|badge }}">{{ lead.priority }}</span>{% else %}—{% endif %}</dd>
-      <dt>Source</dt><dd>{{ lead.source or '—' }}</dd>
+      {% if not fhidden('possibility') or lead.buying_possibility %}<dt>{{ fl('possibility') }}</dt><dd>{% if lead.buying_possibility %}<span class="badge {{ lead.buying_possibility|badge }}">{{ lead.buying_possibility }}</span>{% else %}—{% endif %}</dd>{% endif %}
+      {% if not fhidden('priority') or lead.priority %}<dt>{{ fl('priority') }}</dt><dd>{% if lead.priority %}<span class="badge {{ ('p-' ~ lead.priority)|badge }}">{{ lead.priority }}</span>{% else %}—{% endif %}</dd>{% endif %}
+      {% if not fhidden('source') or lead.source %}<dt>{{ fl('source', 'Source') }}</dt><dd>{{ lead.source or '—' }}</dd>{% endif %}
       {% if has_prod and lead.referral_code %}<dt>Referral code</dt><dd>{{ lead.referral_code }}</dd>{% endif %}
-      <dt>Requirement</dt><dd class="prewrap">{{ lead.requirement or '—' }}</dd>
-      <dt>Notes</dt><dd class="prewrap">{{ lead.notes or '—' }}</dd>
+      {% if not fhidden('requirement') or lead.requirement %}<dt>{{ fl('requirement', 'Requirement') }}</dt><dd class="prewrap">{{ lead.requirement or '—' }}</dd>{% endif %}
+      {% if not fhidden('notes') or lead.notes %}<dt>{{ fl('notes', 'Notes') }}</dt><dd class="prewrap">{{ lead.notes or '—' }}</dd>{% endif %}
     </dl>
     <h2>Record</h2>
     <dl class="details">
-      <dt>Project</dt><dd><a href="{{ url_for('leads', project=lead.project_id) }}">{{ lead.project_name }}</a></dd>
+      <dt>{{ fl('project', 'Project') }}</dt><dd><a href="{{ url_for('leads', project=lead.project_id) }}">{{ lead.project_name }}</a></dd>
       <dt>Created by</dt><dd><b>{{ lead.staff_name }}</b> on {{ lead.created_at }}</dd>
-      <dt>Assigned to</dt><dd>{{ lead.assigned_name or '—' }}</dd>
+      <dt>{{ fl('assigned') }}</dt><dd>{{ lead.assigned_name or '—' }}</dd>
       {% if lead.updated_by_name %}<dt>Last updated</dt><dd>{{ lead.updated_by_name }} on {{ lead.updated_at }}</dd>{% endif %}
     </dl>
   </section>

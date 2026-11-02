@@ -22,16 +22,16 @@
 <form method="post" class="card form lead-form" autocomplete="off">
   {{ csrf() }}
   <fieldset>
-    <legend>Project</legend>
+    <legend>{{ fl('sec_project') }}</legend>
     <div class="row-2">
-      <label>Project / campaign *
+      <label>{{ fl('project') }} *
         <select name="project_id" required>
-          <option value="">— Choose project —</option>
+          <option value="">— Choose —</option>
           {% for p in projects_all %}<option value="{{ p.id }}" {{ 'selected' if data.project_id == p.id }}>{{ p.name }}{% if p.code %} [{{ p.code }}]{% endif %}</option>{% endfor %}
         </select>
       </label>
       {% if is_admin() %}
-      <label>Assigned staff member
+      <label>{{ fl('assigned', 'Assigned staff member') }}
         <select name="assigned_to">{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if data.assigned_to == u.id }}>{{ u.name }}</option>{% endfor %}</select>
       </label>
       {% endif %}
@@ -39,60 +39,62 @@
   </fieldset>
 
   <fieldset>
-    <legend>Customer details</legend>
+    <legend>{{ fl('sec_customer') }}</legend>
     <div class="row-2">
-      <label>Customer name *<input autocomplete="off" name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
-      <label>Company / business name<input autocomplete="off" name="company_name" value="{{ data.company_name or '' }}" placeholder="The firm this person represents"></label>
+      <label>{{ fl('customer_name') }} *<input autocomplete="off" name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
+      {% if not fhidden('company') %}<label>{{ fl('company') }}<input autocomplete="off" name="company_name" value="{{ data.company_name or '' }}" placeholder="The firm this person represents"></label>{% endif %}
     </div>
     <div class="row-3">
-      <label>Phone number<input autocomplete="off" type="tel" name="phone" id="phone" value="{{ data.phone or '' }}"></label>
-      <label>WhatsApp number
+      <label>{{ fl('phone') }}<input autocomplete="off" type="tel" name="phone" id="phone" value="{{ data.phone or '' }}"></label>
+      {% if not fhidden('whatsapp') %}<label>{{ fl('whatsapp') }}
         <input autocomplete="off" type="tel" name="whatsapp" id="whatsapp" value="{{ data.whatsapp or '' }}">
         <span class="check"><input type="checkbox" onclick="if(this.checked)document.getElementById('whatsapp').value=document.getElementById('phone').value"> Same as phone</span>
-      </label>
-      <label>Email address<input autocomplete="off" type="email" name="email" value="{{ data.email or '' }}"></label>
+      </label>{% endif %}
+      {% if not fhidden('email') %}<label>{{ fl('email') }}<input autocomplete="off" type="email" name="email" value="{{ data.email or '' }}"></label>{% endif %}
     </div>
     <div class="row-4">
-      <label>Place / city<input autocomplete="off" name="place" list="places" value="{{ data.place or '' }}"></label>
-      <label>District<input autocomplete="off" name="district" list="districts" value="{{ data.district or '' }}"></label>
+      {% if not fhidden('place') %}<label>{{ fl('place') }}<input autocomplete="off" name="place" list="places" value="{{ data.place or '' }}"></label>{% endif %}
+      {% if not fhidden('district') %}<label>{{ fl('district') }}<input autocomplete="off" name="district" list="districts" value="{{ data.district or '' }}"></label>{% endif %}
       {% set is_indian = (data.state in INDIAN_STATES) or not data.state %}
-      <label>State
+      {% if not fhidden('state') %}<label>{{ fl('state') }}
         <select name="state" id="state" onchange="document.getElementById('state_other_wrap').style.display=this.value=='__other__'?'block':'none'">
           <option value="">— Select state —</option>
           {% for s in INDIAN_STATES %}<option {{ 'selected' if data.state == s }}>{{ s }}</option>{% endfor %}
           <option value="__other__" {{ 'selected' if not is_indian }}>Other / outside India…</option>
         </select>
         <span id="state_other_wrap" style="display: {{ 'none' if is_indian else 'block' }}"><input autocomplete="off" name="state_other" placeholder="State / province / emirate" value="{{ '' if is_indian else data.state }}"></span>
-      </label>
-      <label>Country<input autocomplete="off" name="country" list="countries" value="{{ data.country or 'India' }}"></label>
+      </label>{% endif %}
+      {% if not fhidden('country') %}<label>{{ fl('country') }}<input autocomplete="off" name="country" list="countries" value="{{ data.country or 'India' }}"></label>{% endif %}
     </div>
     <datalist id="places">{% for p in places %}<option value="{{ p }}">{% endfor %}</datalist>
     <datalist id="districts">{% for p in districts %}<option value="{{ p }}">{% endfor %}</datalist>
     <datalist id="countries">{% for c in COUNTRIES %}<option value="{{ c }}">{% endfor %}</datalist>
   </fieldset>
 
+  {% if not (fhidden('products') and fhidden('requirement')) %}
   <fieldset>
-    <legend>Products / services interested in</legend>
-    {% if products_all %}
+    <legend>{{ fl('sec_products') }}</legend>
+    {% if fhidden('products') %}{% elif products_all %}
     <div class="checks">{% for p in products_all %}<label class="check"><input type="checkbox" name="product_ids" value="{{ p.id }}" {{ 'checked' if p.id in data.product_ids }}> {{ p.name }}{% if p.code %} <small class="muted">{{ p.code }}</small>{% endif %}</label>{% endfor %}</div>
     <p class="muted small">Ticking a product records <b>interest only</b>. Mark it as Ordered or Purchased later on the lead page.</p>
     {% else %}<p class="muted">No products yet.{% if is_admin() %} <a href="{{ url_for('product_new') }}">Add products</a>.{% endif %}</p>{% endif %}
-    <label>Requirement description<textarea autocomplete="off" name="requirement" rows="2" placeholder="Model, size, budget, timeline…">{{ data.requirement or '' }}</textarea></label>
+    {% if not fhidden('requirement') %}<label>{{ fl('requirement') }}<textarea autocomplete="off" name="requirement" rows="2" placeholder="Model, size, budget, timeline…">{{ data.requirement or '' }}</textarea></label>{% endif %}
   </fieldset>
+  {% endif %}
 
   <fieldset>
-    <legend>Qualification &amp; follow-up</legend>
+    <legend>{{ fl('sec_qual') }}</legend>
     <div class="row-4">
-      <label>Lead status<select name="status">{% for s in with_current(LEAD_STATUSES, data.status) %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select></label>
-      <label>Buying possibility<select name="buying_possibility"><option value="">—</option>{% for s in with_current(BUYING_POSSIBILITIES, data.buying_possibility) %}<option {{ 'selected' if data.buying_possibility == s }}>{{ s }}</option>{% endfor %}</select></label>
-      <label>Priority<select name="priority"><option value="">—</option>{% for s in with_current(PRIORITIES, data.priority) %}<option {{ 'selected' if data.priority == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>{{ fl('status') }}<select name="status">{% for s in with_current(LEAD_STATUSES, data.status) %}<option {{ 'selected' if data.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      {% if not fhidden('possibility') %}<label>{{ fl('possibility') }}<select name="buying_possibility"><option value="">—</option>{% for s in with_current(BUYING_POSSIBILITIES, data.buying_possibility) %}<option {{ 'selected' if data.buying_possibility == s }}>{{ s }}</option>{% endfor %}</select></label>{% endif %}
+      {% if not fhidden('priority') %}<label>{{ fl('priority') }}<select name="priority"><option value="">—</option>{% for s in with_current(PRIORITIES, data.priority) %}<option {{ 'selected' if data.priority == s }}>{{ s }}</option>{% endfor %}</select></label>{% endif %}
     </div>
     <div class="row-2">
-      <label>Lead source<select name="source"><option value="">—</option>{% for s in with_current(LEAD_SOURCES, data.source) %}<option {{ 'selected' if data.source == s }}>{{ s }}</option>{% endfor %}</select></label>
-      <label>Next follow-up date<input type="date" name="next_follow_up" value="{{ data.next_follow_up or '' }}"></label>
+      {% if not fhidden('source') %}<label>{{ fl('source') }}<select name="source"><option value="">—</option>{% for s in with_current(LEAD_SOURCES, data.source) %}<option {{ 'selected' if data.source == s }}>{{ s }}</option>{% endfor %}</select></label>{% endif %}
+      {% if not fhidden('next_follow_up') %}<label>{{ fl('next_follow_up') }}<input type="date" name="next_follow_up" value="{{ data.next_follow_up or '' }}"></label>{% endif %}
     </div>
     {% if has_prod %}<label>Referral code <small class="muted">(unit code of the customer who sent this lead — optional)</small><input name="referral_code" autocomplete="off" maxlength="20" value="{{ data.referral_code or '' }}" placeholder="e.g. U12345" style="text-transform:uppercase"></label>{% endif %}
-    <label>Notes / remarks<textarea autocomplete="off" name="notes" rows="3">{{ data.notes or '' }}</textarea></label>
+    {% if not fhidden('notes') %}<label>{{ fl('notes') }}<textarea autocomplete="off" name="notes" rows="3">{{ data.notes or '' }}</textarea></label>{% endif %}
   </fieldset>
 
   {% if duplicates or hidden_duplicates %}<label class="check warn"><input type="checkbox" name="confirm_duplicate" value="1"> Save anyway (this is a separate enquiry)</label>{% endif %}

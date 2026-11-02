@@ -12,9 +12,9 @@
 
 <div class="quicksort">
   <span class="muted">Sort by:</span>
-  {% for key, label in [('name','Name'), ('phone','Number'), ('email','Email'), ('place','Place'), ('state','State'), ('requirement','Product'), ('possibility','Buying possibility'), ('priority','Priority'), ('status','Status'), ('followup','Follow-up'), ('created','Date')] %}
+  {% for key, label, fk in [('name','Name','customer_name'), ('phone','Number','phone'), ('email','Email','email'), ('place','Place','place'), ('state','State','state'), ('requirement','Product','products'), ('possibility','Buying possibility','possibility'), ('priority','Priority','priority'), ('status','Status','status'), ('followup','Follow-up','next_follow_up'), ('created','Date','')] %}{% if not (fk and fhidden(fk)) %}{% set label = fl(fk, label) if fk else label %}
     <a class="chip {{ 'on' if sort == key }}" href="{{ url_for('leads', **dict(params, sort=key, dir=('desc' if key == 'created' else 'asc'), page=1)) }}">{{ label }}</a>
-  {% endfor %}
+  {% endif %}{% endfor %}
 </div>
 
 {% if params.get('outcome') in ('new', 'open', 'won', 'lost') %}<p class="filter-note">Showing <b>{{ {'new': 'new', 'open': 'open', 'won': 'converted / won ✅', 'lost': 'lost / not interested ❌'}[params.outcome] }}</b> leads (every status of that kind). <a href="{{ url_for('leads', **dict(params, outcome=None, page=1)) }}">Show all</a></p>{% endif %}

@@ -298,6 +298,17 @@ Digital Catalogue (built 16 Oct 2026)
   company-wide, prod_settings.board_columns): tick / untick stages; default = all except Delivered; Delivered shows the last
   7 days only.
 
+- Lead form fields (2 Nov, v18, lead_fields.py, table org_lead_fields): Settings > Organization > "Lead form fields"
+  (/settings/lead-fields; Super Admin: /admin/organizations/<id>/lead-fields). Own names for the 4 form headings and every
+  field (fl(key, default) in templates: form, lead page, list headers/cards, filters, bulk bar, follow-ups, dashboard,
+  CSV export; import accepts the own names). 'Show' untick hides a field from form, lists, list-column choices and filters;
+  never hidden: project, assigned, customer name, phone, status. Hidden fields keep their stored values on edit
+  (lead_form_data(base)); lead page still shows a hidden field when it has a value. Reset = standard form.
+- Maker month (2 Nov): the day the order reached Ready for Dispatch (finished_at); the GST bill date is used only for
+  imported / "old delivery" orders; a date set by hand on the order page always wins.
+- Production tick "takers" (2 Nov): Order takers page for everyone + 12-month report (no amounts). In the Production
+  manager preset; preset roles (worker/manager) now always follow the current preset list.
+
 ======================================================================
 4D. DAILY BACKUP TO GOOGLE DRIVE (built 30 Oct 2026, backup_drive.py)
 ======================================================================

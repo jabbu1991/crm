@@ -42,6 +42,7 @@
     </div>
     <p class="small">Login link: <a href="{{ url_for('org_login', code=org.code|lower, _external=True) }}" target="_blank" rel="noopener">{{ url_for('org_login', code=org.code|lower, _external=True) }}</a></p>
     <p><a class="btn btn-sm" href="{{ url_for('admin_org_options', oid=org.id) }}">⚙️ Dropdown options for this client</a></p>
+    <p><a class="btn btn-sm" href="{{ url_for('admin_lead_fields', oid=org.id) }}">✏️ Lead form fields for this client</a></p>
   </fieldset>
   {% endif %}
   {% if not org %}

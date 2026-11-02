@@ -116,7 +116,7 @@
   <h2>{{ 'My recent leads' if mine else 'Recently added leads' }}</h2>
   <div class="table-wrap desktop-only">
   <table class="table leads-table">
-    <thead><tr><th>Customer</th><th>Phone</th><th>WhatsApp</th><th>Products</th><th>State</th><th>Project</th><th>Status</th><th>Notes</th><th>Next follow-up</th><th>Created by</th><th>Date</th><th></th></tr></thead>
+    <thead><tr><th>{{ fl('customer_name', 'Customer') }}</th><th>{{ fl('phone', 'Phone') }}</th><th>{{ fl('whatsapp', 'WhatsApp') }}</th><th>{{ fl('products') }}</th><th>{{ fl('state') }}</th><th>{{ fl('project', 'Project') }}</th><th>{{ fl('status', 'Status') }}</th><th>{{ fl('notes', 'Notes') }}</th><th>{{ fl('next_follow_up', 'Next follow-up') }}</th><th>Created by</th><th>Date</th><th></th></tr></thead>
     <tbody>
     {% for l in recent %}
       <tr>

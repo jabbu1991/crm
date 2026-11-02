@@ -78,7 +78,7 @@ def stage_id(W, code, name):
 def test_migration_keeps_modules_and_production_starts_off(pw):
     c = pw["db"]()
     rows = {r["code"]: r for r in c.execute("SELECT * FROM organizations")}
-    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 17
+    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 18
     assert rows["STAR"]["mod_crm"] == 1 and rows["STAR"]["mod_prod"] == 1 and rows["STAR"]["mod_cafe"] == 0
     assert rows["ONLY"]["mod_prod"] == 0 and rows["ONLY"]["app_type"] == "crm"
     assert rows["FACT"]["mod_crm"] == 0 and rows["FACT"]["mod_prod"] == 1
@@ -522,7 +522,7 @@ def test_maker_page_counts_month_production_finished(pw):
 
 # ---------------------------------------------------------------- round 3: maker month by bill date, order takers
 
-def test_old_order_counts_in_bill_month_and_date_can_be_set(pw):
+def test_maker_month_is_ready_for_dispatch_day_and_date_can_be_set(pw):
     star = pw["star"]
     star.post("/production/orders/new", {"name": "Late Entry", "phone": "9000001001", "product_name": "Pump"})
     oid_ = orders(pw, "STAR")[0]["id"]
@@ -532,8 +532,9 @@ def test_old_order_counts_in_bill_month_and_date_can_be_set(pw):
     star.post(f"/production/orders/{oid_}/move", {"to": stage_id(pw, "STAR", "Dispatch"), "confirm": "1",
                                                   "bill_no": "OLD-77", "bill_date": "2026-03-18"})
     mid = orders(pw, "STAR")[0]["maker_id"]
-    assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month=2026-03").text
-    assert "<b>#1</b>" not in star.get(f"/production/makers/{mid}?month={date.today().isoformat()[:7]}").text
+    # counts in the month it reached Ready for Dispatch, even though the GST bill date is earlier
+    assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month={date.today().isoformat()[:7]}").text
+    assert "<b>#1</b>" not in star.get(f"/production/makers/{mid}?month=2026-03").text
     # set by hand wins
     star.post(f"/production/orders/{oid_}/finished", {"finished": "2026-02-10"})
     assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month=2026-02").text
@@ -608,3 +609,26 @@ def test_board_columns_drag_and_filters(pw):
     assert worker.post("/production/board/columns", {"col": ["Queue"]}).status_code == 403
     wh = worker.get("/production/board").text
     assert 'data-stage="Delivered"' in wh and "⚙️ Columns" not in wh
+
+
+def test_order_takers_tick_for_staff(pw):
+    star = pw["star"]
+    lead = make_staff(star, "lead9")
+    sid = pw["db"]().execute("SELECT id FROM users WHERE username = 'lead9'").fetchone()[0]
+    aid = pw["db"]().execute("SELECT id FROM users WHERE username = 'star_admin'").fetchone()[0]
+    star.post("/production/orders/new", {"name": "Taken By Admin", "phone": "9000001201", "product_name": "Pump",
+                                         "taken_by": str(aid)})
+    db = pw["db"]()
+    db.execute("UPDATE users SET prod_role = 'custom', prod_perms = '[\"view\"]' WHERE id = ?", (sid,))
+    db.commit()
+    assert lead.get(f"/production/order-takers/{aid}").status_code == 403
+    db.execute("UPDATE users SET prod_perms = '[\"view\", \"takers\"]' WHERE id = ?", (sid,))
+    db.commit()
+    html = lead.get("/production/order-takers").text
+    assert "Order takers" in html and "Taken By Admin" not in html
+    page = lead.get(f"/production/order-takers/{aid}").text
+    assert "Taken By Admin" in page and "₹" not in page
+    # the Production manager preset includes the tick, also for managers saved before it existed
+    db.execute("UPDATE users SET prod_role = 'manager', prod_perms = '[\"view\"]' WHERE id = ?", (sid,))
+    db.commit()
+    assert lead.get(f"/production/order-takers/{aid}").status_code == 200

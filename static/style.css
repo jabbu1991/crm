@@ -461,3 +461,8 @@ body.mod-prod .mainnav .nav-cta:hover, body.mod-prod .mainnav .nav-cta.active { 
 .bghost { position: fixed; z-index: 1000; pointer-events: none; transform: rotate(2deg); box-shadow: 0 10px 25px rgba(0,0,0,.25); opacity: .95; }
 body.board-dragging { cursor: grabbing; user-select: none; }
 @media (max-width: 700px) { .bcol { flex-basis: 78vw; max-height: none; } .board-hint { margin-left: 0; width: 100%; } }
+/* Settings > Lead form fields */
+.lf-table input[type=text], .lf-table input:not([type]) { width: 100%; }
+.lf-table .lf-group td { background: #f1f5f9; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #475569; }
+.lf-table td:first-child { width: 38%; }
+.lf-table input[type=checkbox] { width: 20px; height: 20px; }

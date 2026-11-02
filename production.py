@@ -45,6 +45,7 @@ PERMS = [
     ("points", "Redeem / adjust points"),
     ("import", "Import old deliveries"),
     ("export", "Export data (Excel)"),
+    ("takers", "Order takers: everyone's orders and monthly report (no amounts)"),
     ("settings", "Production settings (stages, products, points)"),
 ]
 PERM_KEYS = [k for k, _ in PERMS]
@@ -139,6 +140,12 @@ def user_perms(user=None):
         return set()
     if user["role"] in (H.SUPER_ADMIN, H.ORG_ADMIN):
         return set(PERM_KEYS)
+    try:
+        role = user["prod_role"]
+    except (IndexError, KeyError):
+        role = None
+    if role in ("worker", "manager"):   # presets follow the current list, so new ticks reach existing staff
+        return set(ROLE_PRESETS[role])
     try:
         perms = json.loads(user["prod_perms"] or "null")
     except (ValueError, TypeError, IndexError, KeyError):
@@ -436,15 +443,15 @@ QUEUE_ORDER = f"(o.pinned_at IS NULL), o.pinned_at, ({FIRST_ADV} IS NULL), {FIRS
 
 
 def done_date(o):
-    """The day production finished, for the maker's month: set by hand -> that day; otherwise the earlier of the day it
-    reached Ready for Dispatch and the GST bill date (an old order entered today still counts in its bill month)."""
+    """The day production finished, for the maker's month: set by hand -> that day; otherwise the day the machine was
+    moved to Ready for Dispatch (the 'production finished' stage). Only orders that never went through that stage in
+    the software (old deliveries added or imported later) fall back to the GST bill date, so they count in their bill
+    month and not in the month they were typed in."""
     fin = to_date(o["finished_at"])
-    if fin and o["finished_manual"]:
+    if fin and (o["finished_manual"] or not o["imported"]):
         return fin
     bill = to_date(o["bill_date"])
-    if fin and bill:
-        return min(fin, bill)
-    return fin or (bill if o["maker_id"] else None)
+    return bill if (bill and o["maker_id"]) else fin
 
 
 def order_days(o):
@@ -1321,7 +1328,8 @@ def order_finished(order_id):
 # ---------------------------------------------------------------- order takers (who took the order)
 
 def taker_view(view):
-    """Any logged-in person of an organization with Production: Admin sees everyone, staff see only themselves."""
+    """Any logged-in person of an organization with Production: Admin and staff with the 'takers' tick see everyone,
+    other staff see only themselves."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         def inner():
@@ -1347,7 +1355,7 @@ def last_months(n=12):
 @bp.route("/production/order-takers")
 @taker_view
 def takers():
-    if not H.is_admin():
+    if not can("takers"):
         return redirect(url_for("prod.taker_page", uid=g.user["id"]))
     oid = H.org_id()
     this_m = today()[:7]
@@ -1364,7 +1372,7 @@ def takers():
 @taker_view
 def taker_page(uid):
     """One person: orders taken per month (by order date, no amounts) and, for a month, which orders."""
-    if not H.is_admin() and uid != g.user["id"]:
+    if not can("takers") and uid != g.user["id"]:
         abort(403)
     oid = H.org_id()
     u = H.query("SELECT id, name, designation FROM users WHERE id = ? AND org_id = ?", (uid, oid), one=True) or abort(404)

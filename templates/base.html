@@ -48,7 +48,7 @@
   {% if pcan('view') %}<a href="{{ url_for('prod.orders') }}" class="{{ 'active' if ep in ('prod.orders', 'prod.order_view', 'prod.order_edit', 'prod.order_move') }}">📋 Orders</a>{% endif %}
   {% if pcan('edit') and not viewing %}<a href="{{ url_for('prod.order_new') }}" class="nav-cta {{ 'active' if ep == 'prod.order_new' }}">+ New Order</a>{% endif %}
   {% if pcan('maker') %}<a href="{{ url_for('prod.makers') }}" class="{{ 'active' if ep == 'prod.makers' }}">👷 Makers</a>{% endif %}
-  {% if is_admin() %}<a href="{{ url_for('prod.takers') }}" class="{{ 'active' if ep in ('prod.takers', 'prod.taker_page') }}">🧑‍💼 Order takers</a>
+  {% if pcan('takers') %}<a href="{{ url_for('prod.takers') }}" class="{{ 'active' if ep in ('prod.takers', 'prod.taker_page') }}">🧑‍💼 Order takers</a>
   {% else %}<a href="{{ url_for('prod.taker_page', uid=g.user.id) }}" class="{{ 'active' if ep == 'prod.taker_page' }}">🧑‍💼 My orders</a>{% endif %}
   {% if pcan('settings') %}<a href="{{ url_for('prod.products') }}" class="{{ 'active' if ep in ('prod.products', 'prod.product_edit') }}">Products</a>{% endif %}
   {% if pcan('view') %}<a href="{{ url_for('prod.warranty') }}" class="{{ 'active' if ep == 'prod.warranty' }}">🛡 Warranty</a>

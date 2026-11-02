@@ -34,6 +34,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import crm_db
 import crm_options
+import lead_fields
 from crm_constants import (BUYING_POSSIBILITIES, CAMPAIGN_TYPES, CLOSED_LOST_STATUSES, COUNTRIES,
                            DEFAULT_COUNTRY, INDIAN_STATES, LEAD_QUALITIES, LEAD_SOURCES, LEAD_STATUSES,
                            ORG_ADMIN, PRIORITIES, PRODUCT_STAGES, PROJECT_STATUSES, ROLE_LABELS, STAFF,
@@ -416,6 +417,7 @@ def inject_globals():
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
         COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link,
         list_settings=list_settings, LIST_COLUMNS=LIST_COLUMNS, quick_dates=quick_dates(),
+        fl=fl, fhidden=fhidden,
         client_brand=g.get("login_brand") or (org_brand() if g.get("user") else None),
         MODULES=MODULES, module_labels=module_labels, module_home=module_home,
         my_modules=user_modules() if g.get("user") and g.get("org") else [],
@@ -606,6 +608,24 @@ def org_opts(kind, oid=None):
     if (oid, kind) not in cache:
         cache[(oid, kind)] = crm_options.load(get_db(), oid, kind)
     return cache[(oid, kind)]
+
+
+def field_cfg(oid=None):
+    """This organization's lead form fields: {'labels': {...}, 'hidden': {...}} (cached per request)."""
+    oid = oid or (org_id() if g.get("org") else None)
+    cache = g.setdefault("_lead_fields", {})
+    if oid not in cache:
+        cache[oid] = lead_fields.load(get_db(), oid)
+    return cache[oid]
+
+
+def fl(key, default=None):
+    """The organization's name for a lead field or heading; otherwise `default` (the page's own wording)."""
+    return field_cfg()["labels"].get(key) or default or lead_fields.STANDARD.get(key, key)
+
+
+def fhidden(key):
+    return key in field_cfg()["hidden"]
 
 
 def opt_values(kind, oid=None):
@@ -992,7 +1012,9 @@ def list_settings():
                 card = [c for c in json.loads(row["card_fields"]) if c in CARD_FIELD_CHOICES][:MAX_CARD_FIELDS]
             except (ValueError, TypeError):
                 pass
-        g.list_settings = {"columns": list(dict.fromkeys(cols)), "card": list(dict.fromkeys(card))}
+        hidden = field_cfg()["hidden"]
+        g.list_settings = {"columns": [c for c in dict.fromkeys(cols) if c not in hidden],
+                           "card": [c for c in dict.fromkeys(card) if c not in hidden]}
     return g.list_settings
 
 
@@ -1495,7 +1517,9 @@ LEAD_TEXT_FIELDS = ["customer_name", "company_name", "phone", "whatsapp", "email
 # lead_quality (Hot/Warm/Cold) was retired from every screen; stored values are kept untouched.
 
 
-def lead_form_data():
+def lead_form_data(base=None):
+    """The submitted lead form. Fields the organization hid are not on the form: they keep `base` (the lead's current
+    values, or a new lead's defaults), so hiding a field never wipes data."""
     data = {k: clean(request.form.get(k)) for k in LEAD_TEXT_FIELDS}
     if data["state"] == "__other__":
         data["state"] = clean(request.form.get("state_other"))
@@ -1505,6 +1529,9 @@ def lead_form_data():
     data["product_ids"] = int_list(request.form.getlist("product_ids"))
     data["next_follow_up"] = clean(request.form.get("next_follow_up"))
     data["referral_code"] = clean(request.form.get("referral_code")).upper()[:20]
+    for key in field_cfg()["hidden"]:
+        for dk in lead_fields.DATA_KEYS.get(key, []):
+            data[dk] = (base or {}).get(dk) or ([] if dk == "product_ids" else "")
     return data
 
 
@@ -1676,10 +1703,13 @@ def leads_export():
 def leads_csv_response(rows):
     out = io.StringIO()
     writer = SafeCsvWriter(out)
-    writer.writerow(["ID", "Project", "Project Code", "Customer Name", "Company", "Phone", "WhatsApp", "Email", "Place",
-                     "District", "State", "Country", "Products", "Requirement", "Status", "Buying Possibility",
-                     "Priority", "Source", "Next Follow-up", "Assigned To", "Created By",
-                     "Created At", "Updated By", "Updated At", "Notes"])
+    writer.writerow(["ID", fl("project", "Project"), "Project Code", fl("customer_name", "Customer Name"),
+                     fl("company", "Company"), fl("phone", "Phone"), fl("whatsapp", "WhatsApp"), fl("email", "Email"),
+                     fl("place", "Place"), fl("district", "District"), fl("state", "State"), fl("country", "Country"),
+                     fl("products", "Products"), fl("requirement", "Requirement"), fl("status", "Status"),
+                     fl("possibility", "Buying Possibility"), fl("priority", "Priority"), fl("source", "Source"),
+                     fl("next_follow_up", "Next Follow-up"), fl("assigned", "Assigned To"), "Created By",
+                     "Created At", "Updated By", "Updated At", fl("notes", "Notes")])
     for r in rows:
         writer.writerow([r["id"], r["project_name"], r["project_code"], r["customer_name"], r["company_name"], r["phone"], r["whatsapp"],
                          r["email"], r["place"], r["district"], r["state"], r["country"], r["product_stages"],
@@ -1700,7 +1730,7 @@ def lead_new():
     data.update(status=default_status(), priority=default_priority(), country=DEFAULT_COUNTRY,
                 project_id=request.args.get("project", type=int), product_ids=[], assigned_to=g.user["id"])
     if request.method == "POST":
-        data = lead_form_data()
+        data = lead_form_data(data)
         errors = validate_lead(data)
         for e in errors:
             flash(e, "error")
@@ -1759,7 +1789,7 @@ def lead_edit(lid):
     data = dict(lead)
     data["product_ids"] = [r[0] for r in query("SELECT product_id FROM lead_products WHERE lead_id = ?", (lid,))]
     if request.method == "POST":
-        data = lead_form_data()
+        data = lead_form_data(data)
         errors = validate_lead(data, lead)
         for e in errors:
             flash(e, "error")
@@ -2138,6 +2168,9 @@ CSV_ALIASES = {
     "next_follow_up": ["next follow-up", "next_follow_up", "next follow up", "follow-up", "follow up", "followup",
                        "follow-up date"],
 }
+# CSV field -> lead form field key (lead_fields.py), for the organization's own column names.
+FIELD_OF_CSV = {"company_name": "company", "buying_possibility": "possibility", "products": "products"}
+
 # Columns of the downloadable import template, in order (each one is an alias above).
 IMPORT_TEMPLATE_HEADERS = [
     ("customer_name", "Customer Name"), ("company_name", "Company"), ("phone", "Phone"), ("whatsapp", "WhatsApp"),
@@ -2194,8 +2227,10 @@ def leads_import():
             reader = csv.DictReader(io.StringIO(text))
             headers = {(h or "").strip().lower(): h for h in (reader.fieldnames or [])}
             mapping = {}
+            # The organization's own field names (Settings > Lead form fields) work as column names too.
+            own = {field: field_cfg()["labels"].get(FIELD_OF_CSV.get(field, field), "") for field in CSV_ALIASES}
             for field, aliases in CSV_ALIASES.items():
-                for alias in aliases:
+                for alias in ([own[field].lower()] if own[field] else []) + aliases:
                     if alias in headers:
                         mapping[field] = headers[alias]
                         break
@@ -2966,6 +3001,46 @@ def org_options_settings():
 def admin_org_options(oid):
     org_or_404(oid)
     return options_editor(oid, url_for("admin_orgs"), url_for("admin_org_options", oid=oid))
+
+
+# ---------------------------------------------------------------- lead form fields (per client)
+
+def lead_fields_editor(oid, back_url, self_url):
+    db = get_db()
+    if request.method == "POST":
+        if request.form.get("reset"):
+            lead_fields.reset(db, oid)
+            db.commit()
+            audit("lead_fields_reset", "Lead form fields back to standard", org=oid)
+            flash("Lead form is back to the standard names and fields.", "success")
+            return redirect(self_url)
+        labels = {k: clean(request.form.get("label_" + k))[:lead_fields.MAX_LABEL] for k in lead_fields.STANDARD}
+        hidden = {k for k in lead_fields.HIDEABLE if not request.form.get("show_" + k)}
+        cfg = lead_fields.save(db, oid, labels, hidden, g.user["id"], now())
+        db.commit()
+        g.pop("_lead_fields", None)
+        g.pop("list_settings", None)
+        audit("lead_fields_saved", "Renamed: " + (", ".join(f"{lead_fields.STANDARD[k]} → {v}"
+              for k, v in cfg["labels"].items()) or "none") + "; hidden: " + (", ".join(
+              lead_fields.STANDARD[k] for k in cfg["hidden"]) or "none"), org=oid)
+        flash("Lead form fields saved. Everyone in this organization now sees the new names.", "success")
+        return redirect(self_url)
+    org = query("SELECT * FROM organizations WHERE id = ?", (oid,), one=True)
+    return render_template("lead_fields.html", cfg=lead_fields.load(db, oid), FIELDS=lead_fields.FIELDS,
+                           HIDEABLE=lead_fields.HIDEABLE, max_len=lead_fields.MAX_LABEL, org=org, back_url=back_url)
+
+
+@app.route("/settings/lead-fields", methods=["GET", "POST"])
+@admin_required
+def lead_fields_settings():
+    return lead_fields_editor(org_id(), url_for("organization_settings"), url_for("lead_fields_settings"))
+
+
+@app.route("/admin/organizations/<int:oid>/lead-fields", methods=["GET", "POST"])
+@super_required
+def admin_lead_fields(oid):
+    org_or_404(oid)
+    return lead_fields_editor(oid, url_for("admin_orgs"), url_for("admin_lead_fields", oid=oid))
 
 
 @app.route("/organization", methods=["GET", "POST"])
