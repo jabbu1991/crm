@@ -35,6 +35,7 @@
   .btn.alt { background: #fff; color: #111; border: 1px solid #d1d5db; }
   .foot { text-align: center; font-size: 12px; color: #9ca3af; margin: 18px 0; }
   .pts td:first-child { font-weight: 700; }
+  .prod-photo { display: block; width: 100%; max-height: 260px; object-fit: contain; border-radius: 10px; background: #f8fafc; margin-bottom: 8px; }
   .center { text-align: center; } .prewrap { white-space: pre-line; }
   .thanks p { margin: 0; font-size: 16px; } .w-line { font-size: 16px; margin: 0 0 10px; }
   .btn + .btn { margin-left: 6px; }
@@ -50,6 +51,22 @@
     {% if cancelled %}<p class="exp">This order was cancelled.</p>{% endif %}
   </div>
 
+  {# Product and its specification (as on the order form). Never prices, advances, notes or maker details. #}
+  {% if not cancelled %}
+  <div class="card">
+    <h2>📦 Your product</h2>
+    {% if photo %}<img class="prod-photo" src="{{ url_for('media', name=photo) }}" alt="{{ o.product_name or 'Product' }}">{% endif %}
+    <table>
+      <tr><td class="muted">Product</td><td><b>{{ o.product_name or '—' }}</b>{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</td></tr>
+      {% if o.category %}<tr><td class="muted">Category / model</td><td>{{ o.category }}</td></tr>{% endif %}
+      {% if o.machine_type %}<tr><td class="muted">Machine type</td><td>{{ o.machine_type }}</td></tr>{% endif %}
+      {% if o.power_source %}<tr><td class="muted">Power source</td><td>{{ o.power_source }}</td></tr>{% endif %}
+      {% if o.weight %}<tr><td class="muted">Weight</td><td>{{ o.weight }}</td></tr>{% endif %}
+    </table>
+    {% if o.details %}<h2 style="margin-top:12px">Specification</h2><p class="prewrap small">{{ o.details }}</p>{% endif %}
+  </div>
+  {% endif %}
+
   {% if delivered and not cancelled and st.thanks_text %}
   <div class="card thanks"><p>🙏 {{ st.thanks_text }}</p></div>
   {% endif %}
@@ -57,7 +74,7 @@
   {% set wv = st.warranty_view %}
   {% if delivered and not cancelled %}
   <div class="card">
-    <h2>📦 Your machine</h2>
+    <h2>🛡 Your machine</h2>
     {% if w and w.main and wv == 'countdown' %}
     <div class="w-main">
       {% if w.main.expired %}<div class="w-days exp">Warranty ended</div><div class="muted">on {{ w.main.end.strftime('%d-%m-%Y') }}</div>
@@ -69,7 +86,6 @@
     <p class="w-line">{% if w.main.expired %}🛡 Warranty period completed{% else %}✅ Under warranty{% endif %}</p>
     {% endif %}
     <table>
-      <tr><td class="muted">Product</td><td><b>{{ o.product_name or '—' }}</b>{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</td></tr>
       {% if o.delivered_date %}<tr><td class="muted">Delivered</td><td>{{ o.delivered_date[8:10] }}-{{ o.delivered_date[5:7] }}-{{ o.delivered_date[:4] }}</td></tr>{% endif %}
       {% if o.bill_no %}<tr><td class="muted">GST bill no</td><td>{{ o.bill_no }}</td></tr>{% endif %}
       {% if st.referral %}<tr><td class="muted">Unit code</td><td><b>{{ o.unit_code }}</b></td></tr>{% endif %}

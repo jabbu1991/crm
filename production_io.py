@@ -63,6 +63,10 @@ def public_track(code, tok):
     care = ""
     if o["product_id"]:
         care = H.scalar("SELECT care_tips FROM products WHERE id = ? AND org_id = ?", (o["product_id"], org["id"])) or ""
+    photo = None
+    if o["product_id"]:
+        photo = H.scalar("SELECT filename FROM product_images WHERE product_id = ? AND org_id = ? ORDER BY id LIMIT 1",
+                         (o["product_id"], org["id"]))
     catalog = url_for("catalog_page", code=org["code"]) if st["catalog_link"] and H.catalog_published(org) else ""
     digits = re.sub(r"\D", "", org["phone"] or "")
     help_wa = ""
@@ -73,7 +77,7 @@ def public_track(code, tok):
     return render_template("production/public.html", o=o, org=org, st=st, stages=stages, reached=reached,
                            w=warranty_info(o, parts) if st["warranty"] else None, ph=ph, sched=sched, ledger=ledger,
                            value=value, brand=brand, share=share, cancelled=o["status"] != "active",
-                           delivered=ph == "delivered", care=care, catalog=catalog, help_wa=help_wa)
+                           delivered=ph == "delivered", care=care, catalog=catalog, help_wa=help_wa, photo=photo)
 
 
 # ---------------------------------------------------------------- Excel helpers

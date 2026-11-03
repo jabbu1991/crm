@@ -744,3 +744,19 @@ def test_customer_page_extras(pw):
     page = Browser().get(f"/t/star/{tok}").text
     assert "Thank you for choosing Starway" in page and "Write a review" in page and "Check the oil level" in page
     assert "Need help" in page and "wa.me/919847012345" in page
+
+
+
+def test_customer_link_shows_product_details_not_money(pw):
+    star = pw["star"]
+    star.post("/production/orders/new", {"name": "Spec Cust", "phone": "9000001600", "product_name": "Log Splitter",
+                                         "category": "Crompton 7.5", "machine_type": "Vertical", "power_source": "Electric",
+                                         "weight": "450 kg", "details": "6 ft, 20 ton, with trolley",
+                                         "note": "customer asked for discount", "unit_price": "185000",
+                                         "adv_date": date.today().isoformat(), "adv_amount": "50000", "adv_note": "cash"})
+    o = orders(pw, "STAR")[-1]
+    page = Browser().get(f"/t/star/{o['token']}").text
+    for must in ("Your product", "Log Splitter", "Crompton 7.5", "Vertical", "Electric", "450 kg", "6 ft, 20 ton, with trolley"):
+        assert must in page, must
+    for never in ("customer asked for discount", "1,85,000", "185000", "50,000", "Advance"):
+        assert never not in page, never

@@ -320,6 +320,9 @@ Digital Catalogue (built 16 Oct 2026)
   warranty · valid till …", no countdown) / status / hide / countdown; Thank-you message; Google review link; "See our
   other products" (catalogue on); "Need help?" WhatsApp + Call (org phone); Care tips per product (products.care_tips,
   Production > Products > Edit). Extras show only when filled.
+- Customer link "📦 Your product" card (3 Nov): product × qty, category / model, machine type, power source, weight, the
+  order form's "Full product details / specification" (labelled on the form as seen by the customer) and the first
+  catalogue photo of the product. Never price, advances, Note, Approved by or maker details.
 
 ======================================================================
 4D. DAILY BACKUP TO GOOGLE DRIVE (built 30 Oct 2026, backup_drive.py)

@@ -42,7 +42,7 @@
       <label>Unit price (₹)<input name="unit_price" inputmode="decimal" value="{{ paise(d.unit_price) }}" placeholder="amount of the machine"></label>
       <label>Total weight (approx.)<input name="weight" value="{{ d.weight or '' }}" placeholder="e.g. 450 kg"></label>
     </div>
-    <label>Full product details / specification<textarea name="details" rows="4" placeholder="Size, model, motor, colour, special requirements…">{{ d.details or '' }}</textarea></label>
+    <label>Full product details / specification <small class="muted">(the customer sees this on their link — write internal notes in Note below)</small><textarea name="details" rows="4" placeholder="Size, model, motor, colour, special requirements…">{{ d.details or '' }}</textarea></label>
     <div class="row-2">
       <label>Production days <small class="muted">(how many days to make, after production starts)</small><input type="number" name="prod_days" id="prod-days" min="0" value="{{ '' if d.prod_days is none else d.prod_days }}" placeholder="default {{ st.default_days }}"></label>
       <label>Approved by (name)<input name="approved_by" value="{{ d.approved_by or '' }}" placeholder="e.g. Abdul Salam"></label>
