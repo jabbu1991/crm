@@ -68,3 +68,44 @@ if (form) form.addEventListener("submit", function (e) {
   var url = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
   setTimeout(function () { window.location.href = url; }, 300); // a moment for the pixel request
 });
+
+// Motion: things below the screen come up when scrolled to (light: only opacity/transform) ------
+(function () {
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!("IntersectionObserver" in window) || reduce) {
+    document.querySelectorAll(".steps.line").forEach(function (s) { s.classList.add("drawn"); });
+    return;
+  }
+  var groups = ".cards, .steps, .highlights, .pills, .faq, .contact-list, .approach";
+  var items = document.querySelectorAll(
+    ".section .kicker, .section h2, .section .big, .mission, .card, .steps li, .approach-item, .pills li, " +
+    ".faq-item, .contact-list li, .careers-teaser > .btn, .more-link, .cta-band h2, .cta-band .btn, .phone");
+  var screenH = window.innerHeight;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      var el = e.target;
+      io.unobserve(el);
+      el.classList.add("in");
+      // afterwards give the element its own hover transitions back
+      setTimeout(function () { el.classList.remove("rv", "in"); el.style.removeProperty("--d"); }, 1400);
+    });
+  }, {rootMargin: "0px 0px -8% 0px", threshold: 0.08});
+  items.forEach(function (el) {
+    if (el.closest(".hero, .product-hero, .careers-hero, .stories-band") || el.getBoundingClientRect().top < screenH) return;
+    var group = el.parentElement && el.parentElement.closest(groups);
+    var d = group ? Array.prototype.indexOf.call(el.parentElement.children, el) : 0;
+    el.style.setProperty("--d", Math.min(d, 6));
+    el.classList.add("rv");
+    io.observe(el);
+  });
+  // the process line draws itself; animations pause when they are off the screen
+  var draw = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("drawn"); draw.unobserve(e.target); } });
+  }, {threshold: 0.3});
+  document.querySelectorAll(".steps.line").forEach(function (s) { draw.observe(s); });
+  var pause = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { e.target.classList.toggle("paused", !e.isIntersecting); });
+  });
+  document.querySelectorAll(".phone, .stories-band").forEach(function (el) { pause.observe(el); });
+})();

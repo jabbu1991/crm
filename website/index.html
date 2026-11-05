@@ -17,6 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add("js")</script>
   <!-- Meta Pixel -->
   <script>
   !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -54,11 +55,12 @@
 <main>
   <!-- HOME -->
   <section class="hero">
+    <div class="hero-glow" aria-hidden="true"></div>
     <div class="wrap hero-inner">
-      <p class="eyebrow">Create. Engage. Inspire.</p>
-      <h1>Creative Thinking.<br>Strategic Marketing.<br><span class="grad">Stronger Brands.</span></h1>
-      <p class="lead">Real View Creative Studio helps businesses communicate their value through branding, product marketing, creative campaigns and digital content. We bring strategy and creative execution together, so your brand looks consistent, speaks clearly and gives customers a reason to get in touch.</p>
-      <div class="hero-cta">
+      <p class="eyebrow hero-in" style="--i:0">Create. Engage. Inspire.</p>
+      <h1 aria-label="Creative Thinking. Strategic Marketing. Stronger Brands."><span aria-hidden="true"><span class="w" style="--i:1">Creative</span> <span class="w" style="--i:2">Thinking.</span><br><span class="w" style="--i:3">Strategic</span> <span class="w" style="--i:4">Marketing.</span><br><span class="w grad" style="--i:5">Stronger</span> <span class="w grad" style="--i:6">Brands.</span></span></h1>
+      <p class="lead hero-in" style="--i:7">Branding, marketing and creative content that brings customers to your business.</p>
+      <div class="hero-cta hero-in" style="--i:8">
         <a class="btn btn-primary wa-link" href="https://wa.me/918547275320" target="_blank" rel="noopener">Chat on WhatsApp</a>
         <a class="btn btn-ghost-light" href="#services">Our services</a>
       </div>
@@ -75,22 +77,32 @@
     </div>
   </section>
 
+  <!-- INSTAGRAM STORIES (filled by stories.js from the CRM; stays hidden when there are none) -->
+  <section class="stories-band" id="stories" hidden data-track-section="Instagram Stories">
+    <div class="wrap">
+      <div class="stories-head">
+        <p class="kicker">Latest from Instagram</p>
+        <a class="stories-follow" href="https://www.instagram.com/realview_creative_studio/" target="_blank" rel="noopener">@realview_creative_studio</a>
+      </div>
+      <div class="stories-row" role="list"></div>
+    </div>
+  </section>
+
   <!-- ABOUT -->
   <section class="section" id="about" data-track-section="About">
     <div class="wrap">
       <p class="kicker">About us</p>
-      <h2>Good marketing starts with understanding the business</h2>
+      <h2>We understand your business first</h2>
       <div class="about-grid">
         <div>
-          <p class="big">Real View Creative Studio is a creative, branding and marketing agency in Kerala that helps businesses present their brands, products and services clearly. We believe good marketing starts with understanding the business, then turning that understanding into creative work people remember and act on.</p>
-          <blockquote class="mission"><span>Our mission</span>To build brands, create meaningful experiences and turn creative ideas into business opportunities.</blockquote>
+          <p class="big">A creative, branding and marketing agency in Kerala.</p>
+          <blockquote class="mission"><span>Our mission</span>Build brands. Create experiences. Turn ideas into business.</blockquote>
         </div>
         <div class="approach">
-          <h3>Our approach</h3>
-          <div class="approach-item"><b>Strategy first</b><p>Every creative decision ties back to a business goal.</p></div>
-          <div class="approach-item"><b>Brand consistency</b><p>We respect each client's approved logo, colours and voice.</p></div>
-          <div class="approach-item"><b>Attention to detail</b><p>Names, product details, dates and Malayalam copy are proofread before anything goes live.</p></div>
-          <div class="approach-item"><b>Modern tools, human direction</b><p>We use AI-assisted workflows to move faster, guided by real strategy and creative judgement.</p></div>
+          <div class="approach-item"><b>Strategy first</b><p>Every design has a business goal.</p></div>
+          <div class="approach-item"><b>Brand consistency</b><p>Your logo, colours and voice, always.</p></div>
+          <div class="approach-item"><b>Attention to detail</b><p>Every name, price and date checked.</p></div>
+          <div class="approach-item"><b>Modern tools, human direction</b><p>AI speed, real creative judgement.</p></div>
         </div>
       </div>
     </div>
@@ -100,102 +112,131 @@
   <section class="section alt" id="services" data-track-section="Services">
     <div class="wrap">
       <p class="kicker">Services</p>
-      <h2>Seven services, from brand identity to customer enquiry</h2>
+      <h2>Everything your brand needs</h2>
       <div class="cards services">
-        <article class="card" data-service="Branding and Brand Identity"><span class="num">01</span><h3>Branding and Brand Identity</h3><p>Visual identity direction, logo applications, brand colours, typography, business stationery and brand-consistent marketing materials.</p></article>
-        <article class="card" data-service="Social Media Creatives"><span class="num">02</span><h3>Social Media Creatives</h3><p>Instagram and Facebook post designs, product promotion creatives, campaign graphics and platform-specific content.</p></article>
-        <article class="card" data-service="Performance Ads"><span class="num">03</span><h3>Performance Ads</h3><p>Meta ad campaigns built for enquiries, admissions and sales, with click-to-WhatsApp flows that turn clicks into conversations.</p></article>
-        <article class="card" data-service="Reels and Video Content"><span class="num">04</span><h3>Reels and Video Content</h3><p>Short-form reels and promotional video concepts that explain products and drive action.</p></article>
-        <article class="card" data-service="Product Marketing"><span class="num">05</span><h3>Product Marketing</h3><p>Product positioning, posters, feature communication, catalogues and sales-support materials.</p></article>
-        <article class="card" data-service="Brochures and Catalogues"><span class="num">06</span><h3>Brochures and Catalogues</h3><p>Product and service brochures, information layouts and business presentation materials.</p></article>
-        <article class="card" data-service="Campaigns and Business Communication"><span class="num">07</span><h3>Campaigns and Business Communication</h3><p>Seasonal and festival campaigns, registration-focused creatives, website copy, landing-page messaging and sales presentations.</p></article>
+        <article class="card" data-service="Branding and Brand Identity"><span class="num">01</span><h3>Branding</h3><p>A logo, colours and a look people remember.</p></article>
+        <article class="card" data-service="Social Media Creatives"><span class="num">02</span><h3>Social Media Creatives</h3><p>Scroll-stopping posts for Instagram and Facebook.</p></article>
+        <article class="card" data-service="Performance Ads"><span class="num">03</span><h3>Performance Ads</h3><p>Meta ads that bring enquiries on WhatsApp.</p></article>
+        <article class="card" data-service="Reels and Video Content"><span class="num">04</span><h3>Reels and Video</h3><p>Short videos that explain and sell.</p></article>
+        <article class="card" data-service="Product Marketing"><span class="num">05</span><h3>Product Marketing</h3><p>Clear positioning, posters and sales material.</p></article>
+        <article class="card" data-service="Brochures and Catalogues"><span class="num">06</span><h3>Brochures and Catalogues</h3><p>Print and digital, neatly designed.</p></article>
+        <article class="card" data-service="Campaigns and Business Communication"><span class="num">07</span><h3>Campaigns</h3><p>Festival, launch and admission campaigns.</p></article>
       </div>
     </div>
   </section>
 
   <!-- PROCESS -->
-  <section class="section alt" id="process" data-track-section="Process">
+  <section class="section" id="process" data-track-section="Process">
     <div class="wrap">
       <p class="kicker">Our process</p>
-      <h2>Five steps, so you always know what happens next</h2>
-      <ol class="steps">
-        <li><span>1</span><h3>Understand the business</h3><p>We learn your product, customers and goals before designing anything.</p></li>
-        <li><span>2</span><h3>Plan the strategy</h3><p>We decide the message, the channels and what success looks like.</p></li>
-        <li><span>3</span><h3>Develop the creative</h3><p>We design the visuals and copy, keeping your brand identity consistent.</p></li>
-        <li><span>4</span><h3>Execute</h3><p>We publish content, launch campaigns and set up enquiry channels such as WhatsApp.</p></li>
-        <li><span>5</span><h3>Review</h3><p>We check what worked and refine the next round.</p></li>
+      <h2>Five simple steps</h2>
+      <ol class="steps line">
+        <li><span>1</span><h3>Understand</h3><p>Your product, customers and goals.</p></li>
+        <li><span>2</span><h3>Plan</h3><p>Message, channels and targets.</p></li>
+        <li><span>3</span><h3>Create</h3><p>Visuals and copy, on brand.</p></li>
+        <li><span>4</span><h3>Launch</h3><p>Content, ads and WhatsApp enquiries.</p></li>
+        <li><span>5</span><h3>Review</h3><p>Measure and improve.</p></li>
       </ol>
     </div>
   </section>
 
   <!-- PRODUCTS (full pages are /products/...) -->
-  <section class="section" id="products" data-track-section="Products">
+  <section class="section alt" id="products" data-track-section="Products">
     <div class="wrap">
       <p class="kicker">Our products</p>
       <h2>Software for growing businesses</h2>
-      <p class="big">Simple, phone-friendly software we build and run ourselves. Use one, or switch them on together.</p>
-      <div class="cards products">
-        <article class="card product-card">
-          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3 3 0 0 1 0 6M18 14c2 .6 3 2.6 3 6"/></svg></span>
-          <span class="tag">Lead management</span>
-          <h3>Real View CRM</h3>
-          <p>Every enquiry from ads, WhatsApp, calls and walk-ins in one place, with follow-up reminders and staff-wise reports.</p>
-          <div class="product-actions">
-            <a class="btn btn-primary" href="/products/crm/">Learn more</a>
-            <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of Real View CRM" data-demo="CRM Demo" data-track-label="Book a CRM demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+      <p class="big">Simple, phone-friendly, built by us.</p>
+      <div class="products-split">
+        <div class="phone" aria-hidden="true">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="ps ps-1">
+              <div class="ps-top">💼 Leads <em>Today 12</em></div>
+              <div class="ps-row"><b>Anwar K</b><i class="chip hot">Hot</i></div>
+              <div class="ps-row"><b>Fathima S</b><i class="chip fu">Follow-up</i></div>
+              <div class="ps-row"><b>Rahul M</b><i class="chip ok">Converted</i></div>
+              <div class="ps-row"><b>Safa Traders</b><i class="chip hot">Hot</i></div>
+              <div class="ps-bars"><em style="--w:82%"></em><em style="--w:58%"></em><em style="--w:36%"></em></div>
+            </div>
+            <div class="ps ps-2">
+              <div class="ps-top">🏭 Production <em>Board</em></div>
+              <div class="ps-board">
+                <div><h5>Queue</h5><p>#41</p><p>#42</p></div>
+                <div><h5>Making</h5><p class="o">#38</p><p class="o">#39</p></div>
+                <div><h5>Ready</h5><p class="g">#36</p></div>
+              </div>
+              <div class="ps-row"><b>Warranty</b><i class="chip ok">12 months</i></div>
+            </div>
+            <div class="ps ps-3">
+              <div class="ps-top">☕ Bill #128 <em>Table 4</em></div>
+              <div class="ps-line"><span>Kerala Chai × 2</span><span>₹40</span></div>
+              <div class="ps-line"><span>Chicken Puffs × 3</span><span>₹90</span></div>
+              <div class="ps-line"><span>Lime Juice</span><span>₹30</span></div>
+              <div class="ps-line total"><span>Total</span><span>₹160</span></div>
+              <div class="ps-pay"><i>Cash</i><i class="on">UPI</i><i>Card</i></div>
+            </div>
           </div>
-        </article>
-        <article class="card product-card">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10"/></svg></span>
-          <span class="tag">Production &amp; orders</span>
-          <h3>Real View Order Tracker</h3>
-          <p>For made-to-order businesses: queue, production stages, makers, GST bill, warranty and a tracking link for each customer.</p>
-          <div class="product-actions">
-            <a class="btn btn-primary" href="/products/order-tracker/">Learn more</a>
-            <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of Real View Order Tracker" data-demo="Order Tracker Demo" data-track-label="Book a Order Tracker demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
-          </div>
-        </article>
-        <article class="card product-card">
-          <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2.2 0-4 2.5-4 6v4h4"/></svg></span>
-          <span class="tag">Restaurants &amp; cafes</span>
-          <h3>Restaurant Management Software</h3>
-          <p>Fast billing with KOT and GST, a QR digital menu, online orders with alerts, customer points and daily profit reports.</p>
-          <div class="product-actions">
-            <a class="btn btn-primary" href="/products/restaurant-management-software/">Learn more</a>
-            <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of the Restaurant Management Software" data-demo="Restaurant Software Demo" data-track-label="Book a Restaurant Software demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
-          </div>
-        </article>
+        </div>
+        <div class="cards products">
+          <article class="card product-card">
+            <span class="ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3 3 0 0 1 0 6M18 14c2 .6 3 2.6 3 6"/></svg></span>
+            <span class="tag">Lead management</span>
+            <h3>Real View CRM</h3>
+            <p>Every enquiry in one place, with follow-ups.</p>
+            <div class="product-actions">
+              <a class="btn btn-primary" href="/products/crm/">Learn more</a>
+              <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of Real View CRM" data-demo="CRM Demo" data-track-label="Book a CRM demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+            </div>
+          </article>
+          <article class="card product-card">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10"/></svg></span>
+            <span class="tag">Production &amp; orders</span>
+            <h3>Real View Order Tracker</h3>
+            <p>Orders, production stages and warranty.</p>
+            <div class="product-actions">
+              <a class="btn btn-primary" href="/products/order-tracker/">Learn more</a>
+              <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of Real View Order Tracker" data-demo="Order Tracker Demo" data-track-label="Book a Order Tracker demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+            </div>
+          </article>
+          <article class="card product-card">
+            <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2.2 0-4 2.5-4 6v4h4"/></svg></span>
+            <span class="tag">Restaurants &amp; cafes</span>
+            <h3>Restaurant Management Software</h3>
+            <p>Billing, QR menu and online orders.</p>
+            <div class="product-actions">
+              <a class="btn btn-primary" href="/products/restaurant-management-software/">Learn more</a>
+              <a class="btn btn-ghost-light wa-link" data-wa-text="I&#x27;d like a demo of the Restaurant Management Software" data-demo="Restaurant Software Demo" data-track-label="Book a Restaurant Software demo" href="https://wa.me/918547275320" target="_blank" rel="noopener">Book a demo</a>
+            </div>
+          </article>
+        </div>
       </div>
       <p class="more-link"><a href="/products/">See all products →</a></p>
     </div>
   </section>
 
   <!-- CAREERS (teaser; the full page is /careers/) -->
-  <section class="section alt" id="careers" data-track-section="Careers">
+  <section class="section" id="careers" data-track-section="Careers">
     <div class="wrap careers-teaser">
       <div>
         <p class="kicker">Careers</p>
         <h2>We're hiring creative people</h2>
-        <p class="big">Designers, video editors, writers, marketers and developers: work on branding, social media and digital marketing for many different brands, at our office or remotely.</p>
+        <p class="big">Design, video, writing, marketing and development.</p>
       </div>
       <a class="btn btn-primary" href="/careers/">View careers →</a>
     </div>
   </section>
 
   <!-- CONTACT -->
-  <section class="section" id="contact">
+  <section class="section alt" id="contact">
     <div class="wrap contact-grid">
       <div>
         <p class="kicker">Contact</p>
         <h2>Have a project in mind?</h2>
-        <p class="big">Let's talk about how Real View Creative Studio can help your brand communicate more effectively. Tell us about your project and we will get back to you.</p>
+        <p class="big">Tell us about it. We reply on WhatsApp.</p>
         <ul class="contact-list">
           <li><b>WhatsApp</b><a class="wa-link" href="https://wa.me/918547275320" target="_blank" rel="noopener">+91 85472 75320</a></li>
+          <li><b>Instagram</b><a href="https://www.instagram.com/realview_creative_studio/" target="_blank" rel="noopener">@realview_creative_studio</a></li>
           <li><b>Location</b>Kerala, India</li>
-          <!-- Add when ready:
-          <li><b>Email</b><a href="mailto:hello@realviewcreativestudio.in">hello@realviewcreativestudio.in</a></li>
-          <li><b>Instagram</b><a href="https://instagram.com/…" target="_blank" rel="noopener">@…</a></li>
-          -->
         </ul>
       </div>
       <form class="enquiry card" id="enquiry" novalidate>
@@ -231,7 +272,7 @@
 <footer class="footer">
   <div class="wrap footer-inner">
     <div class="logo small"><img class="logo-mark" src="assets/logo-mark.png" alt="" width="42" height="42"><span class="logo-text"><b>Real View</b><small>Creative Studio</small></span></div>
-    <p>Creative, branding and marketing agency · Kerala, India</p>
+    <p>Creative, branding and marketing agency · Kerala, India · <a href="https://www.instagram.com/realview_creative_studio/" target="_blank" rel="noopener">Instagram</a></p>
     <p>© <span id="year">2026</span> Real View Creative Studio · <a href="/products/">Products</a> · <a href="/careers/">Careers</a> · <a href="/privacy/">Privacy Policy</a> · <a href="https://crm.realviewcreativestudio.in/login">Login</a></p>
     <p class="cookie-note">This website uses cookies and the Meta Pixel to measure our ads.</p>
   </div>
@@ -243,5 +284,6 @@
 
 <script src="assets/pixel-events.js"></script>
 <script src="main.js"></script>
+<script src="stories.js" defer></script>
 </body>
 </html>

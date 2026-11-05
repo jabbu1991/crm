@@ -45,7 +45,7 @@ Contact on website: WhatsApp +91 85472 75320.
   production.py + production_io.py (production module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day, v16 = finished day set by hand, v17 = Google Drive backup log). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day, v16 = finished day set by hand, v17 = Google Drive backup log, v18/v19 = lead fields + production pay, v20 = Instagram stories for the website). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -386,3 +386,14 @@ E) Business ideas discussed: Basic vs Premium plans (templates + catalogue as pr
 2. git push to branch claude/marketing-agency-crm-y3shvh.
 3. Render auto-deploys the CRM (and the website) in ~3-5 minutes. Database on the disk is kept;
    schema upgrades back up the database first.
+
+======================================================================
+WEBSITE UPGRADE (5 Nov 2026)
+======================================================================
+- Home page text shortened; 7 light animations (hero words + moving glow, sections come up on scroll,
+  cards lift/glow, process line draws, phone mockup with CRM / Order Tracker / billing screens,
+  WhatsApp pulse + button shine, Instagram story circles). CSS + small JS only; respects "Reduce motion".
+- Instagram stories (instagram_stories.py, Super Admin -> 📸 Instagram): the CRM saves a copy of every story of
+  @realview_creative_studio once a day (about every 22 h) and on "Check Instagram now"; website/stories.js shows
+  them newest first, forever (latest 60 kept). Files in /var/data/instagram, token in /var/data/instagram.json.
+  Public feed: crm.realviewcreativestudio.in/ig/stories.json. Hide / title / delete per story.

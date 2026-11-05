@@ -15,7 +15,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1201,9 +1201,32 @@ def _migrate_v19(conn):
         BEGIN SELECT RAISE(ABORT, 'tenant: payment organization mismatch'); END""")
 
 
+def _migrate_v20(conn):
+    """Website: Instagram stories kept forever (copies saved on the server disk). Adds only."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS ig_stories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ig_id TEXT NOT NULL UNIQUE,
+        media_type TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        thumb_name TEXT,
+        posted_at TEXT,
+        permalink TEXT,
+        title TEXT,
+        hidden INTEGER NOT NULL DEFAULT 0,
+        fetched_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ig_stories_posted ON ig_stories(posted_at)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ig_check_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ok INTEGER NOT NULL DEFAULT 0,
+        new_count INTEGER NOT NULL DEFAULT 0,
+        message TEXT)""")
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20)]
 
 
 def migrate(db_path):

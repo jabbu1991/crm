@@ -1,0 +1,89 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Instagram{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>📸 Instagram stories</h1>
+  <div class="actions">
+    {% if connected and not running %}<form method="post" action="{{ url_for('admin_instagram_check') }}" class="inline">{{ csrf() }}<button class="btn btn-primary">🔄 Check Instagram now</button></form>{% endif %}
+    <a class="btn" href="https://www.realviewcreativestudio.in/#stories" target="_blank" rel="noopener">🌐 See on website</a>
+  </div>
+</div>
+<p class="muted">Once a day (about every {{ hours }} hours) the CRM saves a copy of every new story from Instagram, so it stays on the website <b>forever</b> — newest first. After you post a story, press <b>Check Instagram now</b> to show it at once. The latest {{ keep }} stories are kept ({{ size_mb }} MB on the server).</p>
+{% if running %}<div class="flash flash-warning">⏳ A check is running now. Refresh this page in a minute.</div>{% endif %}
+
+<div class="grid-2">
+<section class="card">
+  <h2>Instagram account</h2>
+  {% if connected %}
+    <p>✅ Connected to <b>@{{ st.username or profile }}</b>{% if st.connected_at %} <span class="muted small">since {{ st.connected_at|ist }}</span>{% endif %}</p>
+    <p class="small muted">The token renews itself every week. If Instagram ever says the token expired, paste a new one below.</p>
+    <details><summary class="small">Paste a new token</summary>
+      <form method="post" action="{{ url_for('admin_instagram_token') }}">{{ csrf() }}
+        <textarea name="token" rows="3" placeholder="IGAA…" required></textarea>
+        <button class="btn btn-sm btn-primary">Save token</button>
+      </form>
+    </details>
+    <form method="post" action="{{ url_for('admin_instagram_disconnect') }}" class="inline" onsubmit="return confirm('Stop saving new stories? Saved stories stay on the website.')">{{ csrf() }}<button class="btn btn-sm">Disconnect</button></form>
+  {% else %}
+    <p><b>One-time setup (about 10 minutes):</b> the account must be a Professional (Business or Creator) account.</p>
+    <ol class="setup-steps small">
+      <li>Open <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">developers.facebook.com/apps</a> with your Facebook account → <b>Create app</b> → name "Real View Website" → use case <b>"Manage messaging &amp; content on Instagram"</b> → Create.</li>
+      <li>In the app: <b>Instagram</b> → <b>API setup with Instagram login</b> → section 1 "Generate access tokens" → <b>Add account</b> → log in as <b>@{{ profile }}</b> → Allow.</li>
+      <li>Next to the account press <b>Generate token</b> → tick "I understand" → <b>Copy</b> the long token.</li>
+      <li>Paste it here and press <b>Connect</b>.</li>
+    </ol>
+    <form method="post" action="{{ url_for('admin_instagram_token') }}">{{ csrf() }}
+      <textarea name="token" rows="3" placeholder="IGAA…" required></textarea>
+      <button class="btn btn-primary">🔗 Connect</button>
+    </form>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>Last checks</h2>
+  <div class="table-wrap"><table class="table compact">
+    <thead><tr><th>When</th><th>Type</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for r in log %}<tr><td class="small nowrap">{{ r.started_at|ist }}</td><td class="small">{{ 'Daily' if r.kind == 'auto' else 'By hand' }}</td>
+      <td class="small">{% if r.ok %}<span class="w-ok">✅</span> {{ r.message }}{% elif r.message == 'running' %}⏳ running{% else %}<span class="w-exp">❌ {{ r.message }}</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No checks yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+</div>
+
+<section class="card">
+  <h2>Saved stories ({{ stories|length }})</h2>
+  {% if not stories %}<p class="muted">No stories saved yet.</p>{% endif %}
+  <div class="ig-grid">
+  {% for s in stories %}
+    <div class="ig-item{{ ' ig-hidden' if s.hidden }}">
+      <a href="{{ url_for('ig_media', name=s.file_name) }}" target="_blank" rel="noopener" class="ig-thumb">
+        {% if s.thumb_name %}<img src="{{ url_for('ig_media', name=s.thumb_name) }}" alt="" loading="lazy">{% else %}<span>▶</span>{% endif %}
+        {% if s.media_type == 'VIDEO' %}<i>▶ Video</i>{% endif %}
+      </a>
+      <div class="small muted">{{ s.posted_at|ist }}{{ ' · hidden' if s.hidden }}</div>
+      <form method="post" action="{{ url_for('admin_instagram_story', sid=s.id) }}" class="ig-title">{{ csrf() }}
+        <input name="title" value="{{ s.title or '' }}" maxlength="30" placeholder="Title (optional)">
+        <button class="btn btn-sm" name="action" value="title">Save</button>
+      </form>
+      <form method="post" action="{{ url_for('admin_instagram_story', sid=s.id) }}" class="inline">{{ csrf() }}
+        {% if s.hidden %}<button class="btn btn-sm" name="action" value="show">👁 Show</button>{% else %}<button class="btn btn-sm" name="action" value="hide">🙈 Hide</button>{% endif %}
+      </form>
+      <form method="post" action="{{ url_for('admin_instagram_story', sid=s.id) }}" class="inline" onsubmit="return confirm('Delete this story from the website for good?')">{{ csrf() }}
+        <button class="btn btn-sm" name="action" value="delete">🗑</button>
+      </form>
+    </div>
+  {% endfor %}
+  </div>
+</section>
+<style>
+.ig-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.ig-item { display: flex; flex-direction: column; gap: 6px; }
+.ig-item.ig-hidden { opacity: .55; }
+.ig-thumb { position: relative; display: grid; place-items: center; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; background: #0f172a; color: #fff; text-decoration: none; }
+.ig-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ig-thumb i { position: absolute; left: 6px; bottom: 6px; font-style: normal; font-size: 11px; background: rgba(0,0,0,.6); padding: 2px 6px; border-radius: 6px; }
+.ig-title { display: flex; gap: 4px; }
+.ig-title input { min-width: 0; flex: 1; }
+</style>
+{% endblock %}
