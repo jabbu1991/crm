@@ -35,9 +35,22 @@ class FakeInstagram:
         self.calls.append(url)
         if url in self.files:
             return 200, self.files[url]
+        if url.startswith(ig.GRAPH_FB + "/"):
+            path, q = url[len(ig.GRAPH_FB) + 1:].split("?", 1)
+            q = dict(urllib.parse.parse_qsl(q))
+            if not q["access_token"].startswith("EAA"):
+                return 400, json.dumps({"error": {"message": "Invalid OAuth access token", "code": 190}}).encode()
+            if path == "me/accounts":
+                return 200, json.dumps({"data": [{"id": "p1"}, {"id": "p2", "instagram_business_account": {
+                    "id": "1789", "username": "realview_creative_studio"}}]}).encode()
+            if path == "1789/stories":
+                return 200, json.dumps({"data": self.live}).encode()
+            if path == "1789":
+                return 200, json.dumps({"id": "1789", "username": "realview_creative_studio"}).encode()
+            raise AssertionError(f"unexpected call {url}")
         path, q = url[len(ig.GRAPH) + 1:].split("?", 1)
         q = dict(urllib.parse.parse_qsl(q))
-        if q.get("access_token", "").startswith("BAD"):
+        if q.get("access_token", "").startswith(("BAD", "EAA")):
             return 400, json.dumps({"error": {"message": "Invalid OAuth access token", "code": 190}}).encode()
         if path == "me":
             return 200, json.dumps({"user_id": "1784", "username": "realview_creative_studio"}).encode()
@@ -176,3 +189,21 @@ def test_token_renews_itself_after_a_week(iw):
     r = sup.post("/admin/instagram/check")
     assert "Checked Instagram" in r.text
     assert ig_state(iw)["token"] == "IGAA-renewed-token-xxxxxxxxxxxxxxxx"
+
+
+def test_unified_login_system_user_token(iw):
+    """Unified / Facebook Login token (EAA..., never expires): found through graph.facebook.com, never refreshed."""
+    sup, fake = iw["sup"], iw["fake"]
+    fake.live = [story(1)]
+    r = sup.post("/admin/instagram/token", {"token": "EAA" + "u" * 40})
+    assert "Instagram connected (@realview_creative_studio)" in r.text and "1 new story saved" in r.text, r.text[:2000]
+    st = ig_state(iw)
+    assert st["api"] == "fb" and st["user_id"] == "1789"
+    st["token_saved_at"] = "2020-01-01 00:00:00"
+    json.dump(st, open(os.path.join(iw["dir"], "instagram.json"), "w"))
+    r = sup.post("/admin/instagram/check")
+    assert "Checked Instagram" in r.text
+    assert not any("refresh_access_token" in u for u in fake.calls)
+    # the account id typed by hand also works
+    r = sup.post("/admin/instagram/token", {"token": "EAA" + "v" * 40, "ig_id": "1789"})
+    assert "Instagram connected" in r.text

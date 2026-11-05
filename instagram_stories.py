@@ -26,7 +26,8 @@ from datetime import datetime, timedelta, timezone
 from flask import abort, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 H = None
-GRAPH = "https://graph.instagram.com"
+GRAPH = "https://graph.instagram.com"              # Instagram Login tokens (IGAA...)
+GRAPH_FB = "https://graph.facebook.com/v23.0"      # Unified / Facebook Login tokens (EAA..., never expire)
 PROFILE = "realview_creative_studio"
 CHECK_EVERY_HOURS = 22      # automatic check: a little under 24 h, so a story is never missed
 RETRY_AFTER_HOURS = 1       # after a failed automatic check
@@ -115,9 +116,9 @@ def http(url, max_bytes=None):
         raise IgError(f"Network problem: {e}")
 
 
-def api(path, token, **params):
+def api(path, token, base=None, **params):
     params["access_token"] = token
-    status, body = http(f"{GRAPH}/{path}?" + urllib.parse.urlencode(params))
+    status, body = http(f"{base or GRAPH}/{path}?" + urllib.parse.urlencode(params))
     try:
         data = json.loads(body or b"{}")
     except ValueError:
@@ -202,8 +203,38 @@ def _remove_files(*names):
                 pass
 
 
+def _base(st):
+    return GRAPH_FB if st.get("api") == "fb" else GRAPH
+
+
+def discover(token, ig_id=""):
+    """Which kind of token is this, and which Instagram account does it reach?
+    Returns (api, user_id, username). Instagram Login tokens use graph.instagram.com; Unified / Facebook Login
+    (system-user) tokens use graph.facebook.com with the Instagram business account id."""
+    if ig_id:
+        me = api(ig_id, token, base=GRAPH_FB, fields="id,username")
+        return "fb", str(me.get("id") or ig_id), me.get("username") or ""
+    try:
+        me = api("me", token, fields="user_id,username")
+        return "ig", str(me.get("user_id") or me.get("id") or ""), me.get("username") or ""
+    except IgError as first:
+        try:
+            pages = api("me/accounts", token, base=GRAPH_FB, fields="instagram_business_account{id,username}")
+        except IgError:
+            raise first
+        for pg in pages.get("data", []):
+            acc = pg.get("instagram_business_account") or {}
+            if acc.get("id"):
+                return "fb", str(acc["id"]), acc.get("username") or ""
+        raise IgError("The token works, but no Instagram account was found. Paste the Instagram account ID "
+                      "too (Meta app -> Instagram -> API setup: the number shown under the account).")
+
+
 def _refresh_token(st):
-    """Long-lived tokens last 60 days; refresh them weekly so they never run out."""
+    """Instagram Login tokens last 60 days; refresh them weekly so they never run out.
+    (Unified / Facebook Login system-user tokens never expire.)"""
+    if st.get("api") == "fb":
+        return
     saved = st.get("token_saved_at") or ""
     if saved and saved > (datetime.now() - timedelta(days=REFRESH_TOKEN_DAYS)).strftime("%Y-%m-%d %H:%M:%S"):
         return
@@ -232,7 +263,7 @@ def run_check(kind="auto"):
             raise IgError("Instagram is not connected.")
         _refresh_token(st)
         user = st.get("user_id") or "me"
-        data = api(f"{user}/stories", st["token"],
+        data = api(f"{user}/stories", st["token"], base=_base(st),
                    fields="id,media_type,media_url,thumbnail_url,timestamp,permalink")
         known = {r[0] for r in db.execute("SELECT ig_id FROM ig_stories")}
         new, skipped = 0, []
@@ -363,15 +394,16 @@ def save_token():
     if len(token) < 20:
         flash("Paste the whole Instagram token.", "error")
         return redirect(url_for("admin_instagram"))
+    ig_id = re.sub(r"\D", "", request.form.get("ig_id", ""))
     try:
-        me = api("me", token, fields="user_id,username")
+        kind, user_id, username = discover(token, ig_id)
     except IgError as e:
         flash(f"Instagram did not accept this token: {e}", "error")
         return redirect(url_for("admin_instagram"))
-    save_state({"token": token, "token_saved_at": H.now(), "user_id": str(me.get("user_id") or me.get("id") or ""),
-                "username": me.get("username") or "", "connected_at": H.now()})
+    save_state({"token": token, "token_saved_at": H.now(), "api": kind, "user_id": user_id,
+                "username": username, "connected_at": H.now()})
     res = run_check("manual")
-    flash(f"Instagram connected (@{me.get('username') or '?'}). {res['message']}",
+    flash(f"Instagram connected (@{username or '?'}). {res['message']}",
           "success" if res["ok"] else "error")
     return redirect(url_for("admin_instagram"))
 
