@@ -27,7 +27,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, sen
 
 H = None
 GRAPH = "https://graph.instagram.com"              # Instagram Login tokens (IGAA...)
-GRAPH_FB = "https://graph.facebook.com/v23.0"      # Unified / Facebook Login tokens (EAA..., never expire)
+GRAPH_FB = "https://graph.facebook.com/v25.0"      # Unified / Facebook Login tokens (EAA..., never expire)
 PROFILE = "realview_creative_studio"
 CHECK_EVERY_HOURS = 22      # automatic check: a little under 24 h, so a story is never missed
 RETRY_AFTER_HOURS = 1       # after a failed automatic check
@@ -207,34 +207,65 @@ def _base(st):
     return GRAPH_FB if st.get("api") == "fb" else GRAPH
 
 
-def discover(token, ig_id=""):
-    """Which kind of token is this, and which Instagram account does it reach?
-    Returns (api, user_id, username). Instagram Login tokens use graph.instagram.com; Unified / Facebook Login
-    (system-user) tokens use graph.facebook.com with the Instagram business account id."""
-    if ig_id:
-        try:
-            me = api(ig_id, token, base=GRAPH_FB, fields="id,username")
-            return "fb", str(me.get("id") or ig_id), me.get("username") or ""
-        except IgError as first:
-            try:
-                me = api(ig_id, token, fields="id,username")
-            except IgError:
-                raise first
-            return "ig", str(me.get("id") or ig_id), me.get("username") or ""
+def _fb_candidates(token, ig_id=""):
+    """Instagram account ids this Unified / Facebook Login token may reach, best first, plus its scopes (for the
+    error text). The token describes itself (debug_token: granular scopes with the account ids it was given);
+    an account linked to a Facebook Page and a typed id are tried too."""
+    ids, scopes = [], []
     try:
-        me = api("me", token, fields="user_id,username")
-        return "ig", str(me.get("user_id") or me.get("id") or ""), me.get("username") or ""
-    except IgError as first:
-        try:
-            pages = api("me/accounts", token, base=GRAPH_FB, fields="instagram_business_account{id,username}")
-        except IgError:
-            raise first
-        for pg in pages.get("data", []):
+        info = api("debug_token", token, base=GRAPH_FB, input_token=token).get("data") or {}
+        scopes = list(info.get("scopes") or [])
+        for g in info.get("granular_scopes") or []:
+            if str(g.get("scope", "")).startswith("instagram"):
+                ids += [str(t) for t in g.get("target_ids") or []]
+    except IgError:
+        pass
+    try:
+        for pg in api("me/accounts", token, base=GRAPH_FB,
+                      fields="instagram_business_account{id,username}").get("data", []):
             acc = pg.get("instagram_business_account") or {}
             if acc.get("id"):
-                return "fb", str(acc["id"]), acc.get("username") or ""
-        raise IgError("The token works, but no Instagram account was found. Paste the Instagram account ID "
-                      "too (Meta app -> Instagram -> API setup: the long number shown under the account name).")
+                ids.append(str(acc["id"]))
+    except IgError:
+        pass
+    if ig_id:
+        ids.append(ig_id)
+    seen, out = set(), []
+    for i in ids:
+        if i and i not in seen:
+            seen.add(i)
+            out.append(i)
+    return out, scopes
+
+
+def discover(token, ig_id=""):
+    """Which kind of token is this, and which Instagram account does it reach?
+    Returns (api, user_id, username). Instagram Login tokens (IGAA...) use graph.instagram.com; Unified /
+    Facebook Login tokens (EAA..., system-user tokens never expire) use graph.facebook.com with the account id."""
+    first = None
+    if not token.startswith("EAA"):
+        try:
+            if ig_id:
+                me = api(ig_id, token, fields="id,username")
+                return "ig", str(me.get("id") or ig_id), me.get("username") or ""
+            me = api("me", token, fields="user_id,username")
+            return "ig", str(me.get("user_id") or me.get("id") or ""), me.get("username") or ""
+        except IgError as e:
+            first = e
+    ids, scopes = _fb_candidates(token, ig_id)
+    last = None
+    for i in ids:
+        try:
+            me = api(i, token, base=GRAPH_FB, fields="id,username")
+            return "fb", str(me.get("id") or i), me.get("username") or ""
+        except IgError as e:
+            last = e
+    if first and not ids and not scopes:
+        raise first
+    have = ", ".join(scopes) if scopes else "unknown"
+    raise IgError(("No Instagram account could be read with this token. " if not last else f"{last} ")
+                  + f"[Token permissions: {have}; accounts tried: {', '.join(ids) or 'none'}] — in the Meta app, "
+                  "the configuration needs instagram_basic and the Instagram account ticked, then Generate token again.")
 
 
 def _refresh_token(st):

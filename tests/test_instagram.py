@@ -40,6 +40,11 @@ class FakeInstagram:
             q = dict(urllib.parse.parse_qsl(q))
             if not q["access_token"].startswith("EAA"):
                 return 400, json.dumps({"error": {"message": "Invalid OAuth access token", "code": 190}}).encode()
+            if path == "debug_token":
+                if q["access_token"].startswith("EAAscoped"):
+                    return 200, json.dumps({"data": {"scopes": ["instagram_basic"], "granular_scopes": [
+                        {"scope": "instagram_basic", "target_ids": ["1789"]}]}}).encode()
+                return 200, json.dumps({"data": {"scopes": ["instagram_basic"]}}).encode()
             if path == "me/accounts":
                 return 200, json.dumps({"data": [{"id": "p1"}, {"id": "p2", "instagram_business_account": {
                     "id": "1789", "username": "realview_creative_studio"}}]}).encode()
@@ -47,7 +52,7 @@ class FakeInstagram:
                 return 200, json.dumps({"data": self.live}).encode()
             if path == "1789":
                 return 200, json.dumps({"id": "1789", "username": "realview_creative_studio"}).encode()
-            raise AssertionError(f"unexpected call {url}")
+            return 400, json.dumps({"error": {"message": f"Object with ID '{path}' does not exist", "code": 100}}).encode()
         path, q = url[len(ig.GRAPH) + 1:].split("?", 1)
         q = dict(urllib.parse.parse_qsl(q))
         if q.get("access_token", "").startswith(("BAD", "EAA")):
@@ -224,3 +229,22 @@ def test_account_id_on_instagram_graph(iw):
     r = sup.post("/admin/instagram/token", {"token": "IGAA" + "t" * 40, "ig_id": "1784"})
     assert "Instagram connected" in r.text and "1 new story saved" in r.text, r.text[:2000]
     assert ig_state(iw)["api"] == "ig"
+
+
+def test_unified_login_account_found_from_the_token_itself(iw):
+    sup, fake = iw["sup"], iw["fake"]
+    fake.live = [story(1)]
+    orig = fake.__call__
+
+    def no_pages(url, max_bytes=None):   # no Facebook Page: only debug_token knows the account
+        if "/me/accounts?" in url:
+            return 200, json.dumps({"data": []}).encode()
+        return orig(url, max_bytes)
+    import instagram_stories
+    instagram_stories.http = no_pages
+    r = sup.post("/admin/instagram/token", {"token": "EAAscoped" + "u" * 40})
+    assert "Instagram connected (@realview_creative_studio)" in r.text, r.text[:2000]
+    assert ig_state(iw)["user_id"] == "1789"
+    # nothing reachable: the error lists the token's permissions
+    r = sup.post("/admin/instagram/token", {"token": "EAA" + "w" * 40, "ig_id": "999"})
+    assert "Token permissions: instagram_basic" in r.text and "accounts tried: 999" in r.text
