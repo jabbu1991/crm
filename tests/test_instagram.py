@@ -207,3 +207,20 @@ def test_unified_login_system_user_token(iw):
     # the account id typed by hand also works
     r = sup.post("/admin/instagram/token", {"token": "EAA" + "v" * 40, "ig_id": "1789"})
     assert "Instagram connected" in r.text
+
+
+def test_account_id_on_instagram_graph(iw):
+    """A token that only graph.instagram.com accepts, with the account id typed by hand."""
+    sup, fake = iw["sup"], iw["fake"]
+    real = fake.__call__
+
+    def call(url, max_bytes=None):
+        if url.startswith(ig.GRAPH + "/1784?"):
+            return 200, json.dumps({"id": "1784", "username": "realview_creative_studio"}).encode()
+        return real(url, max_bytes)
+    import instagram_stories
+    instagram_stories.http = call
+    fake.live = [story(1)]
+    r = sup.post("/admin/instagram/token", {"token": "IGAA" + "t" * 40, "ig_id": "1784"})
+    assert "Instagram connected" in r.text and "1 new story saved" in r.text, r.text[:2000]
+    assert ig_state(iw)["api"] == "ig"

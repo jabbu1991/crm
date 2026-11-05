@@ -212,8 +212,15 @@ def discover(token, ig_id=""):
     Returns (api, user_id, username). Instagram Login tokens use graph.instagram.com; Unified / Facebook Login
     (system-user) tokens use graph.facebook.com with the Instagram business account id."""
     if ig_id:
-        me = api(ig_id, token, base=GRAPH_FB, fields="id,username")
-        return "fb", str(me.get("id") or ig_id), me.get("username") or ""
+        try:
+            me = api(ig_id, token, base=GRAPH_FB, fields="id,username")
+            return "fb", str(me.get("id") or ig_id), me.get("username") or ""
+        except IgError as first:
+            try:
+                me = api(ig_id, token, fields="id,username")
+            except IgError:
+                raise first
+            return "ig", str(me.get("id") or ig_id), me.get("username") or ""
     try:
         me = api("me", token, fields="user_id,username")
         return "ig", str(me.get("user_id") or me.get("id") or ""), me.get("username") or ""
@@ -227,7 +234,7 @@ def discover(token, ig_id=""):
             if acc.get("id"):
                 return "fb", str(acc["id"]), acc.get("username") or ""
         raise IgError("The token works, but no Instagram account was found. Paste the Instagram account ID "
-                      "too (Meta app -> Instagram -> API setup: the number shown under the account).")
+                      "too (Meta app -> Instagram -> API setup: the long number shown under the account name).")
 
 
 def _refresh_token(st):
