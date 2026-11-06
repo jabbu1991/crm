@@ -27,7 +27,7 @@ import zipfile
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
-from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template,
+from flask import (Flask, Response, abort, send_file, flash, g, jsonify, redirect, render_template,
                    request, send_from_directory, session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -3510,6 +3510,45 @@ def admin_org_toggle(oid):
         flash(f"'{org['name']}' is now {new}." + (" Its users can no longer log in." if new == "Inactive" else ""),
               "success")
     return redirect(url_for("admin_orgs"))
+
+
+# ---------------------------------------------------------------- one organization's data as Excel
+
+def send_org_excel(org):
+    """Build the organization's Excel (org_excel.py, read-only connection, temp file) and send it; the temp file is
+    removed when the download finishes."""
+    import org_excel
+    path = org_excel.build_temp(DB_PATH, org)
+    resp = send_file(path, as_attachment=True, download_name=org_excel.file_name(org, today()),
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", max_age=0)
+    resp.headers["Cache-Control"] = "no-store"
+
+    def _cleanup():
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    resp.call_on_close(_cleanup)
+    return resp
+
+
+@app.route("/admin/organizations/<int:oid>/excel")
+@super_required
+def admin_org_excel(oid):
+    """Super Admin: download one client's data as Excel. Written to that client's access log."""
+    org = org_or_404(oid)
+    audit("Super Admin downloaded all data (Excel)", org=oid)
+    return send_org_excel(org)
+
+
+@app.route("/export/all-excel")
+@admin_required
+def export_org_excel():
+    """Organization Admin: all of their own organization's data as one Excel file (never another organization's)."""
+    if is_super() and not g.get("viewing"):
+        return redirect(url_for("admin_orgs"))
+    audit("Super Admin downloaded all data (Excel)" if is_super() else "All data downloaded (Excel)", org=org_id())
+    return send_org_excel(g.org)
 
 
 @app.route("/admin/organizations/<int:oid>/view", methods=["POST"])

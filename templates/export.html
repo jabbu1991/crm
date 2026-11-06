@@ -3,7 +3,10 @@
 {% block content %}
 <div class="page-head">
   <h1>Export data</h1>
-  <a class="btn btn-primary" href="{{ url_for('export_zip') }}">⬇ Download everything (ZIP)</a>
+  <div class="actions">
+    {% if is_admin() and (viewing or not global_export) %}<a class="btn" href="{{ url_for('export_org_excel') }}">⬇️ Download all our data (Excel)</a>{% endif %}
+    <a class="btn btn-primary" href="{{ url_for('export_zip') }}">⬇ Download everything (ZIP)</a>
+  </div>
 </div>
 <div class="card export-scope">
   {% if global_export %}

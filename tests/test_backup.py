@@ -121,8 +121,10 @@ def test_connect_backup_photos_once_and_retention(bw):
         open(os.path.join(media, n + ".jpg"), "wb").write(b"\xff\xd8photo")
     r = sup.post("/admin/backups/run")
     assert "Backup done" in r.text, r.text[:3000]
-    dbs = fake.names("Database")
+    dbs = [n for n in fake.names("Database") if n.endswith(".db")]
     assert len(dbs) == 1 and dbs[0].startswith("crm-") and dbs[0].endswith(".db")
+    xls = [n for n in fake.names("Database") if n.endswith(".xlsx")]
+    assert "Client - " in " ".join(xls) and all(n.endswith(".xlsx") for n in xls)   # one Excel per organization
     assert fake.names("Photos") == ["a" * 32 + ".jpg", "b" * 32 + ".jpg"]
     up = next(f for f in fake.files.values() if f["name"] == dbs[0])
     assert up["size"] > 1000                               # a real SQLite file
@@ -135,8 +137,12 @@ def test_connect_backup_photos_once_and_retention(bw):
     dbf = next(i for i, f in fake.files.items() if f["name"] == "Database")
     old = (backup_drive.ist_now() - timedelta(days=40)).strftime("%Y-%m-%d")
     fake.files["old1"] = {"name": f"crm-{old}.db", "parents": [dbf]}
+    fake.files["old2"] = {"name": f"Client - {old}.xlsx", "parents": [dbf]}
+    keep = (backup_drive.ist_now() - timedelta(days=3)).strftime("%Y-%m-%d")
+    fake.files["new2"] = {"name": f"Client - {keep}.xlsx", "parents": [dbf]}
     r = sup.post("/admin/backups/run")
-    assert "1 old copy(ies) removed" in r.text and "old1" not in fake.files
+    assert "2 old copy(ies) removed" in r.text and "old1" not in fake.files and "old2" not in fake.files
+    assert "new2" in fake.files
     page = sup.get("/admin/backups").text
     assert "Connected" in page and "owner@example.com" in page and "By hand" in page
 
@@ -172,3 +178,21 @@ def test_download_gives_a_working_database(bw):
     open(path, "wb").write(r.data)
     c = sqlite3.connect(path)
     assert c.execute("SELECT COUNT(*) FROM organizations").fetchone()[0] == 2
+
+
+def test_one_failing_excel_does_not_stop_the_backup(bw, monkeypatch):
+    sup, fake = bw["sup"], bw["fake"]
+    connect(sup)
+    import org_excel
+    real = org_excel.build_temp
+
+    def flaky(db_path, org):
+        if org["code"] == "CLI":
+            raise RuntimeError("boom")
+        return real(db_path, org)
+    monkeypatch.setattr(org_excel, "build_temp", flaky)
+    r = sup.post("/admin/backups/run")
+    assert "Backup done" in r.text and "1 failed" in r.text
+    names = fake.names("Database")
+    assert any(n.endswith(".db") for n in names) and not any(n.startswith("Client - ") for n in names)
+    assert any(n.startswith("Real View - ") for n in names)     # the other organization still went up

@@ -17,7 +17,8 @@
       <td class="nowrap">
         {% if o.kind != 'agency' %}<form method="post" action="{{ url_for('admin_view_enter', oid=o.id) }}" class="inline">{{ csrf() }}<button class="linkbtn dark"><b>Open workspace</b></button></form> ·{% endif %}
         <a href="{{ url_for('admin_org_users', oid=o.id) }}">Accounts</a> ·
-        <a href="{{ url_for('admin_org_edit', oid=o.id) }}">Edit</a>
+        <a href="{{ url_for('admin_org_edit', oid=o.id) }}">Edit</a> ·
+        <a href="{{ url_for('admin_org_excel', oid=o.id) }}" title="All of this organization's data as one Excel file (recorded in its access log)">⬇️ Excel</a>
         {% if o.kind != 'agency' %} ·
         <form method="post" action="{{ url_for('admin_org_toggle', oid=o.id) }}" class="inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="{{ 'Deactivate' if o.status == 'Active' else 'Activate' }} {{ o.name }}?{{ ' All its users will be signed out and blocked.' if o.status == 'Active' }}">{{ csrf() }}<button class="linkbtn dark">{{ 'Deactivate' if o.status == 'Active' else 'Activate' }}</button></form>
         {% endif %}

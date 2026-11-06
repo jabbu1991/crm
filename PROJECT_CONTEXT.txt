@@ -324,6 +324,18 @@ Digital Catalogue (built 16 Oct 2026)
   order form's "Full product details / specification" (labelled on the form as seen by the customer) and the first
   catalogue photo of the product. Never price, advances, Note, Approved by or maker details.
 
+- Pre-upgrade backups (6 Nov): crm_db.prune_pre_upgrade_backups keeps the newest 5 crm-YYYYMMDD-HHMMSS-pre-vNN.db
+  files in the backups folder after each new pre-upgrade copy (never the copy just made, never the live DB, nothing
+  else in the folder). Server status page says so.
+- Per-organization Excel (6 Nov, org_excel.py, openpyxl write-only, explicit column lists, no secrets/tokens):
+  Organization, Leads, Follow-ups, Activity history, Deleted leads, Products & Services, Projects & Campaigns,
+  Staff & Users + Cafe sheets (Menu items, Bills, Bill items, Orders, Customers, Income & Expenses) + Order Tracker
+  sheets (Production orders, Stage history, Advances, Parts & warranty, Makers, Stages) for the modules the org uses.
+  Daily Drive backup uploads "<Org> - YYYY-MM-DD.xlsx" per active organization next to the .db (Database folder, same
+  30-day retention; one failure is logged and skipped). Super Admin: Client Organizations "⬇️ Excel"
+  (/admin/organizations/<id>/excel, written to the client's access log). Org Admin: Export page "⬇️ Download all our
+  data (Excel)" (/export/all-excel); staff 403.
+
 ======================================================================
 4D. DAILY BACKUP TO GOOGLE DRIVE (built 30 Oct 2026, backup_drive.py)
 ======================================================================

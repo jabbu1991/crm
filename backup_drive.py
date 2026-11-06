@@ -14,6 +14,7 @@ GOOGLE_CLIENT_SECRET (a free Google Cloud "OAuth client"). Uses only the Python 
 """
 import json
 import os
+import re
 import secrets
 import sqlite3
 import tempfile
@@ -229,6 +230,50 @@ def db_copy(dest):
         src.close()
 
 
+_XLSX_DAY = re.compile(r" - (\d{4}-\d{2}-\d{2})(?:-\d{4})?\.xlsx$")
+
+
+def file_day(name):
+    """The date in a backup file name: crm-YYYY-MM-DD….db or '<Organization> - YYYY-MM-DD[-HHMM].xlsx'."""
+    if name.startswith("crm-") and name.endswith(".db") and re.match(r"\d{4}-\d{2}-\d{2}", name[4:14]):
+        return name[4:14]
+    m = _XLSX_DAY.search(name)
+    return m.group(1) if m else None
+
+
+def upload_org_excels(drive, db_file, folder, stamp):
+    """Build and upload '<Organization> - <stamp>.xlsx' for every active client organization, from the database
+    copy `db_file`. Returns (uploaded, failed). Failures are logged without personal data and skipped."""
+    import org_excel
+    conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        orgs = conn.execute("SELECT * FROM organizations WHERE lower(status) = 'active' ORDER BY id").fetchall()
+    finally:
+        conn.close()
+    ok = failed = 0
+    for org in orgs:
+        path = None
+        try:
+            path = org_excel.build_temp(db_file, org)
+            drive.upload(path, org_excel.file_name(org, stamp), folder,
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            ok += 1
+        except Exception as e:  # noqa: BLE001  (one organization never stops the others)
+            failed += 1
+            try:
+                H.app.logger.warning("Excel backup failed for organization #%s: %s", org["id"], type(e).__name__)
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            if path:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    return ok, failed
+
+
 def run_backup(kind="auto"):
     """Upload today's database copy + new photos, remove copies older than 30 days. Returns the log row dict."""
     if not _lock.acquire(blocking=False):
@@ -252,10 +297,15 @@ def run_backup(kind="auto"):
         name = f"crm-{day}.db" if kind == "auto" else f"crm-{ist_now().strftime('%Y-%m-%d-%H%M')}.db"
         tmpdir = tempfile.mkdtemp(prefix="crm-backup-")
         tmp = os.path.join(tmpdir, name)
+        excel_ok = excel_fail = 0
         try:
             db_copy(tmp)
             size = os.path.getsize(tmp)
             drive.upload(tmp, name, dbf, "application/x-sqlite3")
+            # one Excel file per active client organization, built from the same copy; one failing never stops
+            # the others (the .db copy above is already uploaded)
+            excel_ok, excel_fail = upload_org_excels(drive, tmp, dbf, day if kind == "auto"
+                                                     else ist_now().strftime("%Y-%m-%d-%H%M"))
         finally:
             try:
                 os.remove(tmp)
@@ -276,11 +326,12 @@ def run_backup(kind="auto"):
         cutoff = (ist_now() - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%d")
         removed = 0
         for f in drive.files_in(dbf):
-            d = f["name"][4:14]
-            if f["name"].startswith("crm-") and len(d) == 10 and d < cutoff:
+            d = file_day(f["name"])
+            if d and d < cutoff:
                 drive.delete(f["id"])
                 removed += 1
         msg = f"Database {round(size / 1048576, 1)} MB uploaded as {name}; {photos} new photo(s)"
+        msg += f"; Excel for {excel_ok} organization(s)" + (f", {excel_fail} failed" if excel_fail else "")
         msg += f"; {removed} old copy(ies) removed" if removed else ""
         db.execute("UPDATE backup_log SET finished_at = ?, ok = 1, db_size = ?, photos = ?, message = ? WHERE id = ?",
                    (H.now(), size, photos, msg, log_id))

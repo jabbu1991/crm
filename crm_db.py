@@ -10,6 +10,7 @@ Before migrating a database that already holds data, a full backup is written to
 instance/backups/. Migrations only ADD tables/columns; no existing data is dropped.
 """
 import os
+import re
 import sqlite3
 from datetime import datetime
 
@@ -254,6 +255,37 @@ def backup_database(db_path, label):
     finally:
         src.close()
     return dest
+
+
+PRE_UPGRADE_KEEP = 5
+_PRE_UPGRADE_RE = re.compile(r"crm-\d{8}-\d{6}-pre-v\d+\.db")
+
+
+def prune_pre_upgrade_backups(folder, keep=PRE_UPGRADE_KEEP, protect=None, live_db=None):
+    """Delete older pre-upgrade copies in the backups folder, keeping the newest `keep`. Only files named
+    crm-YYYYMMDD-HHMMSS-pre-vNN.db directly inside `folder` are considered; `protect` (the copy just made) and the
+    live database are never deleted. Returns the list of deleted file names."""
+    folder = os.path.abspath(folder)
+    if not os.path.isdir(folder):
+        return []
+    never = {os.path.abspath(p) for p in (protect, live_db) if p}
+    names = sorted((n for n in os.listdir(folder)
+                    if _PRE_UPGRADE_RE.fullmatch(n) and os.path.isfile(os.path.join(folder, n))
+                    and not os.path.islink(os.path.join(folder, n))), reverse=True)   # newest first (timestamp in name)
+    keep_set = set(names[:keep])
+    if protect:
+        keep_set.add(os.path.basename(protect))
+    deleted = []
+    for n in names:
+        path = os.path.join(folder, n)
+        if n in keep_set or path in never or os.path.dirname(path) != folder:
+            continue
+        try:
+            os.remove(path)
+            deleted.append(n)
+        except OSError:
+            pass
+    return deleted
 
 
 def _columns(conn, table):
@@ -1241,6 +1273,10 @@ def migrate(db_path):
         pending = [(v, fn) for v, fn in MIGRATIONS if v > version]
         if pending and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
             backup_path = backup_database(db_path, f"pre-v{pending[0][0]}")
+            try:   # keep the newest few upgrade copies on the server disk; daily copies live in Google Drive
+                prune_pre_upgrade_backups(os.path.dirname(backup_path), protect=backup_path, live_db=db_path)
+            except Exception:
+                pass
         for v, fn in pending:
             conn.execute("PRAGMA foreign_keys = OFF")
             conn.execute("BEGIN")
