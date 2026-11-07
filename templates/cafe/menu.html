@@ -29,17 +29,17 @@
     <form class="inline-form" method="get"><input name="q" value="{{ q }}" placeholder="🔍 Search item or S.No"></form>
     {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ Add item</a>
     <a class="btn" href="{{ url_for('cafe.menu_bulk') }}">📥 Excel upload / photos</a>
-    {% if total %}<button type="button" class="btn" id="selToggle">🗑 Delete items</button>{% endif %}{% endif %}
+    {% if total or cats %}<button type="button" class="btn" id="selToggle">🗑 Delete items</button>{% endif %}{% endif %}
     <a class="btn" href="{{ url_for('cafe.menu_export') }}">⬇️ Download menu (Excel)</a>
     <a class="btn" href="{{ url_for('cafe.banners') }}">Offer banners</a>
     <a class="btn" href="{{ url_for('cafe.public_menu', code=g.org.code.lower(), preview=1) }}" target="_blank" rel="noopener">👁 View menu</a>
   </div>
 </div>
 {% if not viewing and session.get('menu_undo') %}
-<div class="card undo-card"><span>🗑 {{ session.get('menu_undo_n', 0) }} item(s) were removed from the menu.</span>
+<div class="card undo-card"><span>🗑 {{ session.get('menu_undo_n', 0) }} removed from the menu.</span>
   <form method="post" action="{{ url_for('cafe.menu_bulk_undo') }}" class="inline">{{ csrf() }}<button class="btn btn-sm">↩ Undo</button></form></div>
 {% endif %}
-{% if not viewing and total %}
+{% if not viewing and (total or cats) %}
 <form method="post" action="{{ url_for('cafe.menu_bulk_delete') }}" id="bulkdel" class="bulk-bar" hidden>{{ csrf() }}
   <label class="bulk-all"><input type="checkbox" id="pickAll"> Select all</label>
   <span class="muted small" id="pickCount">0 selected</span>
@@ -52,7 +52,7 @@
     <h2>Categories</h2>
     {% for c in cats %}
     <div class="cat-row">
-      <a href="#cat{{ c.id }}">{{ c.name }}</a> <span class="muted small">{{ c.n }}</span>
+      {% if not viewing and not q %}<input type="checkbox" class="cat-pick" data-cat="{{ c.id }}" aria-label="Select category {{ c.name }}">{% endif %}<a href="#cat{{ c.id }}">{{ c.name }}</a> <span class="muted small">{{ c.n }}</span>
       {% if not viewing %}
       <span class="cat-tools">
         <form method="post" action="{{ url_for('cafe.category_save') }}" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ c.id }}"><button class="linkbtn dark" name="action" value="up" title="Move up">▲</button><button class="linkbtn dark" name="action" value="down" title="Move down">▼</button></form>
@@ -70,55 +70,71 @@
   <div class="items-panel">
     {% for c in cats %}
     <section class="card" id="cat{{ c.id }}">
-      <h2>{% if not viewing and by_cat.get(c.id) %}<input type="checkbox" class="cat-pick" title="Select all in {{ c.name }}" aria-label="Select all in {{ c.name }}">{% endif %}{{ c.name }} {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('cafe.item_new', cat=c.id) }}">+ Item</a>{% endif %}</h2>
+      <h2>{% if not viewing and not q %}<input type="checkbox" class="cat-pick" name="cats" value="{{ c.id }}" form="bulkdel" data-cat="{{ c.id }}" title="Select the category with all its items" aria-label="Select category {{ c.name }}">{% endif %}{{ c.name }} {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('cafe.item_new', cat=c.id) }}">+ Item</a>{% endif %}</h2>
       {% for i in by_cat.get(c.id, []) %}{{ item_row(i) }}{% else %}<p class="muted small">No items in this category.</p>{% endfor %}
     </section>
     {% endfor %}
     {% if by_cat.get(None) %}
-    <section class="card"><h2>{% if not viewing %}<input type="checkbox" class="cat-pick" title="Select all in Other" aria-label="Select all in Other">{% endif %}Other <small class="muted">(no category)</small></h2>
+    <section class="card" id="catother"><h2>{% if not viewing %}<input type="checkbox" class="cat-pick" data-cat="other" title="Select all in Other" aria-label="Select all in Other">{% endif %}Other <small class="muted">(no category)</small></h2>
       {% for i in by_cat.get(None) %}{{ item_row(i) }}{% endfor %}</section>
     {% endif %}
     {% if not total %}<div class="card empty"><p>{{ 'Nothing matches your search.' if q else 'The menu has no items yet.' }}</p>{% if not viewing and not q %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ Add the first item</a> <a class="btn" href="{{ url_for('cafe.menu_bulk') }}">📥 Upload the menu from Excel</a>{% endif %}</div>{% endif %}
   </div>
 </div>
-{% if not viewing and total %}
+{% if not viewing and (total or cats) %}
 <script>
 (function () {
   var bar = document.getElementById('bulkdel'), toggle = document.getElementById('selToggle');
   if (!bar || !toggle) return;
-  var picks = function () { return document.querySelectorAll('.mi-pick'); };
-  function update() {
-    var all = picks(), n = 0;
-    all.forEach(function (c) { if (c.checked) n++; });
-    document.getElementById('pickCount').textContent = n + ' selected';
-    var del = document.getElementById('pickDel');
-    del.textContent = 'Delete selected (' + n + ')'; del.disabled = !n;
-    document.getElementById('pickAll').checked = n && n === all.length;
-    document.querySelectorAll('.cat-pick').forEach(function (cp) {
-      var box = cp.closest('section').querySelectorAll('.mi-pick'), k = 0;
-      box.forEach(function (c) { if (c.checked) k++; });
-      cp.checked = box.length && k === box.length; cp.indeterminate = k && k < box.length;
-    });
+  function picks(root) { return (root || document).querySelectorAll('.mi-pick'); }
+  function catIds() {
+    var ids = []; document.querySelectorAll('.cat-pick').forEach(function (c) { if (ids.indexOf(c.dataset.cat) < 0) ids.push(c.dataset.cat); });
+    return ids;
   }
+  function boxes(id) { return document.querySelectorAll('.cat-pick[data-cat="' + id + '"]'); }
+  function itemsOf(id) { var sec = document.getElementById('cat' + id); return sec ? picks(sec) : []; }
+  var emptyOn = {};  // categories with no items: their own tick
+  function counts() {
+    var n = 0, k = 0; picks().forEach(function (c) { if (c.checked) n++; });
+    catIds().forEach(function (id) { if (id !== 'other' && boxes(id)[0].checked) k++; });
+    return {items: n, cats: k};
+  }
+  function update() {
+    catIds().forEach(function (id) {
+      var its = itemsOf(id), on = 0; its.forEach(function (c) { if (c.checked) on++; });
+      var all = its.length ? on === its.length : !!emptyOn[id], part = its.length && on && on < its.length;
+      boxes(id).forEach(function (b) { b.checked = all; b.indeterminate = !!part; });
+    });
+    var t = counts(), label = (t.cats ? t.cats + (t.cats === 1 ? ' category, ' : ' categories, ') : '') + t.items + ' items';
+    document.getElementById('pickCount').textContent = label + ' selected';
+    var del = document.getElementById('pickDel');
+    del.textContent = 'Delete selected (' + (t.cats ? label : t.items) + ')'; del.disabled = !(t.items || t.cats);
+    var allItems = picks(), every = true;
+    allItems.forEach(function (c) { if (!c.checked) every = false; });
+    catIds().forEach(function (id) { if (!boxes(id)[0].checked) every = false; });
+    document.getElementById('pickAll').checked = every && (allItems.length || catIds().length);
+  }
+  function setCat(id, v) { itemsOf(id).forEach(function (c) { c.checked = v; }); emptyOn[id] = v; }
   function setMode(on) {
     document.body.classList.toggle('selmode', on); bar.hidden = !on;
-    if (!on) { picks().forEach(function (c) { c.checked = false; }); }
+    if (!on) { picks().forEach(function (c) { c.checked = false; }); emptyOn = {}; }
     update();
   }
   toggle.addEventListener('click', function () { setMode(!document.body.classList.contains('selmode')); });
   document.getElementById('selCancel').addEventListener('click', function () { setMode(false); });
   document.getElementById('pickAll').addEventListener('change', function () {
-    var v = this.checked; picks().forEach(function (c) { c.checked = v; }); update();
+    var v = this.checked; picks().forEach(function (c) { c.checked = v; }); catIds().forEach(function (id) { emptyOn[id] = v; }); update();
   });
-  document.querySelectorAll('.cat-pick').forEach(function (cp) {
-    cp.addEventListener('change', function () {
-      var v = cp.checked; cp.closest('section').querySelectorAll('.mi-pick').forEach(function (c) { c.checked = v; }); update();
-    });
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (!t.classList) return;
+    if (t.classList.contains('cat-pick')) { setCat(t.dataset.cat, t.checked); update(); }
+    else if (t.classList.contains('mi-pick')) update();
   });
-  document.addEventListener('change', function (e) { if (e.target.classList && e.target.classList.contains('mi-pick')) update(); });
   bar.addEventListener('submit', function (e) {
-    var n = 0; picks().forEach(function (c) { if (c.checked) n++; });
-    if (!n || !confirm('Remove ' + n + ' item(s) from the menu?\n\nOld bills and reports stay as they are. You can press Undo right after.')) e.preventDefault();
+    var t = counts();
+    var msg = 'Remove ' + (t.cats ? t.cats + (t.cats === 1 ? ' category and ' : ' categories and ') : '') + t.items +
+      ' item(s) from the menu?\n\nOld bills and reports stay as they are. You can press Undo right after.';
+    if (!(t.items || t.cats) || !confirm(msg)) e.preventDefault();
   });
 })();
 </script>

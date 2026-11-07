@@ -10,7 +10,7 @@ from datetime import timedelta
 from flask import abort, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
 
 from cafe import (ORDER_TYPES, PAYMENT_MODES, BILL_PAY_MODES, PAY_COLS, parse_payment, pay_text, card_url, qr_svg, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals,
-                  customer_by_phone, expire_points, get_settings, has_cafe, host as H, live_banners, max_redeemable,
+                  customer_by_phone, customer_choice, expire_points, get_settings, has_cafe, host as H, live_banners, max_redeemable,
                   menu_data, menu_url, offer_active, effective_price, phone10, point_value, points_for_amount,
                   round_rupee, rupees, take_points, theme_css, to_int, to_paise, to_float, today, today_date, token,
                   upsert_customer, valid_birthday)
@@ -836,6 +836,7 @@ def public_menu(code):
     types = [k for k in ("dine_in", "takeaway", "delivery") if st["order_" + k]]
     cfg = {
         "cats": data[0], "items": data[1], "banners": banners,
+        "top": customer_choice(org["id"], data[1], st["choice_count"]) if st["choice_on"] else [],
         "online": bool(st["online_on"] and types), "types": {k: ORDER_TYPES[k] for k in types},
         "table": dict(table) if table else None, "birthday_on": st["birthday_on"],
         "referral": st["referral"]["on"], "ref": (request.args.get("ref") or "")[:20],

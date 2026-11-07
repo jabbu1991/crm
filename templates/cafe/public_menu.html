@@ -138,7 +138,7 @@
   }
   function vegMark(i) { if (!i.type) return null; var v = el("span", "veg veg-" + i.type); v.title = i.type === "veg" ? "Veg" : (i.type === "egg" ? "Egg" : "Non-veg"); return v; }
   function card(i) {
-    var c = el("article", "item" + (i.available ? "" : " unavailable")); c.id = "i" + i.id;
+    var c = el("article", "item" + (i.available ? "" : " unavailable")); c.setAttribute("data-iid", i.id);
     c.onclick = function () { openItem(i.id); };
     if (i.photo) { var f = el("div", "ph"); var im = el("img"); im.src = i.photo; im.alt = i.name; im.loading = "lazy"; f.appendChild(im); c.appendChild(f); }
     else c.classList.add("no-photo");
@@ -160,6 +160,11 @@
       (map[i.cat] || other).items.push(i); shown++;
     });
     if (other.items.length) groups.push(other);
+    if (!ql && cfg.top && cfg.top.length) {  // ⭐ Customer Choice: the most ordered items, best first
+      var top = {id: "top", name: "⭐ Customer Choice", items: []};
+      cfg.top.forEach(function (id) { if (byId[id]) top.items.push(byId[id]); });
+      if (top.items.length) groups.unshift(top);
+    }
     var chips = $("cb-chips"); chips.innerHTML = "";
     groups.forEach(function (g) {
       if (!g.items.length) return;
@@ -181,8 +186,9 @@
     if (!$("item-sheet").hidden) openItem(id);
   }
   function refreshItem(id) {
-    var c = $("i" + id); if (!c) return;
-    var old = c.querySelector(".add"); old.parentNode.replaceChild(stepper(byId[id]), old);
+    document.querySelectorAll('[data-iid="' + id + '"]').forEach(function (c) {
+      var old = c.querySelector(".add"); if (old) old.parentNode.replaceChild(stepper(byId[id]), old);
+    });
   }
   function totals() { var n = 0, t = 0; Object.keys(cart).forEach(function (k) { n += cart[k]; t += cart[k] * lineP(k); }); return {n: n, t: t}; }
   function renderBar() {

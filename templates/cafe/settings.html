@@ -97,6 +97,10 @@
         <select name="sort_menu"><option value="popular" {{ 'selected' if st.sort_menu == 'popular' }}>Most sold first (last 30 days)</option><option value="menu" {{ 'selected' if st.sort_menu == 'menu' }}>Menu order</option></select></label>
     </div>
     <p class="muted small">Items marked 📌 Pin to top (in Menu → Edit item) always come first.</p>
+    <div class="row-2">
+      <label class="check"><input type="checkbox" name="choice_on" value="1" {{ 'checked' if st.choice_on }}> Show "⭐ Customer Choice" at the top of the customer menu</label>
+      <label>How many items <small>(most sold in the last 30 days)</small><input type="number" name="choice_count" min="3" max="30" value="{{ st.choice_count }}"></label>
+    </div>
     <label>Billing screen tiles
       <select name="pos_tiles"><option value="photo" {{ 'selected' if st.pos_tiles != 'text' }}>With photos</option><option value="text" {{ 'selected' if st.pos_tiles == 'text' }}>Text only (faster on a slow network)</option></select></label>
   </section>

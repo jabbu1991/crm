@@ -36,6 +36,8 @@ def settings():
         st["sort_pos"] = "popular" if f.get("sort_pos") == "popular" else "menu"
         st["sort_menu"] = "popular" if f.get("sort_menu") == "popular" else "menu"
         st["pos_tiles"] = "text" if f.get("pos_tiles") == "text" else "photo"
+        st["choice_on"] = checked("choice_on")
+        st["choice_count"] = int(to_float(f.get("choice_count"), 10, 3, 30))
         for k in ("kot_on", "kot_with_bill", "gst_on", "gst_inclusive", "menu_on", "online_on", "order_dine_in",
                   "order_takeaway", "order_delivery", "birthday_on", "bt_print", "bt_auto", "card_qr"):
             st[k] = checked(k)
@@ -393,19 +395,31 @@ def menu_bulk_delete():
         abort(403)
     oid = H.org_id()
     ids = sorted({int(x) for x in request.form.getlist("ids") if x.isdigit()})
-    if not ids:
-        flash("Tick at least one item.", "error")
+    cids = sorted({int(x) for x in request.form.getlist("cats") if x.isdigit()})
+    if not ids and not cids:
+        flash("Tick at least one item or category.", "error")
         return redirect(url_for("cafe.menu"))
     db = H.get_db()
-    found = [r[0] for r in db.execute(
-        f"SELECT id FROM menu_items WHERE org_id = ? AND active = 1 AND id IN ({','.join('?' * len(ids))})",
-        (oid, *ids)).fetchall()]
-    if not found:
+    cats = [r[0] for r in db.execute(
+        f"SELECT id FROM menu_categories WHERE org_id = ? AND active = 1 AND id IN ({','.join('?' * len(cids))})",
+        (oid, *cids)).fetchall()] if cids else []
+    found = set()
+    if ids:
+        found |= {r[0] for r in db.execute(
+            f"SELECT id FROM menu_items WHERE org_id = ? AND active = 1 AND id IN ({','.join('?' * len(ids))})",
+            (oid, *ids)).fetchall()}
+    if cats:  # a ticked category goes with all its items
+        found |= {r[0] for r in db.execute(
+            f"SELECT id FROM menu_items WHERE org_id = ? AND active = 1 AND category_id IN ({','.join('?' * len(cats))})",
+            (oid, *cats)).fetchall()}
+    found = sorted(found)
+    if not found and not cats:
         flash("Those items are already removed.", "warning")
         return redirect(url_for("cafe.menu"))
     ts = H.now()
     db.executemany("UPDATE menu_items SET active = 0, updated_at = ? WHERE id = ? AND org_id = ?",
                    [(ts, i, oid) for i in found])
+    db.executemany("UPDATE menu_categories SET active = 0 WHERE id = ? AND org_id = ?", [(c, oid) for c in cats])
     db.commit()
     old = session.pop("menu_undo", None)
     if old and re.fullmatch(r"[0-9a-f]{24}", old):
@@ -416,12 +430,14 @@ def menu_bulk_delete():
             pass
     tok = secrets.token_hex(12)
     with open(_undo_path(tok), "w") as fh:
-        json.dump({"org": oid, "ids": found}, fh)
+        json.dump({"org": oid, "ids": found, "cats": cats}, fh)
+    what = f"{len(found)} item{'s' if len(found) != 1 else ''}"
+    if cats:
+        what = f"{len(cats)} categor{'ies' if len(cats) != 1 else 'y'} and " + what
     session["menu_undo"] = tok
-    session["menu_undo_n"] = len(found)
-    H.audit("Menu items removed", f"{len(found)} item(s)")
-    flash(f"{len(found)} item{'s' if len(found) != 1 else ''} removed from the menu. Old bills keep them as they were.",
-          "success")
+    session["menu_undo_n"] = what
+    H.audit("Menu items removed", what)
+    flash(f"{what} removed from the menu. Old bills keep them as they were.", "success")
     return redirect(url_for("cafe.menu"))
 
 
@@ -453,9 +469,14 @@ def menu_bulk_undo():
     taken = {r[0] for r in db.execute("SELECT serial FROM menu_items WHERE org_id = ? AND active = 1 AND serial IS NOT NULL",
                                       (oid,)).fetchall()}
     ts = H.now()
+    back_cats = 0
+    for cid in data.get("cats", []):
+        back_cats += db.execute("UPDATE menu_categories SET active = 1 WHERE id = ? AND org_id = ? AND active = 0",
+                                (cid, oid)).rowcount
+    live_cats = {r[0] for r in db.execute("SELECT id FROM menu_categories WHERE org_id = ? AND active = 1", (oid,))}
     back = 0
     for iid in data.get("ids", []):
-        row = db.execute("SELECT id, serial FROM menu_items WHERE id = ? AND org_id = ? AND active = 0",
+        row = db.execute("SELECT id, serial, category_id FROM menu_items WHERE id = ? AND org_id = ? AND active = 0",
                          (iid, oid)).fetchone()
         if not row:
             continue
@@ -465,16 +486,20 @@ def menu_bulk_undo():
             while sno in taken:
                 sno += 1
         taken.add(sno)
-        db.execute("UPDATE menu_items SET active = 1, serial = ?, updated_at = ? WHERE id = ? AND org_id = ?",
-                   (sno, ts, iid, oid))
+        cat = row["category_id"] if row["category_id"] in live_cats else None  # its category was removed later -> Other
+        db.execute("UPDATE menu_items SET active = 1, serial = ?, category_id = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+                   (sno, cat, ts, iid, oid))
         back += 1
     db.commit()
     try:
         os.remove(path)
     except OSError:
         pass
-    H.audit("Menu items brought back (undo)", f"{back} item(s)")
-    flash(f"{back} item{'s' if back != 1 else ''} back on the menu.", "success")
+    what = f"{back} item{'s' if back != 1 else ''}"
+    if back_cats:
+        what = f"{back_cats} categor{'ies' if back_cats != 1 else 'y'} and " + what
+    H.audit("Menu items brought back (undo)", what)
+    flash(f"{what} back on the menu.", "success")
     return redirect(url_for("cafe.menu"))
 
 

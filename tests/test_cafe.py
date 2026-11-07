@@ -1141,3 +1141,58 @@ def test_menu_bulk_delete_select_all_and_undo(cw):
     w["sup"].post(f"/admin/organizations/{w['oid']('CHAI')}/view")
     assert w["sup"].post("/cafe/menu/bulk-delete", {"ids": [str(juice)]}, follow=False).status_code == 403
     assert w["db"]().execute("SELECT active FROM menu_items WHERE id = ?", (juice,)).fetchone()[0] == 1
+
+
+def test_menu_delete_categories_with_items_and_undo(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    for n in ("Juices", "Snacks", "Empty"):
+        b.post("/cafe/menu/category", {"action": "add", "name": n})
+    cid = {r["name"]: r["id"] for r in w["db"]().execute("SELECT id, name FROM menu_categories")}
+    add_item(b, "Orange", "40", category_id=str(cid["Juices"]))
+    add_item(b, "Apple", "50", category_id=str(cid["Juices"]))
+    add_item(b, "Samosa", "15", category_id=str(cid["Snacks"]))
+    page = b.get("/cafe/menu").text
+    assert f'name="cats" value="{cid["Juices"]}"' in page
+    r = b.post("/cafe/menu/bulk-delete", {"cats": [str(cid["Juices"]), str(cid["Empty"])]})
+    assert "2 categories and 2 items removed" in r.text
+    db = w["db"]()
+    cats = {x["name"]: x["active"] for x in db.execute("SELECT name, active FROM menu_categories")}
+    assert cats == {"Juices": 0, "Snacks": 1, "Empty": 0}
+    act = {x["name"]: x["active"] for x in db.execute("SELECT name, active FROM menu_items")}
+    assert act == {"Orange": 0, "Apple": 0, "Samosa": 1}
+    r = b.post("/cafe/menu/bulk-undo")
+    assert "2 categories and 2 items back on the menu" in r.text
+    db = w["db"]()
+    assert all(x[0] == 1 for x in db.execute("SELECT active FROM menu_categories"))
+    assert {x["name"]: x["category_id"] for x in db.execute("SELECT name, category_id FROM menu_items")}["Orange"] == cid["Juices"]
+    # another cafe's category is ignored
+    w["cafe2"].post("/cafe/menu/category", {"action": "add", "name": "Theirs"})
+    theirs = w["db"]().execute("SELECT id FROM menu_categories WHERE name = 'Theirs'").fetchone()[0]
+    assert "Those items are already removed" in b.post("/cafe/menu/bulk-delete", {"cats": [str(theirs)]}).text
+    assert w["db"]().execute("SELECT active FROM menu_categories WHERE id = ?", (theirs,)).fetchone()[0] == 1
+
+
+def test_customer_choice_on_public_menu(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b, choice_on="1", choice_count="3")
+    for n in ("Aaa", "Bbb", "Ccc", "Ddd", "Eee"):
+        add_item(b, n, "10")
+    ids = {n: item_id(w, n) for n in ("Aaa", "Bbb", "Ccc", "Ddd", "Eee")}
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [
+        {"item_id": ids["Ccc"], "qty": 5}, {"item_id": ids["Aaa"], "qty": 3}, {"item_id": ids["Ddd"], "qty": 2},
+        {"item_id": ids["Eee"], "qty": 1}]})
+
+    def top():
+        m = re.search(r'"top": \[([^\]]*)\]', Browser().get("/m/chai").text)
+        return [int(x) for x in m.group(1).split(",") if x.strip()]
+    assert top() == [ids["Ccc"], ids["Aaa"], ids["Ddd"]]  # most ordered first, 3 items
+    assert "⭐ Customer Choice" in Browser().get("/m/chai").text
+    # not available items are left out
+    b.post(f"/cafe/menu/item/{ids['Ccc']}/toggle", {"next": "/cafe/menu"})
+    assert top() == [ids["Aaa"], ids["Ddd"], ids["Eee"]]
+    # can be turned off
+    settings(b, choice_count="3")
+    assert top() == []

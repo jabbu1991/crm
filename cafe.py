@@ -112,6 +112,7 @@ DEFAULT_SETTINGS = {
     "referral": {"on": False, "referrer_points": 50, "new_points": 25},
     "birthday_on": False,
     "sort_pos": "popular", "sort_menu": "popular",   # most sold first, or the menu order
+    "choice_on": True, "choice_count": 10,           # "⭐ Customer Choice" on the customer menu (most sold, 30 days)
     "bt_print": False, "bt_auto": False,             # phone Bluetooth printing through the RawBT app
     "pos_tiles": "photo",                            # billing tiles with photos, or text only (slow network)
     "card_qr": False,                                # QR to the customer's My Card page on printed bills
@@ -423,6 +424,14 @@ def popularity(oid, days=30):
                       WHERE b.org_id = ? AND b.status = 'paid' AND b.bill_date >= ? AND bi.item_id IS NOT NULL
                       GROUP BY bi.item_id""", (oid, since))
     return {r["item_id"]: r["n"] for r in rows}
+
+
+def customer_choice(oid, items, count=10):
+    """Ids of the most sold items of the last 30 days, best first (only items on the menu and available)."""
+    pop = popularity(oid)
+    ok = [i for i in items if i["available"] and pop.get(i["id"], 0) > 0]
+    ok.sort(key=lambda i: -pop[i["id"]])
+    return [i["id"] for i in ok[:max(0, int(count or 0))]]
 
 
 def menu_data(oid, for_public=False, sort=None):

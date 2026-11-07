@@ -278,3 +278,6 @@ body.selmode .mi .switch, body.selmode .mi .edit-btn { display: none; }
 .bulk-all input { width: 20px; height: 20px; }
 .bulk-btns { margin-left: auto; display: flex; gap: 8px; }
 .undo-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-left: 4px solid #e0a100; }
+.items-panel section > h2 { justify-content: flex-start; gap: 8px; }
+.items-panel section > h2 > .btn, .items-panel section > h2 > small { margin-left: auto; }
+.cat-row .cat-pick { margin: 0; }

@@ -181,6 +181,8 @@ Digital Catalogue (built 16 Oct 2026)
 - Menu items have a serial number (S.No), auto 1, 2, 3... (editable, unique per cafe). Staff only: shown in Menu list,
   billing tiles, Excel. Billing: type S.No + Enter to add the item. NOT shown on the customer menu or bill.
 - Bulk delete (Menu > 🗑 Delete items): tick items / Select all / per-category select-all -> POST /cafe/menu/bulk-delete sets active=0 (old bills untouched). Ids saved in imports/menu-undo-<token>.json, token in session; POST /cafe/menu/bulk-undo restores (S.No taken meanwhile -> next free). Needs menu_edit; not while Super Admin is viewing.
+  Categories can be ticked too (cats=...): category active=0 plus all its items; undo restores both (item whose category is gone -> Other).
+- Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).
 - Bulk menu (Menu > Excel upload / photos): download empty template or current menu (.xlsx, openpyxl), upload ->
   preview (new / update / problem rows) -> Import. Match by S.No, else item name. New categories auto-created.
   Bulk photos: file name = item name or S.No (e.g. 'Kerala Chai.jpg', '12.jpg'), each cropped square under 50 KB.
