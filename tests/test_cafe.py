@@ -1111,6 +1111,8 @@ def test_menu_bulk_delete_select_all_and_undo(cw):
     pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [{"item_id": tea, "qty": 2}]})
     page = b.get("/cafe/menu").text
     assert "🗑 Delete items" in page and 'class="mi-pick"' in page and "Select all" in page
+    assert "<title>Menu" in page and "<script" not in page.split("</title>")[0]  # the select script is in the page body
+    assert "getElementById('selToggle')" in page.split("</title>")[1]
     # another cafe's id in the list is ignored
     r = b.post("/cafe/menu/bulk-delete", {"ids": [str(tea), str(coffee), str(theirs)]})
     assert "2 items removed from the menu" in r.text and "↩ Undo" in r.text

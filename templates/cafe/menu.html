@@ -1,47 +1,5 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
-{% block title %}Menu{% if not viewing and total %}
-<script>
-(function () {
-  var bar = document.getElementById('bulkdel'), toggle = document.getElementById('selToggle');
-  if (!bar || !toggle) return;
-  var picks = function () { return document.querySelectorAll('.mi-pick'); };
-  function update() {
-    var all = picks(), n = 0;
-    all.forEach(function (c) { if (c.checked) n++; });
-    document.getElementById('pickCount').textContent = n + ' selected';
-    var del = document.getElementById('pickDel');
-    del.textContent = 'Delete selected (' + n + ')'; del.disabled = !n;
-    document.getElementById('pickAll').checked = n && n === all.length;
-    document.querySelectorAll('.cat-pick').forEach(function (cp) {
-      var box = cp.closest('section').querySelectorAll('.mi-pick'), k = 0;
-      box.forEach(function (c) { if (c.checked) k++; });
-      cp.checked = box.length && k === box.length; cp.indeterminate = k && k < box.length;
-    });
-  }
-  function setMode(on) {
-    document.body.classList.toggle('selmode', on); bar.hidden = !on;
-    if (!on) { picks().forEach(function (c) { c.checked = false; }); }
-    update();
-  }
-  toggle.addEventListener('click', function () { setMode(!document.body.classList.contains('selmode')); });
-  document.getElementById('selCancel').addEventListener('click', function () { setMode(false); });
-  document.getElementById('pickAll').addEventListener('change', function () {
-    var v = this.checked; picks().forEach(function (c) { c.checked = v; }); update();
-  });
-  document.querySelectorAll('.cat-pick').forEach(function (cp) {
-    cp.addEventListener('change', function () {
-      var v = cp.checked; cp.closest('section').querySelectorAll('.mi-pick').forEach(function (c) { c.checked = v; }); update();
-    });
-  });
-  document.addEventListener('change', function (e) { if (e.target.classList && e.target.classList.contains('mi-pick')) update(); });
-  bar.addEventListener('submit', function (e) {
-    var n = 0; picks().forEach(function (c) { if (c.checked) n++; });
-    if (!n || !confirm('Remove ' + n + ' item(s) from the menu?\n\nOld bills and reports stay as they are. You can press Undo right after.')) e.preventDefault();
-  });
-})();
-</script>
-{% endif %}
-{% endblock %}
+{% block title %}Menu{% endblock %}
 {% macro item_row(i) %}
 <div class="mi {{ 'mi-off' if not i.available }}" id="item{{ i.id }}">
   {% if not viewing %}<input type="checkbox" class="mi-pick" name="ids" value="{{ i.id }}" form="bulkdel" aria-label="Select {{ i.name }}">{% endif %}
@@ -123,4 +81,46 @@
     {% if not total %}<div class="card empty"><p>{{ 'Nothing matches your search.' if q else 'The menu has no items yet.' }}</p>{% if not viewing and not q %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ Add the first item</a> <a class="btn" href="{{ url_for('cafe.menu_bulk') }}">📥 Upload the menu from Excel</a>{% endif %}</div>{% endif %}
   </div>
 </div>
+{% if not viewing and total %}
+<script>
+(function () {
+  var bar = document.getElementById('bulkdel'), toggle = document.getElementById('selToggle');
+  if (!bar || !toggle) return;
+  var picks = function () { return document.querySelectorAll('.mi-pick'); };
+  function update() {
+    var all = picks(), n = 0;
+    all.forEach(function (c) { if (c.checked) n++; });
+    document.getElementById('pickCount').textContent = n + ' selected';
+    var del = document.getElementById('pickDel');
+    del.textContent = 'Delete selected (' + n + ')'; del.disabled = !n;
+    document.getElementById('pickAll').checked = n && n === all.length;
+    document.querySelectorAll('.cat-pick').forEach(function (cp) {
+      var box = cp.closest('section').querySelectorAll('.mi-pick'), k = 0;
+      box.forEach(function (c) { if (c.checked) k++; });
+      cp.checked = box.length && k === box.length; cp.indeterminate = k && k < box.length;
+    });
+  }
+  function setMode(on) {
+    document.body.classList.toggle('selmode', on); bar.hidden = !on;
+    if (!on) { picks().forEach(function (c) { c.checked = false; }); }
+    update();
+  }
+  toggle.addEventListener('click', function () { setMode(!document.body.classList.contains('selmode')); });
+  document.getElementById('selCancel').addEventListener('click', function () { setMode(false); });
+  document.getElementById('pickAll').addEventListener('change', function () {
+    var v = this.checked; picks().forEach(function (c) { c.checked = v; }); update();
+  });
+  document.querySelectorAll('.cat-pick').forEach(function (cp) {
+    cp.addEventListener('change', function () {
+      var v = cp.checked; cp.closest('section').querySelectorAll('.mi-pick').forEach(function (c) { c.checked = v; }); update();
+    });
+  });
+  document.addEventListener('change', function (e) { if (e.target.classList && e.target.classList.contains('mi-pick')) update(); });
+  bar.addEventListener('submit', function (e) {
+    var n = 0; picks().forEach(function (c) { if (c.checked) n++; });
+    if (!n || !confirm('Remove ' + n + ' item(s) from the menu?\n\nOld bills and reports stay as they are. You can press Undo right after.')) e.preventDefault();
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
