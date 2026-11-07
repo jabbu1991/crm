@@ -1097,3 +1097,45 @@ def test_push_reminders_until_handled(cw, monkeypatch):
         c.execute("UPDATE cafe_orders SET created_at = '2020-01-01 10:00:00' WHERE status = 'pending'")
     with crm_app.app.app_context():
         assert cafe_push.remind_waiting(_t.time() + 200) == 0
+
+
+def test_menu_bulk_delete_select_all_and_undo(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    for n, p in (("Tea", "15"), ("Coffee", "20"), ("Juice", "40")):
+        add_item(b, n, p)
+    add_item(w["cafe2"], "Their Tea", "10")
+    tea, coffee, juice = item_id(w, "Tea"), item_id(w, "Coffee"), item_id(w, "Juice")
+    theirs = item_id(w, "Their Tea", "OTHER")
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [{"item_id": tea, "qty": 2}]})
+    page = b.get("/cafe/menu").text
+    assert "🗑 Delete items" in page and 'class="mi-pick"' in page and "Select all" in page
+    # another cafe's id in the list is ignored
+    r = b.post("/cafe/menu/bulk-delete", {"ids": [str(tea), str(coffee), str(theirs)]})
+    assert "2 items removed from the menu" in r.text and "↩ Undo" in r.text
+    act = {x["name"]: x["active"] for x in w["db"]().execute("SELECT name, active FROM menu_items")}
+    assert act == {"Tea": 0, "Coffee": 0, "Juice": 1, "Their Tea": 1}
+    # old bill keeps the item
+    assert w["db"]().execute("SELECT name, qty FROM cafe_bill_items").fetchone()[0] == "Tea"
+    assert ">Tea<" not in b.get("/cafe/menu").text
+    # a new item takes Tea's S.No meanwhile -> Tea gets a new number on undo
+    old_sno = w["db"]().execute("SELECT serial FROM menu_items WHERE id = ?", (tea,)).fetchone()[0]
+    add_item(b, "Lassi", "30", serial=str(old_sno))
+    r = b.post("/cafe/menu/bulk-undo")
+    assert "2 items back on the menu" in r.text
+    rows = {x["name"]: (x["active"], x["serial"]) for x in w["db"]().execute(
+        "SELECT name, active, serial FROM menu_items WHERE org_id = ?", (w["oid"]("CHAI"),))}
+    assert all(a == 1 for a, _ in rows.values())
+    sers = [s for _, s in rows.values()]
+    assert len(sers) == len(set(sers)) and rows["Lassi"][1] == old_sno
+    # undo only once
+    assert "Nothing to undo" in b.post("/cafe/menu/bulk-undo").text
+    # nothing ticked
+    assert "Tick at least one item" in b.post("/cafe/menu/bulk-delete", {}).text
+    # staff without menu edit cannot; Super Admin viewing cannot
+    cashier = make_staff(b, "cashier9", perms=["bill_create"])
+    assert cashier.post("/cafe/menu/bulk-delete", {"ids": [str(juice)]}, follow=False).status_code == 403
+    w["sup"].post(f"/admin/organizations/{w['oid']('CHAI')}/view")
+    assert w["sup"].post("/cafe/menu/bulk-delete", {"ids": [str(juice)]}, follow=False).status_code == 403
+    assert w["db"]().execute("SELECT active FROM menu_items WHERE id = ?", (juice,)).fetchone()[0] == 1

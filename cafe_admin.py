@@ -374,6 +374,110 @@ def item_action(iid, action):
     return redirect(H.safe_next(url_for("cafe.menu")) + f"#item{iid}")
 
 
+# ---------------------------------------------------------------- remove many menu items at once (with undo)
+
+def _undo_path(tok):
+    import os
+    from cafe_import import import_dir
+    return os.path.join(import_dir(), f"menu-undo-{tok}.json")
+
+
+@bp.route("/cafe/menu/bulk-delete", methods=["POST"])
+@cafe_view("menu_edit")
+def menu_bulk_delete():
+    """Take the ticked items off the menu (active = 0, like the single delete): old bills keep them. The ids are kept
+    in a small file so the last removal can be undone."""
+    import secrets
+    from flask import session
+    if g.get("viewing"):
+        abort(403)
+    oid = H.org_id()
+    ids = sorted({int(x) for x in request.form.getlist("ids") if x.isdigit()})
+    if not ids:
+        flash("Tick at least one item.", "error")
+        return redirect(url_for("cafe.menu"))
+    db = H.get_db()
+    found = [r[0] for r in db.execute(
+        f"SELECT id FROM menu_items WHERE org_id = ? AND active = 1 AND id IN ({','.join('?' * len(ids))})",
+        (oid, *ids)).fetchall()]
+    if not found:
+        flash("Those items are already removed.", "warning")
+        return redirect(url_for("cafe.menu"))
+    ts = H.now()
+    db.executemany("UPDATE menu_items SET active = 0, updated_at = ? WHERE id = ? AND org_id = ?",
+                   [(ts, i, oid) for i in found])
+    db.commit()
+    old = session.pop("menu_undo", None)
+    if old and re.fullmatch(r"[0-9a-f]{24}", old):
+        try:
+            import os
+            os.remove(_undo_path(old))
+        except OSError:
+            pass
+    tok = secrets.token_hex(12)
+    with open(_undo_path(tok), "w") as fh:
+        json.dump({"org": oid, "ids": found}, fh)
+    session["menu_undo"] = tok
+    session["menu_undo_n"] = len(found)
+    H.audit("Menu items removed", f"{len(found)} item(s)")
+    flash(f"{len(found)} item{'s' if len(found) != 1 else ''} removed from the menu. Old bills keep them as they were.",
+          "success")
+    return redirect(url_for("cafe.menu"))
+
+
+@bp.route("/cafe/menu/bulk-undo", methods=["POST"])
+@cafe_view("menu_edit")
+def menu_bulk_undo():
+    """Bring back the items of the last bulk removal (photos and details as they were; a S.No taken meanwhile by
+    another item gets a new number)."""
+    import os
+    from flask import session
+    if g.get("viewing"):
+        abort(403)
+    tok = session.pop("menu_undo", None)
+    session.pop("menu_undo_n", None)
+    if not tok or not re.fullmatch(r"[0-9a-f]{24}", tok):
+        flash("Nothing to undo.", "warning")
+        return redirect(url_for("cafe.menu"))
+    path = _undo_path(tok)
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        flash("Nothing to undo.", "warning")
+        return redirect(url_for("cafe.menu"))
+    oid = H.org_id()
+    if data.get("org") != oid:
+        abort(404)
+    db = H.get_db()
+    taken = {r[0] for r in db.execute("SELECT serial FROM menu_items WHERE org_id = ? AND active = 1 AND serial IS NOT NULL",
+                                      (oid,)).fetchall()}
+    ts = H.now()
+    back = 0
+    for iid in data.get("ids", []):
+        row = db.execute("SELECT id, serial FROM menu_items WHERE id = ? AND org_id = ? AND active = 0",
+                         (iid, oid)).fetchone()
+        if not row:
+            continue
+        sno = row["serial"]
+        if sno is None or sno in taken:
+            sno = next_serial(oid)
+            while sno in taken:
+                sno += 1
+        taken.add(sno)
+        db.execute("UPDATE menu_items SET active = 1, serial = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+                   (sno, ts, iid, oid))
+        back += 1
+    db.commit()
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    H.audit("Menu items brought back (undo)", f"{back} item(s)")
+    flash(f"{back} item{'s' if back != 1 else ''} back on the menu.", "success")
+    return redirect(url_for("cafe.menu"))
+
+
 # ---------------------------------------------------------------- offer banners
 
 @bp.route("/cafe/banners")

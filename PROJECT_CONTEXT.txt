@@ -180,6 +180,7 @@ Digital Catalogue (built 16 Oct 2026)
 - All cafe screens are in ENGLISH (owner's request, 24 Oct). Owner discusses in Malayalam, software text stays English.
 - Menu items have a serial number (S.No), auto 1, 2, 3... (editable, unique per cafe). Staff only: shown in Menu list,
   billing tiles, Excel. Billing: type S.No + Enter to add the item. NOT shown on the customer menu or bill.
+- Bulk delete (Menu > 🗑 Delete items): tick items / Select all / per-category select-all -> POST /cafe/menu/bulk-delete sets active=0 (old bills untouched). Ids saved in imports/menu-undo-<token>.json, token in session; POST /cafe/menu/bulk-undo restores (S.No taken meanwhile -> next free). Needs menu_edit; not while Super Admin is viewing.
 - Bulk menu (Menu > Excel upload / photos): download empty template or current menu (.xlsx, openpyxl), upload ->
   preview (new / update / problem rows) -> Import. Match by S.No, else item name. New categories auto-created.
   Bulk photos: file name = item name or S.No (e.g. 'Kerala Chai.jpg', '12.jpg'), each cropped square under 50 KB.

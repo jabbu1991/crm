@@ -1,7 +1,50 @@
 {% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
-{% block title %}Menu{% endblock %}
+{% block title %}Menu{% if not viewing and total %}
+<script>
+(function () {
+  var bar = document.getElementById('bulkdel'), toggle = document.getElementById('selToggle');
+  if (!bar || !toggle) return;
+  var picks = function () { return document.querySelectorAll('.mi-pick'); };
+  function update() {
+    var all = picks(), n = 0;
+    all.forEach(function (c) { if (c.checked) n++; });
+    document.getElementById('pickCount').textContent = n + ' selected';
+    var del = document.getElementById('pickDel');
+    del.textContent = 'Delete selected (' + n + ')'; del.disabled = !n;
+    document.getElementById('pickAll').checked = n && n === all.length;
+    document.querySelectorAll('.cat-pick').forEach(function (cp) {
+      var box = cp.closest('section').querySelectorAll('.mi-pick'), k = 0;
+      box.forEach(function (c) { if (c.checked) k++; });
+      cp.checked = box.length && k === box.length; cp.indeterminate = k && k < box.length;
+    });
+  }
+  function setMode(on) {
+    document.body.classList.toggle('selmode', on); bar.hidden = !on;
+    if (!on) { picks().forEach(function (c) { c.checked = false; }); }
+    update();
+  }
+  toggle.addEventListener('click', function () { setMode(!document.body.classList.contains('selmode')); });
+  document.getElementById('selCancel').addEventListener('click', function () { setMode(false); });
+  document.getElementById('pickAll').addEventListener('change', function () {
+    var v = this.checked; picks().forEach(function (c) { c.checked = v; }); update();
+  });
+  document.querySelectorAll('.cat-pick').forEach(function (cp) {
+    cp.addEventListener('change', function () {
+      var v = cp.checked; cp.closest('section').querySelectorAll('.mi-pick').forEach(function (c) { c.checked = v; }); update();
+    });
+  });
+  document.addEventListener('change', function (e) { if (e.target.classList && e.target.classList.contains('mi-pick')) update(); });
+  bar.addEventListener('submit', function (e) {
+    var n = 0; picks().forEach(function (c) { if (c.checked) n++; });
+    if (!n || !confirm('Remove ' + n + ' item(s) from the menu?\n\nOld bills and reports stay as they are. You can press Undo right after.')) e.preventDefault();
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
 {% macro item_row(i) %}
 <div class="mi {{ 'mi-off' if not i.available }}" id="item{{ i.id }}">
+  {% if not viewing %}<input type="checkbox" class="mi-pick" name="ids" value="{{ i.id }}" form="bulkdel" aria-label="Select {{ i.name }}">{% endif %}
   <span class="mi-sno" title="S.No">{{ i.serial or '–' }}</span>
   {% if i.photo %}<img src="{{ url_for('media', name=i.photo) }}" alt="" loading="lazy">{% else %}<span class="mi-noimg">{{ i.name[:1]|upper }}</span>{% endif %}
   <div class="mi-body">
@@ -27,12 +70,25 @@
   <div class="actions">
     <form class="inline-form" method="get"><input name="q" value="{{ q }}" placeholder="🔍 Search item or S.No"></form>
     {% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ Add item</a>
-    <a class="btn" href="{{ url_for('cafe.menu_bulk') }}">📥 Excel upload / photos</a>{% endif %}
+    <a class="btn" href="{{ url_for('cafe.menu_bulk') }}">📥 Excel upload / photos</a>
+    {% if total %}<button type="button" class="btn" id="selToggle">🗑 Delete items</button>{% endif %}{% endif %}
     <a class="btn" href="{{ url_for('cafe.menu_export') }}">⬇️ Download menu (Excel)</a>
     <a class="btn" href="{{ url_for('cafe.banners') }}">Offer banners</a>
     <a class="btn" href="{{ url_for('cafe.public_menu', code=g.org.code.lower(), preview=1) }}" target="_blank" rel="noopener">👁 View menu</a>
   </div>
 </div>
+{% if not viewing and session.get('menu_undo') %}
+<div class="card undo-card"><span>🗑 {{ session.get('menu_undo_n', 0) }} item(s) were removed from the menu.</span>
+  <form method="post" action="{{ url_for('cafe.menu_bulk_undo') }}" class="inline">{{ csrf() }}<button class="btn btn-sm">↩ Undo</button></form></div>
+{% endif %}
+{% if not viewing and total %}
+<form method="post" action="{{ url_for('cafe.menu_bulk_delete') }}" id="bulkdel" class="bulk-bar" hidden>{{ csrf() }}
+  <label class="bulk-all"><input type="checkbox" id="pickAll"> Select all</label>
+  <span class="muted small" id="pickCount">0 selected</span>
+  <span class="bulk-btns"><button type="submit" class="btn btn-danger btn-sm" id="pickDel" disabled>Delete selected (0)</button>
+  <button type="button" class="btn btn-sm" id="selCancel">Cancel</button></span>
+</form>
+{% endif %}
 <div class="menu-layout">
   <aside class="card cat-panel">
     <h2>Categories</h2>
@@ -56,12 +112,12 @@
   <div class="items-panel">
     {% for c in cats %}
     <section class="card" id="cat{{ c.id }}">
-      <h2>{{ c.name }} {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('cafe.item_new', cat=c.id) }}">+ Item</a>{% endif %}</h2>
+      <h2>{% if not viewing and by_cat.get(c.id) %}<input type="checkbox" class="cat-pick" title="Select all in {{ c.name }}" aria-label="Select all in {{ c.name }}">{% endif %}{{ c.name }} {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('cafe.item_new', cat=c.id) }}">+ Item</a>{% endif %}</h2>
       {% for i in by_cat.get(c.id, []) %}{{ item_row(i) }}{% else %}<p class="muted small">No items in this category.</p>{% endfor %}
     </section>
     {% endfor %}
     {% if by_cat.get(None) %}
-    <section class="card"><h2>Other <small class="muted">(no category)</small></h2>
+    <section class="card"><h2>{% if not viewing %}<input type="checkbox" class="cat-pick" title="Select all in Other" aria-label="Select all in Other">{% endif %}Other <small class="muted">(no category)</small></h2>
       {% for i in by_cat.get(None) %}{{ item_row(i) }}{% endfor %}</section>
     {% endif %}
     {% if not total %}<div class="card empty"><p>{{ 'Nothing matches your search.' if q else 'The menu has no items yet.' }}</p>{% if not viewing and not q %}<a class="btn btn-primary" href="{{ url_for('cafe.item_new') }}">+ Add the first item</a> <a class="btn" href="{{ url_for('cafe.menu_bulk') }}">📥 Upload the menu from Excel</a>{% endif %}</div>{% endif %}

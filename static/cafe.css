@@ -265,3 +265,16 @@ button.pl-amt:hover { border-color: #fb923c; }
 #new-order-toast { top: 12px; bottom: auto; }
 button#new-order-toast { border: 0; font: inherit; font-weight: 700; cursor: pointer; }
 #new-order-toast.ok { background: #15803d; box-shadow: 0 8px 24px rgba(21, 128, 61, .35); animation: none; }
+
+/* Menu: select items to delete */
+.mi-pick, .cat-pick { display: none; width: 20px; height: 20px; flex: 0 0 auto; margin: 0 6px 0 0; cursor: pointer; }
+body.selmode .mi-pick, body.selmode .cat-pick { display: inline-block; vertical-align: middle; }
+body.selmode .mi .switch, body.selmode .mi .edit-btn { display: none; }
+.bulk-bar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  background: var(--card, #fff); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.bulk-bar[hidden] { display: none; }
+.bulk-all { display: flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer; }
+.bulk-all input { width: 20px; height: 20px; }
+.bulk-btns { margin-left: auto; display: flex; gap: 8px; }
+.undo-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-left: 4px solid #e0a100; }
