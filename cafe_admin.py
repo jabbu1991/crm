@@ -5,7 +5,7 @@ import re
 
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from cafe import (BANNER_PHOTO_HINT, DEFAULT_SETTINGS, FONTS, FOOD_TYPES, GST_RATES, ITEM_PHOTO_HINT, ITEM_TAGS,
+from cafe import (BANNER_PHOTO_HINT, DEFAULT_SETTINGS, FONTS, ITEM_PHOTO_KB, FOOD_TYPES, GST_RATES, ITEM_PHOTO_HINT, ITEM_TAGS,
                   UNITS, LAYOUTS, PAPER_SIZES, SHAPES, THEMES, bp, cafe_name, cafe_view, get_category, get_item,
                   get_settings, host as H, menu_url, next_serial, paise_str, save_photo, save_settings, to_float, to_int,
                   to_paise, valid_birthday)
@@ -322,7 +322,7 @@ def item_new():
         if errors:
             return _item_form(None, data, errors)
         _apply_new_category(data, new_cat)
-        photo = save_photo("photo", (600, 600), True)
+        photo = save_photo("photo", (600, 600), True, ITEM_PHOTO_KB)
         iid = H.execute(f"INSERT INTO menu_items (org_id, {', '.join(ITEM_COLS)}, photo, created_by, created_at,"
                         f" updated_at) VALUES ({', '.join('?' * (len(ITEM_COLS) + 5))})",
                         [H.org_id()] + [data[c] for c in ITEM_COLS] + [photo, g.user["id"], H.now(), H.now()])
@@ -344,7 +344,7 @@ def item_edit(iid):
             return _item_form(item, data, errors)
         _apply_new_category(data, new_cat)
         photo = item["photo"]
-        new_photo = save_photo("photo", (600, 600), True)
+        new_photo = save_photo("photo", (600, 600), True, ITEM_PHOTO_KB)
         if new_photo:
             H.remove_media(photo)
             photo = new_photo

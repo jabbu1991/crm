@@ -45,7 +45,7 @@
     <label class="check pin-check"><input type="checkbox" name="pinned" value="1" {{ 'checked' if data.pinned }}> 📌 Pin to top (always first in billing and on the menu)</label>
   </div>
   <label>Photo<input type="file" name="photo" accept="image/*"><span class="photo-hint">📷 {{ hint }}</span>
-    <small class="muted">Any photo works: it is cropped square and shrunk to under 50 KB automatically.</small></label>
+    <small class="muted">Any photo works: it is cropped square and shrunk to under 20 KB automatically.</small></label>
   {% if item and item.photo %}<div class="thumbs"><figure><img src="{{ url_for('media', name=item.photo) }}" alt=""></figure></div>
   <label class="check"><input type="checkbox" name="remove_photo" value="1"> Remove photo</label>{% endif %}
   <div class="row-2">

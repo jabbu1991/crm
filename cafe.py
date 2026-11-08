@@ -54,9 +54,10 @@ ITEM_TAGS = {"bestseller": "⭐ Bestseller", "new": "🆕 New", "spicy": "🌶 S
 DEFAULT_EXPENSE_CATEGORIES = ["Raw materials", "Gas", "Salary", "Rent", "Electricity", "Water", "Maintenance",
                               "Packing", "Marketing", "Other"]
 DEFAULT_INCOME_CATEGORIES = ["Catering", "Party order", "Other"]
-ITEM_PHOTO_HINT = "Size: 600 × 600 px (square), under 50 KB"
+ITEM_PHOTO_HINT = "Square photo, 600 × 600 px or bigger. It is made small (under 20 KB) on its own."
 BANNER_PHOTO_HINT = "Size: 1200 × 500 px (wide), under 50 KB"
-PHOTO_MAX_KB = 50
+PHOTO_MAX_KB = 50        # banners, logo, cover
+ITEM_PHOTO_KB = 20       # menu item photos (the menu opens fast on slow phones)
 
 # Permissions a staff member can be given (admins always have all of them).
 PERMS = [
@@ -471,11 +472,11 @@ def get_category(cid):
         or abort(404)
 
 
-def save_photo(field, box, fit):
+def save_photo(field, box, fit, max_kb=PHOTO_MAX_KB):
     f = request.files.get(field)
     if not f or not f.filename:
         return None
-    name = H.save_image(f, box=box, max_kb=PHOTO_MAX_KB, fit=fit)
+    name = H.save_image(f, box=box, max_kb=max_kb, fit=fit)
     if not name:
         flash("That file is not a photo, so it was skipped.", "warning")
     return name

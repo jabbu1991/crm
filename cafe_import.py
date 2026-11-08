@@ -9,7 +9,7 @@ import secrets
 
 from flask import Response, abort, flash, g, redirect, render_template, request, url_for
 
-from cafe import (FOOD_TYPES, PHOTO_MAX_KB, bp, cafe_name, cafe_view, get_settings, host as H, next_serial, paise_str,
+from cafe import (FOOD_TYPES, ITEM_PHOTO_KB, PHOTO_MAX_KB, bp, cafe_name, cafe_view, get_settings, host as H, next_serial, paise_str,
                   to_float, to_paise)
 
 COLUMNS = ["S.No", "Category", "Item name", "Price", "Offer price", "Unit", "Veg / Non-veg", "GST %", "Description",
@@ -384,7 +384,7 @@ def menu_photos():
         if not item:
             unmatched.append(f.filename)
             continue
-        name = H.save_image(f, box=(600, 600), max_kb=PHOTO_MAX_KB, fit=True)
+        name = H.save_image(f, box=(600, 600), max_kb=ITEM_PHOTO_KB, fit=True)
         if not name:
             bad.append(f.filename)
             continue

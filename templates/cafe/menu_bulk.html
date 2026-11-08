@@ -31,8 +31,8 @@
     {% if no_photo %}<b>{{ no_photo }} items have no photo yet.</b>{% endif %}</p>
   {% if not viewing %}
   <form method="post" action="{{ url_for('cafe.menu_photos') }}" enctype="multipart/form-data" class="form">{{ csrf() }}
-    <label>Photos <span class="photo-hint">📷 Size: 600 × 600 px (square), under 50 KB</span><input type="file" name="photos" accept="image/*" multiple required></label>
-    <p class="muted small">Big photos are fine: each one is cropped square and shrunk to under 50 KB.</p>
+    <label>Photos <span class="photo-hint">📷 Square photos, 600 × 600 px or bigger</span><input type="file" name="photos" accept="image/*" multiple required></label>
+    <p class="muted small">Big photos are fine: each one is cropped square and shrunk to under 20 KB.</p>
     <button class="btn btn-primary">Upload photos</button>
   </form>
   {% endif %}
