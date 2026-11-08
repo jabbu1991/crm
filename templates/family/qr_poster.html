@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ st.event_name }} · QR</title>
+<style>body{font-family:system-ui,sans-serif;text-align:center;padding:30px;color:#14532d}h1{font-size:34px;margin:0 0 6px}.qr svg{width:340px;height:340px}p{font-size:18px}.btn{margin-top:18px;padding:10px 18px;font-size:16px}@media print{.btn{display:none}}</style></head>
+<body><h1>🌳 {{ st.event_name }}</h1>{% if st.family_name %}<p><b>{{ st.family_name }}</b></p>{% endif %}
+{% if st.event_date or st.venue %}<p>{{ st.event_date }}{{ ' · ' if st.event_date and st.venue }}{{ st.venue }}</p>{% endif %}
+<p>Scan to register and join the family tree</p><div class="qr">{{ qr|safe }}</div><p style="font-size:14px">{{ link }}</p>
+<button class="btn" onclick="print()">🖨 Print</button></body></html>

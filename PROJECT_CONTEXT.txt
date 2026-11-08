@@ -45,7 +45,7 @@ Contact on website: WhatsApp +91 85472 75320.
   production.py + production_io.py (production module),
   seed_demo.py + demo.bat (local demo data, password demo1234), start.bat (Windows local run),
   README.md (English docs), DEPLOY_ML.md (Malayalam deploy guide).
-- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day, v16 = finished day set by hand, v17 = Google Drive backup log, v18/v19 = lead fields + production pay, v20 = Instagram stories for the website). Before any upgrade the app
+- Database migrations: PRAGMA user_version, currently version 13 (v7 = org_list_settings, v8 = cafe module, v9 = menu item S.No, v10 = unit / barcode / pin + weighed & price-changed bill lines, v11 = split / pay later payments + customer My Card token, v12 = push_subscriptions, v13 = org_options + organizations.brand_logo/brand_color, v14 = module switches + production module, v15 = queue pins + production finished day, v16 = finished day set by hand, v17 = Google Drive backup log, v18/v19 = lead fields + production pay, v20 = Instagram stories for the website, v21 = Family module). Before any upgrade the app
   copies the whole DB to backups/ automatically. Migrations only add tables/columns.
 - Environment variables on Render: CRM_DB_PATH=/var/data/crm.db, CRM_SECRET_KEY (generated),
   CRM_SETUP_KEY (generated, used once on first setup), CRM_SECURE_COOKIES=1, CRM_BEHIND_PROXY=1,
@@ -412,3 +412,22 @@ WEBSITE UPGRADE (5 Nov 2026)
   @realview_creative_studio once a day (about every 22 h) and on "Check Instagram now"; website/stories.js shows
   them newest first, forever (latest 60 kept). Files in /var/data/instagram, token in /var/data/instagram.json.
   Public feed: crm.realviewcreativestudio.in/ig/stories.json. Hide / title / delete per story.
+
+
+======================================================================
+FAMILY MODULE (built 8 Nov 2026) — family.py, templates/family/*, static/family.css, tests/test_family.py
+======================================================================
+- Super Admin → client → tick "🌳 Family". For a family meetup: registration form that builds the family tree.
+- Settings → Family start: root couple (e.g. KUNJIMUHAMMED HAJI (Late) & THAYUMMA (Late)) + their children
+  (branches). Only the root couple comes in without registering; the children show "Not registered".
+- Public form /f/<code>/register (no login, no PIN): branch → "This is me" (claims a not-registered name) or
+  Son / Daughter / Husband / Wife of someone → Name, Age, Late, Phone, WhatsApp (same as phone by default),
+  Photo, Last year achievement, Cultural program, Coming to the meetup? Yes/No. One registration = one person.
+- Fee: age above 5 → ₹800 (both changeable); UPI ID / own QR in Settings → QR + "Pay by UPI" + UPI txn ID.
+  Registration completes whether paid or not; Admin marks Paid / Not paid.
+- Every registration waits for Admin approval (Approvals page; reject needs a reason). Status page /f/<code>/r/<token>.
+- Tree /f/<code>: tree + list views, zoom, search, branch colours, tap a person for details (no phone numbers),
+  print / PDF. Generation + relation text ("Grandson of …") worked out automatically.
+- Admin: Members (filters, Excel, WhatsApp, + child), edit / merge / delete, Achievers (print), Cultural programs,
+  Accounts (income & expense; paid fees counted automatically; staff ticks View / Add; edit + delete Admin only),
+  QR poster, 🧹 Clear all (Admin, type CLEAR) for testing.

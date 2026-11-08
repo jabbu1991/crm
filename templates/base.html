@@ -58,6 +58,20 @@
   {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
   {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
+{% elif not g.user.must_change_password and cur_module == 'fam' %}
+<nav class="mainnav fam-nav">
+  <a href="{{ url_for('fam.home') }}" class="{{ 'active' if ep == 'fam.home' }}">🌳 Dashboard</a>
+  {% if fcan('approve') %}<a href="{{ url_for('fam.approvals') }}" class="{{ 'active' if ep == 'fam.approvals' }}">⏳ Approvals{% if fam_pending() %} <span class="nav-count">{{ fam_pending() }}</span>{% endif %}</a>{% endif %}
+  {% if fcan('view') %}<a href="{{ url_for('fam.members') }}" class="{{ 'active' if ep in ('fam.members', 'fam.member_edit') }}">👥 Members</a>{% endif %}
+  {% if fcan('edit') and not viewing %}<a href="{{ url_for('fam.member_new') }}" class="nav-cta {{ 'active' if ep == 'fam.member_new' }}">+ Add member</a>{% endif %}
+  {% if fcan('view') %}<a href="{{ url_for('fam.achievers') }}" class="{{ 'active' if ep == 'fam.achievers' }}">🏆 Achievers</a>
+  <a href="{{ url_for('fam.programs') }}" class="{{ 'active' if ep == 'fam.programs' }}">🎭 Cultural programs</a>{% endif %}
+  {% if fcan('acc_view') or fcan('acc_add') %}<a href="{{ url_for('fam.accounts') }}" class="{{ 'active' if ep == 'fam.accounts' }}">💰 Accounts</a>{% endif %}
+  <a href="{{ url_for('fam.public_tree', code=g.org.code|lower) }}" target="_blank" rel="noopener">🌳 Family tree ↗</a>
+  {% if fcan('settings') %}<a href="{{ url_for('fam.settings') }}" class="{{ 'active' if ep == 'fam.settings' }}">⚙️ Settings</a>{% endif %}
+  {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+</nav>
 {% elif not g.user.must_change_password and cafe_mode %}
 <nav class="mainnav cafe-nav">
   <a href="{{ url_for('cafe.home') }}" class="{{ 'active' if ep == 'cafe.home' }}">🏠 Home</a>

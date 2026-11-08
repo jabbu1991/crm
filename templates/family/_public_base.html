@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}{{ st.event_name }}{% endblock %} · {{ st.family_name or org.name }}</title>
+  <meta property="og:title" content="{{ st.event_name }} · {{ st.family_name or org.name }}">
+  {% if st.cover %}<meta property="og:image" content="{{ url_for('media', name=st.cover, _external=True) }}">{% endif %}
+  <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+  <link rel="stylesheet" href="{{ url_for('static', filename='family.css') }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% block body %}{% endblock %}
+<footer class="f-foot">Made with <a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.product }}</a></footer>
+</body>
+</html>

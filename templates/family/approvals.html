@@ -1,0 +1,39 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar, late with context %}
+{% block title %}Approvals{% endblock %}
+{% block content %}
+<div class="page-head"><h1>⏳ Waiting for approval ({{ rows|length }})</h1></div>
+{% for n in rows %}
+<div class="card fam-appr">
+  <div class="fam-appr-head">
+    {{ avatar(n, 64) }}
+    <div>
+      <b class="big">{{ n.name }}</b>{{ late(n) }} <span class="muted small">Reg No {{ n.reg_no }}</span>
+      {% if n.claim %}<div>🙋 Says: <b>"This is me"</b> → {{ n.claim.name }} <span class="small muted">({{ n.claim.rel_text }}{{ ' · already registered!' if n.claim.registered }})</span></div>
+      {% else %}<div><b>{{ n.rel_text }}</b></div><div class="small muted">{{ n.rel_sub }}</div>{% endif %}
+      {% if n.dups %}<div class="fam-warn">⚠️ Same name already in the tree: {% for d in n.dups %}{{ d.name }} ({{ d.rel_text }}){{ ', ' if not loop.last }}{% endfor %} — maybe a duplicate.</div>{% endif %}
+    </div>
+  </div>
+  <div class="fam-facts small">
+    {% if n.age is not none %}<span>Age <b>{{ n.age }}</b></span>{% endif %}
+    {% if n.phone %}<span>📞 <a href="tel:{{ n.phone }}">{{ n.phone }}</a></span>{% endif %}
+    {% if n.whatsapp and n.whatsapp != n.phone %}<span>WhatsApp {{ n.whatsapp }}</span>{% endif %}
+    {% if not n.is_late %}<span>Coming: <b>{{ {1: 'Yes', 0: 'No'}.get(n.attending, '—') }}</b></span>{% endif %}
+    {% if n.fee %}<span>Fee {{ rs(n.fee) }}{% if n.upi_ref %} · UPI ref <b>{{ n.upi_ref }}</b>{% endif %}</span>{% endif %}
+  </div>
+  {% if n.achievement %}<p class="small">🏆 {{ n.achievement }}</p>{% endif %}
+  {% if n.program %}<p class="small">🎭 {{ n.program }}</p>{% endif %}
+  {% if not viewing %}
+  <div class="actions">
+    <form method="post" action="{{ url_for('fam.approve', mid=n.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-fam">✅ Approve</button></form>
+    {% if fcan('edit') %}<a class="btn" href="{{ url_for('fam.member_edit', mid=n.id, next=url_for('fam.approvals')) }}">✏️ Edit</a>{% endif %}
+    <form method="post" action="{{ url_for('fam.reject', mid=n.id) }}" class="inline fam-reject"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="reason" placeholder="Reason for rejecting" required maxlength="200"><button class="btn btn-danger">❌ Reject</button></form>
+  </div>
+  {% endif %}
+</div>
+{% else %}<div class="card"><p class="muted">Nothing waiting 👍</p></div>{% endfor %}
+{% if rejected %}
+<details class="card"><summary>Rejected ({{ rejected|length }})</summary>
+  <table class="table compact">{% for r in rejected %}<tr><td>{{ r.name }}</td><td class="small muted">{{ r.reject_reason }}</td></tr>{% endfor %}</table>
+</details>
+{% endif %}
+{% endblock %}

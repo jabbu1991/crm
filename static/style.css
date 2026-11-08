@@ -492,3 +492,32 @@ body.board-dragging { cursor: grabbing; user-select: none; }
   .pay-bulk .pb-row { width: 100%; }
   .pay-bulk .pb-row select, .pay-bulk .pb-row input[type=date] { flex: 1; min-width: 0; }
 }
+
+/* ---------------------------------------------------------------- Family module */
+.btn-fam { background: #15803d; border-color: #15803d; color: #fff; }
+.btn-fam:hover { background: #166534; border-color: #166534; color: #fff; text-decoration: none; }
+.fam-av { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; overflow: hidden;
+  background: #f1f5f9; color: var(--c); font-weight: 700; border: 2px solid var(--c); vertical-align: middle; }
+.fam-av img { width: 100%; height: 100%; object-fit: cover; }
+.fam-name { display: flex; gap: 8px; align-items: center; }
+.fam-late { color: #64748b; font-weight: 400; }
+.fam-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+.fam-unreg td { background: #f8fafc; }
+.fam-unreg .fam-av { border-style: dashed; opacity: .75; }
+.fam-paybtn { border: 0; cursor: pointer; font: inherit; }
+.fam-qr svg { width: 180px; height: 180px; }
+.fam-link { word-break: break-all; font-weight: 600; }
+.fam-appr-head { display: flex; gap: 12px; align-items: flex-start; }
+.fam-appr .big, .fam-ach .big { font-size: 1.1rem; }
+.fam-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; }
+.fam-warn { background: #fef3c7; border-radius: 6px; padding: 4px 8px; margin-top: 4px; font-size: .9em; }
+.fam-reject { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.fam-reject input { min-width: 180px; }
+.fam-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.fam-ach { display: flex; gap: 12px; align-items: flex-start; break-inside: avoid; }
+.fam-head-row { grid-template-columns: 1fr 140px; }
+.danger-card { border-color: #fca5a5; background: #fef2f2; }
+@media print {
+  .fam-nav, .topbar, .site-footer, .page-head .actions, .no-print { display: none !important; }
+  .fam-cards { grid-template-columns: 1fr 1fr; }
+}

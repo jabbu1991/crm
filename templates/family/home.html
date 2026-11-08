@@ -1,0 +1,65 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar, late with context %}
+{% block title %}Family{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>🌳 {{ st.event_name }}</h1>
+  <div class="actions">
+    {% if fcan('approve') and stats.pending %}<a class="btn btn-fam btn-big" href="{{ url_for('fam.approvals') }}">⏳ {{ stats.pending }} waiting for approval</a>{% endif %}
+    <a class="btn btn-big" href="{{ tree_link }}" target="_blank" rel="noopener">🌳 Open family tree</a>
+  </div>
+</div>
+{% if setup_needed %}
+<div class="card warn-card">
+  <b>Start the family tree first:</b> enter the eldest couple and their children in Settings → Family start.
+  {% if fcan('settings') %}<a class="btn btn-sm btn-fam" href="{{ url_for('fam.settings') }}#start">Open Settings</a>{% endif %}
+</div>
+{% endif %}
+<div class="stats">
+  <a class="stat" href="{{ url_for('fam.members', show='registered') }}"><b>{{ stats.registered }}</b><span>Registered</span></a>
+  {% if fcan('approve') %}<a class="stat {{ 'stat-warn' if stats.pending }}" href="{{ url_for('fam.approvals') }}"><b>{{ stats.pending }}</b><span>Waiting approval</span></a>{% endif %}
+  <a class="stat stat-good" href="{{ url_for('fam.members', show='coming') }}"><b>{{ stats.coming }}</b><span>Coming to the meetup</span></a>
+  <a class="stat" href="{{ url_for('fam.members', show='not_registered') }}"><b>{{ stats.not_registered }}</b><span>Not registered yet</span></a>
+  <a class="stat" href="{{ url_for('fam.members') }}"><b>{{ stats.members }}</b><span>In the tree · {{ stats.gens }} generations</span></a>
+  <a class="stat" href="{{ url_for('fam.achievers') }}"><b>{{ stats.achievers }}</b><span>🏆 Achievers</span></a>
+  <a class="stat" href="{{ url_for('fam.programs') }}"><b>{{ stats.programs }}</b><span>🎭 In programs</span></a>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>📝 Registration link</h2>
+    <p><a href="{{ form_link }}" target="_blank" rel="noopener" class="fam-link">{{ form_link }}</a></p>
+    <div class="fam-qr">{{ qr|safe }}</div>
+    <div class="actions">
+      <a class="btn btn-fam" href="{{ share }}" target="_blank" rel="noopener">🟢 Share on WhatsApp</a>
+      <button class="btn" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText('{{ form_link }}'); this.textContent='Copied ✓'">📋 Copy link</button>
+      <a class="btn" href="{{ url_for('fam.qr_poster') }}" target="_blank">🖨 QR poster</a>
+    </div>
+    <p class="small muted">Family tree: <a href="{{ tree_link }}" target="_blank" rel="noopener">{{ tree_link }}</a></p>
+    {% if fcan('acc_view') %}
+    <h2>💰 Fees</h2>
+    <div class="stats compact-stats">
+      <div class="stat"><b>{{ rs(fees.total) }}</b><span>Total fee</span></div>
+      <div class="stat stat-good"><b>{{ rs(fees.got) }}</b><span>Received ({{ fees.paid_n }})</span></div>
+      <a class="stat {{ 'stat-hot' if fees.due }}" href="{{ url_for('fam.members', show='not_paid') }}"><b>{{ rs(fees.due) }}</b><span>Not paid ({{ fees.unpaid_n }})</span></a>
+    </div>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Branches</h2>
+    <table class="table compact">
+      <thead><tr><th>Branch</th><th class="num">In tree</th><th class="num">Registered</th><th class="num">Coming</th></tr></thead>
+      <tbody>
+      {% for b in branches %}<tr><td><span class="fam-dot" style="background: {{ b.color }}"></span> {{ b.name }}</td><td class="num">{{ b.total }}</td><td class="num">{{ b.registered }}</td><td class="num">{{ b.coming }}</td></tr>
+      {% else %}<tr><td class="muted" colspan="4">No branches yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    <h2>Recent registrations</h2>
+    {% for m in recent %}
+      {% set n = nodes.get(m.id, m) %}
+      <a class="run-row" href="{{ url_for('fam.member_edit', mid=m.id) if fcan('edit') else url_for('fam.members', q=m.name) }}">
+        {{ avatar(n, 34) }}<span class="run-main"><b>{{ m.name }}</b>{{ late(m) }} <span class="small muted">{{ n.rel_text if n.rel_text is defined else '' }}</span></span>
+        <span class="badge {{ 'b-new' if m.status == 'pending' else ('b-lost' if m.status == 'rejected' else 'b-converted') }}">{{ m.status|title }}</span>
+      </a>
+    {% else %}<p class="muted">No registrations yet. Share the link above.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

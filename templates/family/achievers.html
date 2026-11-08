@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar, late with context %}
+{% block title %}Achievers{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🏆 Achievers ({{ rows|length }})</h1><div class="actions"><button class="btn" onclick="print()">🖨 Print</button></div></div>
+<p class="muted no-print">For the honouring ceremony at {{ st.event_name }}.</p>
+<div class="fam-cards">
+{% for n in rows %}
+  <div class="card fam-ach">
+    {{ avatar(n, 90) }}
+    <div><b class="big">{{ n.name }}</b>{{ late(n) }}{% if n.age is not none %} <span class="muted">· {{ n.age }} yrs</span>{% endif %}
+      <div class="small muted">{{ n.rel_text }}</div><div class="small muted">{{ n.rel_sub }}</div>
+      <p>🏆 {{ n.achievement }}</p></div>
+  </div>
+{% else %}<p class="muted">No achievements entered yet.</p>{% endfor %}
+</div>
+{% endblock %}

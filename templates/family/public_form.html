@@ -1,0 +1,164 @@
+{% extends 'family/_public_base.html' %}
+{% block title %}Register{% endblock %}
+{% block body %}
+<header class="f-hero">
+  {% if st.cover %}<img class="f-cover" src="{{ url_for('media', name=st.cover) }}" alt="">{% endif %}
+  <h1>🌳 {{ st.event_name }}</h1>
+  {% if st.family_name %}<p class="f-fam">{{ st.family_name }}</p>{% endif %}
+  {% if st.event_date or st.venue %}<p class="f-when">{{ st.event_date }}{{ ' · ' if st.event_date and st.venue }}{{ st.venue }}</p>{% endif %}
+  {% if st.about %}<p class="f-about">{{ st.about }}</p>{% endif %}
+  <p class="f-note">One registration = one person. Register each family member separately.</p>
+</header>
+<main class="f-wrap">
+{% if errors %}<div class="f-errors">{% for e in errors %}<p>⚠️ {{ e }}</p>{% endfor %}</div>{% endif %}
+<form method="post" enctype="multipart/form-data" id="reg" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="text" name="website" class="f-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <input type="hidden" name="branch" id="branch" value="{{ form.branch or pre_branch or '' }}">
+
+  <section class="f-card" id="s1">
+    <h2><span class="f-step">1</span> Your branch</h2>
+    <p class="f-muted">Which child of the family elders do you come under?</p>
+    <div class="f-branches" id="branches">
+      {% for b in branches %}<button type="button" class="f-branch" data-id="{{ b.id }}" style="--c: {{ b.color }}">{{ b.name }}</button>{% endfor %}
+    </div>
+  </section>
+
+  <section class="f-card" id="s2" hidden>
+    <h2><span class="f-step">2</span> Who are you?</h2>
+    <div class="f-seg">
+      <label><input type="radio" name="mode" value="me" {{ 'checked' if form.mode == 'me' }}> My name is already in the list</label>
+      <label><input type="radio" name="mode" value="new" {{ 'checked' if form.mode != 'me' }}> I am new</label>
+    </div>
+    <div id="me-box" hidden>
+      <p class="f-muted">Tap your name ("This is me"):</p>
+      <div class="f-people" id="me-list"></div>
+      <p class="f-muted small" id="me-empty" hidden>Everyone in this branch is already registered. Choose "I am new".</p>
+    </div>
+    <div id="new-box">
+      <div class="f-row">
+        <label>I am the
+          <select name="relation" id="relation">
+            {% for k, v in RELATIONS.items() %}<option value="{{ k }}" {{ 'selected' if form.relation == k }}>{{ v }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>of
+          <select name="of_id" id="of-id"><option value="">— choose —</option></select>
+        </label>
+      </div>
+      <p class="f-muted small" id="rel-hint"></p>
+    </div>
+  </section>
+
+  <section class="f-card" id="s3" hidden>
+    <h2><span class="f-step">3</span> Your details</h2>
+    <label>Name *<input name="name" id="name" required maxlength="120" value="{{ form.name or '' }}" autocomplete="name"></label>
+    <label class="f-check"><input type="checkbox" name="is_late" value="1" id="is-late" {{ 'checked' if form.is_late }}> Registering for someone who passed away (Late)</label>
+    <div id="alive-box">
+      <div class="f-row">
+        <label>Age *<input name="age" id="age" inputmode="numeric" maxlength="3" value="{{ form.age or '' }}"></label>
+        <label>Phone number *<input name="phone" inputmode="tel" maxlength="15" value="{{ form.phone or '' }}" autocomplete="tel"></label>
+      </div>
+      <label class="f-check"><input type="checkbox" name="wa_same" value="1" id="wa-same" {{ 'checked' if not form or form.wa_same or not form.whatsapp }}> WhatsApp number is the same</label>
+      <label id="wa-box" hidden>WhatsApp number<input name="whatsapp" inputmode="tel" maxlength="15" value="{{ form.whatsapp or '' }}"></label>
+      <label>Last year achievement <small>(if any — for the special honouring)</small>
+        <textarea name="achievement" rows="2" maxlength="500" placeholder="e.g. SSLC full A+, new job, award, sports medal …">{{ form.achievement or '' }}</textarea></label>
+      <label>Participating cultural program <small>(if any)</small>
+        <input name="program" maxlength="200" value="{{ form.program or '' }}" placeholder="e.g. Song, Speech, Oppana …"></label>
+      <div class="f-ask">Coming to the meetup? *
+        <div class="f-seg">
+          <label><input type="radio" name="attending" value="1" {{ 'checked' if form.attending == '1' }}> ✅ Yes</label>
+          <label><input type="radio" name="attending" value="0" {{ 'checked' if form.attending == '0' }}> No</label>
+        </div>
+      </div>
+    </div>
+    <label>Photo <small>(a clear face photo)</small><input type="file" name="photo" accept="image/*"></label>
+  </section>
+
+  <section class="f-card f-fee" id="s4" hidden>
+    <h2>Registration fee: <b>₹{{ fee_rs }}</b></h2>
+    <p class="f-muted small">For age above {{ st.free_upto_age }} years. You can register now and pay later — registration is complete either way.</p>
+    {% if st.upi_qr or upi %}
+      {% if st.upi_qr %}<img class="f-qr-img" src="{{ url_for('media', name=st.upi_qr) }}" alt="UPI QR">{% elif upi_qr %}<div class="f-qr">{{ upi_qr|safe }}</div>{% endif %}
+      {% if upi %}<a class="f-btn f-btn-pay" href="{{ upi }}">Pay ₹{{ fee_rs }} by UPI</a>{% endif %}
+      <label>UPI transaction ID <small>(optional, after paying)</small><input name="upi_ref" maxlength="60" value="{{ form.upi_ref or '' }}"></label>
+    {% endif %}
+  </section>
+
+  <div id="s5" hidden>
+    <button class="f-btn f-btn-big" id="submit">✅ Register</button>
+    <p class="f-muted small f-center">The family admin will check and add you to the tree.</p>
+  </div>
+</form>
+<p class="f-center"><a href="{{ url_for('fam.public_tree', code=org.code|lower) }}">🌳 See the family tree</a></p>
+</main>
+<script>
+(function () {
+  var BR = {{ branches|tojson }}, FREE = {{ st.free_upto_age|int }}, FEE = {{ fee_rs|int }};
+  var pre = { claim: {{ (form.claim_id or '')|tojson }}, of: {{ (form.of_id or '')|tojson }} };
+  var $ = function (id) { return document.getElementById(id); };
+  var branchIn = $("branch"), cur = null;
+
+  function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function show(id, on) { $(id).hidden = !on; }
+  function mode() { return (document.querySelector("input[name=mode]:checked") || {}).value || "new"; }
+
+  function pickBranch(id) {
+    cur = BR.filter(function (b) { return b.id == id; })[0] || null;
+    branchIn.value = cur ? cur.id : "";
+    document.querySelectorAll(".f-branch").forEach(function (b) { b.classList.toggle("on", cur && b.dataset.id == cur.id); });
+    if (!cur) return;
+    // "This is me" list: people of this branch not registered yet
+    var free = cur.people.filter(function (p) { return !p.reg; });
+    $("me-list").innerHTML = free.map(function (p) {
+      return '<label class="f-person"><input type="radio" name="claim_id" value="' + p.id + '"' + (pre.claim == p.id ? " checked" : "") + '>' +
+        '<span><b>' + esc(p.name) + '</b><small>' + esc(p.rel || "") + '</small></span></label>';
+    }).join("");
+    show("me-empty", !free.length);
+    fillOf();
+    show("s2", true); sync();
+    if (!pre.done) { pre.done = true; } else { $("s2").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }
+
+  function fillOf() {
+    if (!cur) return;
+    var rel = $("relation").value, spouseRel = rel === "husband" || rel === "wife";
+    var keep = $("of-id").value || pre.of;
+    var opts = cur.people.filter(function (p) { return !(spouseRel && p.spouse); });
+    $("of-id").innerHTML = '<option value="">— choose —</option>' + opts.map(function (p) {
+      return '<option value="' + p.id + '"' + (keep == p.id ? " selected" : "") + '>' + esc(p.name) + (p.rel ? " — " + esc(p.rel) : "") + '</option>';
+    }).join("");
+    $("rel-hint").textContent = spouseRel ? "Married into the family? Choose your husband / wife from the family." :
+      "Choose your father or mother.";
+  }
+
+  function sync() {
+    var m = mode(), late = $("is-late").checked;
+    show("me-box", m === "me"); show("new-box", m !== "me");
+    var ready = cur && (m === "me" ? !!document.querySelector("input[name=claim_id]:checked") : !!$("of-id").value);
+    show("s3", !!ready); show("s5", !!ready);
+    show("alive-box", !late);
+    var age = parseInt($("age").value, 10);
+    show("s4", !!ready && !late && !isNaN(age) && age > FREE && FEE > 0);
+    show("wa-box", !$("wa-same").checked);
+    var c = document.querySelector("input[name=claim_id]:checked");
+    if (m === "me" && c && !$("name").dataset.typed) {
+      var p = cur.people.filter(function (x) { return x.id == c.value; })[0];
+      if (p) $("name").value = p.name;
+    }
+  }
+
+  document.querySelectorAll(".f-branch").forEach(function (b) { b.addEventListener("click", function () { pickBranch(b.dataset.id); }); });
+  document.querySelectorAll("input[name=mode]").forEach(function (r) { r.addEventListener("change", sync); });
+  $("me-list").addEventListener("change", function () { sync(); $("s3").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  $("relation").addEventListener("change", function () { fillOf(); sync(); });
+  $("of-id").addEventListener("change", sync);
+  ["is-late", "wa-same"].forEach(function (id) { $(id).addEventListener("change", sync); });
+  $("age").addEventListener("input", sync);
+  $("name").addEventListener("input", function () { this.dataset.typed = "1"; });
+  {% if form.name %}$("name").dataset.typed = "1";{% endif %}
+  $("reg").addEventListener("submit", function () { $("submit").disabled = true; $("submit").textContent = "Saving…"; });
+  if (branchIn.value) pickBranch(branchIn.value); else pre.done = true;
+})();
+</script>
+{% endblock %}

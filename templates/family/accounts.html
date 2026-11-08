@@ -1,0 +1,77 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+<div class="page-head"><h1>💰 Income &amp; Expense</h1>{% if view_all %}<div class="actions"><a class="btn btn-sm" href="{{ url_for('fam.export') }}">⬇️ Excel</a></div>{% endif %}</div>
+{% if view_all %}
+<div class="stats">
+  <div class="stat stat-good"><b>{{ rs(income_total) }}</b><span>Total income</span></div>
+  <div class="stat stat-hot"><b>{{ rs(sums.expense) }}</b><span>Total expense</span></div>
+  <div class="stat {{ 'stat-good' if balance >= 0 else 'stat-hot' }}"><b>{{ rs(balance) }}</b><span>Balance</span></div>
+  <a class="stat {{ 'stat-warn' if fees.due }}" href="{{ url_for('fam.members', show='not_paid') }}"><b>{{ rs(fees.due) }}</b><span>Fees not paid yet ({{ fees.unpaid_n }})</span></a>
+</div>
+{% endif %}
+<div class="grid-2">
+{% if fcan('acc_add') and not viewing %}
+<form method="post" action="{{ url_for('fam.account_save') }}" enctype="multipart/form-data" class="card form">
+  {{ csrf() }}{% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+  <h2>{{ 'Edit entry' if edit else 'New entry' }}</h2>
+  <div class="seg" id="kind-seg">
+    <label><input type="radio" name="kind" value="expense" {{ 'checked' if not edit or edit.kind == 'expense' }}> 💸 Expense</label>
+    <label><input type="radio" name="kind" value="income" {{ 'checked' if edit and edit.kind == 'income' }}> 💰 Income</label>
+  </div>
+  <div class="row-2">
+    <label>Amount (₹) *<input name="amount" required inputmode="decimal" value="{{ (edit.amount / 100)|round(2)|string|replace('.0', '') if edit else '' }}"></label>
+    <label>Date<input type="date" name="entry_date" value="{{ edit.entry_date if edit else today_ }}"></label>
+  </div>
+  <label>Category *
+    <select name="category" id="cat-sel">
+      <optgroup label="Expense" data-kind="expense">{% for c in EXPENSE_CATS %}<option data-kind="expense" {{ 'selected' if edit and edit.category == c }}>{{ c }}</option>{% endfor %}</optgroup>
+      <optgroup label="Income" data-kind="income">{% for c in INCOME_CATS %}<option data-kind="income" {{ 'selected' if edit and edit.category == c }}>{{ c }}</option>{% endfor %}</optgroup>
+      {% if custom %}<optgroup label="Own">{% for c in custom %}<option {{ 'selected' if edit and edit.category == c }}>{{ c }}</option>{% endfor %}</optgroup>{% endif %}
+    </select>
+  </label>
+  <label>Or a new category<input name="new_category" maxlength="60" placeholder="e.g. Photography"></label>
+  <div class="row-2">
+    <label>From / paid to<input name="party" maxlength="120" value="{{ edit.party if edit and edit.party else '' }}" placeholder="e.g. Sponsor name / shop"></label>
+    <label>Payment<select name="payment_mode">{% for p in PAY_MODES %}<option {{ 'selected' if edit and edit.payment_mode == p }}>{{ p }}</option>{% endfor %}</select></label>
+  </div>
+  <label>Note<input name="note" maxlength="300" value="{{ edit.note if edit and edit.note else '' }}"></label>
+  <label>Bill photo <small>(optional)</small><input type="file" name="photo" accept="image/*"></label>
+  <div class="actions"><button class="btn btn-fam btn-big">💾 Save</button>{% if edit %}<a class="btn" href="{{ url_for('fam.accounts') }}">Cancel</a>{% endif %}</div>
+</form>
+{% endif %}
+<section class="card">
+  {% if view_all %}
+  <div class="chips">{% for k, l in (('all', 'All'), ('income', 'Income'), ('expense', 'Expense')) %}<a class="chip {{ 'on' if kind == k }}" href="{{ url_for('fam.accounts', kind=k) }}">{{ l }}</a>{% endfor %}</div>
+  {% else %}<h2>Your entries</h2>{% endif %}
+  <table class="table compact"><tbody>
+    {% if view_all and kind != 'expense' %}<tr><td></td><td><b>Registration fees</b><div class="small muted">{{ fees.paid_n }} paid · automatic</div></td><td class="num num-pos">+{{ rs(fees.got) }}</td><td></td></tr>{% endif %}
+    {% for e in rows %}<tr>
+      <td class="nowrap small">{{ e.entry_date[8:10] }}/{{ e.entry_date[5:7] }}</td>
+      <td><b>{{ e.category }}</b>{% if e.party %} · {{ e.party }}{% endif %}{% if e.note %}<div class="small muted">{{ e.note }}</div>{% endif %}<div class="small muted">{{ e.payment_mode }} · {{ e.by_name or '' }}</div></td>
+      <td class="num nowrap {{ 'num-neg' if e.kind == 'expense' else 'num-pos' }}">{{ '−' if e.kind == 'expense' else '+' }}{{ rs(e.amount) }}</td>
+      <td class="nowrap">{% if e.photo %}<a href="{{ url_for('media', name=e.photo) }}" target="_blank" title="Bill photo">📎</a>{% endif %}
+        {% if is_admin() and not viewing %}<a class="edit-btn" href="{{ url_for('fam.accounts', edit=e.id) }}">✏️</a>
+        <form method="post" action="{{ url_for('fam.account_delete', eid=e.id) }}" class="inline" onsubmit="return confirm('Delete this entry?')">{{ csrf() }}<button class="del-btn">🗑</button></form>{% endif %}</td>
+    </tr>{% else %}<tr><td class="muted" colspan="4">No entries yet.</td></tr>{% endfor %}
+  </tbody></table>
+  {% if view_all and by_cat %}
+  <h2>Expense by category</h2>
+  <table class="table compact">{% for c in by_cat %}<tr><td>{{ c.category }}</td><td class="num">{{ rs(c.amt) }}</td></tr>{% endfor %}</table>
+  {% endif %}
+</section>
+</div>
+<script>
+(function () {
+  var sel = document.getElementById("cat-sel"); if (!sel) return;
+  function sync() {
+    var k = (document.querySelector("input[name=kind]:checked") || {}).value;
+    sel.querySelectorAll("optgroup[data-kind]").forEach(function (gr) { gr.hidden = gr.dataset.kind !== k; gr.disabled = gr.dataset.kind !== k; });
+    var o = sel.options[sel.selectedIndex];
+    if (!o || o.parentNode.disabled) { var first = sel.querySelector("optgroup[data-kind='" + k + "'] option"); if (first) first.selected = true; }
+  }
+  document.querySelectorAll("input[name=kind]").forEach(function (r) { r.addEventListener("change", sync); });
+  sync();
+})();
+</script>
+{% endblock %}

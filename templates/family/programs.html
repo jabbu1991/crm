@@ -1,0 +1,11 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar, late with context %}
+{% block title %}Cultural programs{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🎭 Cultural programs ({{ total }} people)</h1><div class="actions"><button class="btn" onclick="print()">🖨 Print</button></div></div>
+{% for gr in groups %}
+<section class="card">
+  <h2>{{ gr.name }} <small class="muted">({{ gr.people|length }})</small></h2>
+  <table class="table compact">{% for n in gr.people %}<tr><td><div class="fam-name">{{ avatar(n, 32) }}<b>{{ n.name }}</b></div></td><td class="small muted">{{ n.rel_text }}</td><td class="num">{{ n.age if n.age is not none else '' }}</td><td class="small"><span class="fam-dot" style="background: {{ n.color }}"></span> {{ n.branch_name }}</td></tr>{% endfor %}</table>
+</section>
+{% else %}<div class="card"><p class="muted">Nobody has entered a cultural program yet.</p></div>{% endfor %}
+{% endblock %}

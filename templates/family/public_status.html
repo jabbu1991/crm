@@ -1,0 +1,37 @@
+{% extends 'family/_public_base.html' %}
+{% block title %}Registration {{ m.reg_no }}{% endblock %}
+{% block body %}
+<main class="f-wrap">
+  <div class="f-card f-center">
+    {% if new %}<div class="f-big-ok">✅</div><h1>Registered!</h1>{% else %}<h1>🌳 {{ st.event_name }}</h1>{% endif %}
+    {% if m.photo %}<img class="f-status-photo" src="{{ url_for('media', name=m.photo) }}" alt="">{% endif %}
+    <p class="f-name">{{ m.name }}{% if m.is_late %} <small>(Late)</small>{% endif %}</p>
+    {% if rel %}<p class="f-muted">{{ rel }}</p>{% endif %}
+    <p class="f-regno">Registration No <b>{{ m.reg_no }}</b></p>
+    {% if m.status == 'pending' %}
+      <p class="f-pill f-pill-wait">⏳ Waiting for approval</p>
+      <p class="f-muted small">You will appear in the family tree after the family admin approves it.</p>
+    {% elif m.status == 'approved' %}
+      <p class="f-pill f-pill-ok">✅ Approved — you are in the family tree</p>
+      <a class="f-btn" href="{{ url_for('fam.public_tree', code=org.code|lower, me=m.id) }}">🌳 See me in the tree</a>
+    {% else %}
+      <p class="f-pill f-pill-no">Not accepted{% if m.reject_reason %}: {{ m.reject_reason }}{% endif %}</p>
+    {% endif %}
+    {% if m.fee %}
+    <div class="f-fee">
+      <p>Registration fee <b>₹{{ (m.fee / 100)|int }}</b> · {{ 'Paid ✅' if m.paid else 'Not paid yet' }}</p>
+      {% if not m.paid %}
+        {% if st.upi_qr %}<img class="f-qr-img" src="{{ url_for('media', name=st.upi_qr) }}" alt="UPI QR">{% elif upi_qr %}<div class="f-qr">{{ upi_qr|safe }}</div>{% endif %}
+        {% if upi %}<a class="f-btn f-btn-pay" href="{{ upi }}">Pay ₹{{ (m.fee / 100)|int }} by UPI</a>{% endif %}
+        <p class="f-muted small">You can also pay at the meetup. The family admin marks it as paid.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+    <p class="f-muted small">Keep this page (bookmark / screenshot) to check your status.</p>
+    <div class="f-actions">
+      <a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower, b=b or None) }}">+ Register another person</a>
+      <a class="f-btn f-btn-ghost" href="https://wa.me/?text={{ (st.event_name ~ ' — register here: ' ~ url_for('fam.public_form', code=org.code|lower, _external=True))|urlencode }}" target="_blank" rel="noopener">🟢 Share the form</a>
+    </div>
+  </div>
+</main>
+{% endblock %}

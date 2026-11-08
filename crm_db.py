@@ -16,7 +16,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1256,9 +1256,108 @@ def _migrate_v20(conn):
         message TEXT)""")
 
 
+FAMILY_TABLES = """
+CREATE TABLE IF NOT EXISTS fam_settings (
+    org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
+    data TEXT NOT NULL,
+    updated_by INTEGER,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS fam_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    name TEXT NOT NULL,
+    gender TEXT NOT NULL DEFAULT '',
+    relation TEXT NOT NULL DEFAULT '',
+    parent_id INTEGER REFERENCES fam_members(id),
+    other_parent_id INTEGER REFERENCES fam_members(id),
+    spouse_of INTEGER REFERENCES fam_members(id),
+    claim_of INTEGER REFERENCES fam_members(id),
+    is_root INTEGER NOT NULL DEFAULT 0,
+    is_late INTEGER NOT NULL DEFAULT 0,
+    registered INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'approved',
+    age INTEGER,
+    phone TEXT,
+    whatsapp TEXT,
+    achievement TEXT,
+    program TEXT,
+    photo TEXT,
+    attending INTEGER,
+    fee INTEGER NOT NULL DEFAULT 0,
+    paid INTEGER NOT NULL DEFAULT 0,
+    paid_at TEXT,
+    paid_by INTEGER,
+    upi_ref TEXT,
+    reg_no INTEGER,
+    token TEXT UNIQUE,
+    reject_reason TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL,
+    approved_by INTEGER,
+    approved_at TEXT,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fam_members_org ON fam_members(org_id, status);
+CREATE INDEX IF NOT EXISTS idx_fam_members_parent ON fam_members(parent_id);
+CREATE TABLE IF NOT EXISTS fam_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    kind TEXT NOT NULL,
+    entry_date TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    category TEXT NOT NULL DEFAULT '',
+    party TEXT,
+    payment_mode TEXT,
+    note TEXT,
+    photo TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fam_accounts_org ON fam_accounts(org_id, entry_date);
+"""
+
+FAMILY_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS trg_fam_members_tenant BEFORE INSERT ON fam_members
+WHEN (NEW.parent_id IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.parent_id) IS NOT NEW.org_id)
+  OR (NEW.other_parent_id IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.other_parent_id) IS NOT NEW.org_id)
+  OR (NEW.spouse_of IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.spouse_of) IS NOT NEW.org_id)
+  OR (NEW.claim_of IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.claim_of) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: family member references another organization'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_fam_members_tenant_upd BEFORE UPDATE ON fam_members
+WHEN NEW.org_id IS NOT OLD.org_id
+  OR (NEW.parent_id IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.parent_id) IS NOT NEW.org_id)
+  OR (NEW.other_parent_id IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.other_parent_id) IS NOT NEW.org_id)
+  OR (NEW.spouse_of IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.spouse_of) IS NOT NEW.org_id)
+  OR (NEW.claim_of IS NOT NULL AND (SELECT org_id FROM fam_members WHERE id = NEW.claim_of) IS NOT NEW.org_id)
+BEGIN SELECT RAISE(ABORT, 'tenant: invalid family member update'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_fam_accounts_tenant_upd BEFORE UPDATE ON fam_accounts
+WHEN NEW.org_id IS NOT OLD.org_id
+BEGIN SELECT RAISE(ABORT, 'tenant: invalid family account update'); END;
+"""
+
+
+def _migrate_v21(conn):
+    """Family module: registration form for a family meetup that builds the family tree (root couple, their
+    children, grandchildren ...), admin approval, fee + UPI, achievers and cultural programs, income & expense.
+    Adds only; switched OFF for every existing organization."""
+    def add(table, col, ddl):
+        if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    add("organizations", "mod_fam", "INTEGER NOT NULL DEFAULT 0")
+    add("users", "fam_perms", "TEXT")   # staff only: JSON list of ticked Family permissions
+    for stmt in _split(FAMILY_TABLES):
+        conn.execute(stmt)
+    for stmt in _split_triggers(FAMILY_TRIGGERS):
+        conn.execute(stmt)
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21)]
 
 
 def migrate(db_path):

@@ -1,0 +1,143 @@
+{% extends 'family/_public_base.html' %}
+{% block title %}Family tree{% endblock %}
+{% block body_class %}f-tree-page{% endblock %}
+
+{% macro card(p) -%}
+<button type="button" class="ft-p {{ 'ft-unreg' if not p.registered }} {{ 'ft-lt' if p.is_late }}" data-id="{{ p.id }}" style="--c: {{ p.color }}">
+  <span class="ft-av">{% if p.photo %}<img src="{{ url_for('media', name=p.photo) }}" alt="" loading="lazy">{% else %}{{ (p.name or '?')[:1]|upper }}{% endif %}</span>
+  <span class="ft-n">{{ p.name }}</span>
+  {% if p.is_late %}<span class="ft-tag">Late</span>{% elif not p.registered %}<span class="ft-tag">Not registered</span>{% endif %}
+</button>
+{%- endmacro %}
+
+{% macro branch(node) -%}
+<li class="{{ 'ft-has' if node.children }}">
+  <div class="ft-couple" style="--c: {{ node.p.color }}">
+    {{ card(node.p) }}
+    {% for s in node.spouses %}<span class="ft-heart">❤</span>{{ card(s) }}{% endfor %}
+    {% if node.children %}<button type="button" class="ft-tog" title="Show / hide children" aria-label="Show / hide children">{{ node.children|length }}</button>{% endif %}
+  </div>
+  {% if node.children %}<ul>{% for c in node.children %}{{ branch(c) }}{% endfor %}</ul>{% endif %}
+</li>
+{%- endmacro %}
+
+{% macro listrow(node) -%}
+<li>
+  <div class="fl-row" style="--c: {{ node.p.color }}">
+    {% if node.children %}<button type="button" class="fl-tog" aria-label="Open / close">▸</button>{% else %}<span class="fl-sp"></span>{% endif %}
+    {{ card(node.p) }}{% for s in node.spouses %}<span class="ft-heart">❤</span>{{ card(s) }}{% endfor %}
+    <span class="fl-gen">Gen {{ node.p.gen }}</span>
+  </div>
+  {% if node.children %}<ul>{% for c in node.children %}{{ listrow(c) }}{% endfor %}</ul>{% endif %}
+</li>
+{%- endmacro %}
+
+{% block body %}
+<header class="f-hero f-hero-tree">
+  <h1>🌳 {{ st.family_name or st.event_name }}</h1>
+  {% if st.family_name %}<p class="f-fam">{{ st.event_name }}{% if st.event_date %} · {{ st.event_date }}{% endif %}</p>{% endif %}
+  <p class="f-stats"><b>{{ stats.members }}</b> members · <b>{{ stats.gens }}</b> generations · <b>{{ stats.registered }}</b> registered</p>
+  {% if open_ %}<a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower) }}">📝 Register</a>{% endif %}
+</header>
+
+{% if tree %}
+<div class="ft-bar">
+  <input id="ft-q" type="search" placeholder="🔍 Search a name" autocomplete="off">
+  <div class="ft-views"><button type="button" id="v-tree" class="on">Tree</button><button type="button" id="v-list">List</button></div>
+  <div class="ft-zoom-btns" id="zoom-btns"><button type="button" id="z-out" aria-label="Zoom out">−</button><button type="button" id="z-fit" title="Fit">⤢</button><button type="button" id="z-in" aria-label="Zoom in">+</button></div>
+  <button type="button" id="ft-print" title="Print / save as PDF">🖨</button>
+</div>
+<div class="ft-legend">{% for h in heads %}<button type="button" class="ft-chip" data-id="{{ h.id }}" style="--c: {{ h.color }}">{{ h.name }}</button>{% endfor %}</div>
+
+<div class="ft-view" id="tree-view">
+  <div class="ft-zoom" id="ft-zoom"><ul class="ft">{% for r in tree %}{{ branch(r) }}{% endfor %}</ul></div>
+</div>
+<div class="fl-view" id="list-view" hidden><ul class="fl">{% for r in tree %}{{ listrow(r) }}{% endfor %}</ul></div>
+{% else %}
+<main class="f-wrap"><div class="f-card f-center"><p>The family tree is not set up yet.</p></div></main>
+{% endif %}
+
+<div class="ft-modal" id="ft-modal" hidden>
+  <div class="ft-sheet">
+    <button type="button" class="ft-x" id="ft-x" aria-label="Close">✕</button>
+    <div id="ft-body"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var P = {{ people|tojson }}, focus = {{ (focus or 0)|tojson }};
+  var $ = function (id) { return document.getElementById(id); };
+  if (!$("tree-view")) return;
+  var view = $("tree-view"), zoomEl = $("ft-zoom"), scale = 1, listOn = false;
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+
+  // zoom
+  function setScale(s) { scale = Math.max(0.15, Math.min(2.5, s)); zoomEl.style.zoom = scale; }
+  function fit() { zoomEl.style.zoom = 1; var w = zoomEl.querySelector(".ft").scrollWidth, avail = view.clientWidth - 12;
+    setScale(w > avail ? Math.max(0.35, avail / w) : 1); }
+  $("z-in").onclick = function () { setScale(scale * 1.25); };
+  $("z-out").onclick = function () { setScale(scale / 1.25); };
+  $("z-fit").onclick = fit;
+
+  // collapse / expand
+  document.querySelectorAll(".ft-tog").forEach(function (b) {
+    b.addEventListener("click", function (e) { e.stopPropagation(); b.closest("li").classList.toggle("ft-closed"); });
+  });
+  document.querySelectorAll(".fl-tog").forEach(function (b) {
+    b.addEventListener("click", function () { var li = b.closest("li"); li.classList.toggle("fl-open"); b.textContent = li.classList.contains("fl-open") ? "▾" : "▸"; });
+  });
+  document.querySelectorAll(".fl > li").forEach(function (li) { li.classList.add("fl-open"); var t = li.querySelector(".fl-tog"); if (t) t.textContent = "▾"; });
+
+  // views
+  function setView(list) { listOn = list; $("tree-view").hidden = list; $("list-view").hidden = !list;
+    $("v-tree").classList.toggle("on", !list); $("v-list").classList.toggle("on", list); $("zoom-btns").style.visibility = list ? "hidden" : ""; if (!list) fit(); }
+  $("v-tree").onclick = function () { setView(false); };
+  $("v-list").onclick = function () { setView(true); };
+
+  // open the way to a person and show them
+  function reveal(id) {
+    var root = listOn ? $("list-view") : $("tree-view");
+    var el = root.querySelector('.ft-p[data-id="' + id + '"]');
+    if (!el) return;
+    for (var li = el.closest("li"); li; li = li.parentElement.closest("li")) { li.classList.remove("ft-closed"); if (listOn) { li.classList.add("fl-open"); var t = li.querySelector(":scope > .fl-row > .fl-tog"); if (t) t.textContent = "▾"; } }
+    document.querySelectorAll(".ft-hit").forEach(function (x) { x.classList.remove("ft-hit"); });
+    root.querySelectorAll('.ft-p[data-id="' + id + '"]').forEach(function (x) { x.classList.add("ft-hit"); });
+    el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  }
+
+  // search: Enter goes to the next match
+  var hits = [], hi = 0;
+  $("ft-q").addEventListener("input", function () {
+    var q = this.value.trim().toLowerCase(); hi = 0;
+    hits = q ? Object.keys(P).filter(function (k) { return P[k].name.toLowerCase().indexOf(q) >= 0; }) : [];
+    if (hits.length) reveal(hits[0]);
+  });
+  $("ft-q").addEventListener("keydown", function (e) { if (e.key === "Enter" && hits.length) { e.preventDefault(); hi = (hi + 1) % hits.length; reveal(hits[hi]); } });
+
+  // branch chips
+  document.querySelectorAll(".ft-chip").forEach(function (c) { c.onclick = function () { reveal(c.dataset.id); }; });
+
+  // person details
+  function open(id) {
+    var p = P[id]; if (!p) return;
+    var h = '<div class="ft-m-head" style="--c:' + p.color + '"><span class="ft-av ft-av-big">' + (p.photo ? '<img src="' + p.photo + '" alt="">' : esc(p.name[0] || "?")) + '</span>' +
+      '<div><h2>' + esc(p.name) + (p.late ? ' <small>(Late)</small>' : '') + '</h2>' +
+      (p.rel ? '<p>' + esc(p.rel) + '</p>' : '') + (p.sub ? '<p class="f-muted">' + esc(p.sub) + '</p>' : '') +
+      (!p.reg ? '<p class="f-pill f-pill-wait">Not registered yet</p>' : '') + '</div></div>';
+    if (p.sp.length) h += '<p><b>' + (p.g === "F" ? "Husband" : "Wife") + ':</b> ' + p.sp.map(esc).join(", ") + '</p>';
+    if (p.kids.length) h += '<p><b>Children (' + p.kids.length + '):</b> ' + p.kids.map(esc).join(", ") + '</p>';
+    if (p.ach) h += '<p>🏆 ' + esc(p.ach) + '</p>';
+    if (p.prog) h += '<p>🎭 ' + esc(p.prog) + '</p>';
+    $("ft-body").innerHTML = h; $("ft-modal").hidden = false;
+  }
+  document.addEventListener("click", function (e) { var b = e.target.closest(".ft-p"); if (b) open(b.dataset.id); });
+  $("ft-x").onclick = function () { $("ft-modal").hidden = true; };
+  $("ft-modal").addEventListener("click", function (e) { if (e.target === this) this.hidden = true; });
+  $("ft-print").onclick = function () { setScale(1); setTimeout(function () { window.print(); }, 50); };
+
+  window.addEventListener("load", function () { fit(); if (focus && P[focus]) { setTimeout(function () { reveal(focus); open(focus); }, 300); } });
+  fit();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+{% extends 'family/_public_base.html' %}
+{% block body %}
+<main class="f-wrap"><div class="f-card f-center"><h1>🌳 {{ st.event_name }}</h1><p>{{ message }}</p>
+<a class="f-btn" href="{{ url_for('fam.public_tree', code=org.code|lower) }}">See the family tree</a></div></main>
+{% endblock %}

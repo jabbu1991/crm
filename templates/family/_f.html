@@ -1,0 +1,16 @@
+{% macro avatar(n, size=40) -%}
+<span class="fam-av" style="width:{{ size }}px;height:{{ size }}px;--c: {{ n.color or '#475569' }}">{% if n.photo %}<img src="{{ url_for('media', name=n.photo) }}" alt="" loading="lazy">{% else %}{{ (n.name or '?')[:1]|upper }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro late(n) -%}{% if n.is_late %} <small class="fam-late">(Late)</small>{% endif %}{%- endmacro %}
+
+{% macro fee_cell(n, rs, back='') -%}
+{% if n.fee %}{{ rs(n.fee) }}
+  {% if fcan('edit') and not viewing %}<form method="post" action="{{ url_for('fam.mark_paid', mid=n.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ back }}">
+    <input type="hidden" name="paid" value="{{ 0 if n.paid else 1 }}">
+    <button class="badge {{ 'b-converted' if n.paid else 'b-lost' }} fam-paybtn" title="Tap to change">{{ 'Paid ✅' if n.paid else 'Not paid' }}</button></form>
+  {% else %}<span class="badge {{ 'b-converted' if n.paid else 'b-lost' }}">{{ 'Paid' if n.paid else 'Not paid' }}</span>{% endif %}
+  {% if n.upi_ref %}<div class="small muted">UPI: {{ n.upi_ref }}</div>{% endif %}
+{% elif n.registered and not n.is_late %}<span class="small muted">Free</span>{% endif %}
+{%- endmacro %}

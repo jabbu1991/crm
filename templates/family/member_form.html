@@ -1,0 +1,84 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar with context %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ 'Edit ' ~ m.name if m else 'Add member' }}{% endblock %}
+{% block content %}
+{% set f = request.form if request.method == 'POST' else {} %}
+<div class="page-head"><h1>{{ '✏️ ' ~ m.name if m else '+ Add member' }}</h1>
+  {% if m %}<span class="badge {{ 'b-new' if m.status == 'pending' else ('b-lost' if m.status == 'rejected' else 'b-converted') }}">{{ m.status|title }}</span>{% endif %}
+</div>
+<form method="post" enctype="multipart/form-data" class="card form fam-form">
+  {{ csrf() }}<input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+  {% if m and m.is_root %}
+    <p class="muted">Root of the tree (Gen 1).</p>
+  {% elif claim and m.status == 'pending' %}
+    <p>🙋 This registration says <b>"This is me"</b> for <b>{{ claim.name }}</b> ({{ claim.rel_text }}).</p>
+    <label class="check"><input type="checkbox" name="keep_claim" value="1" checked id="keep-claim"> Keep it that way (on approval it fills {{ claim.name }})</label>
+  {% endif %}
+  {% if not (m and m.is_root) %}
+  <div class="row-2" id="link-box">
+    <label>Relation *
+      <select name="relation">{% for k, v in RELATIONS.items() %}<option value="{{ k }}" {{ 'selected' if (f.relation or cur_rel or pre_rel) == k }}>{{ v }}</option>{% endfor %}</select>
+    </label>
+    <label>of *
+      <select name="of_id" id="of-sel">
+        <option value="">— choose —</option>
+        {% for n in opts %}<option value="{{ n.id }}" {{ 'selected' if (f.of_id|int if f.of_id else (cur_of or pre_of)) == n.id }}>Gen {{ n.gen }} · {{ n.name }}{{ ' (Late)' if n.is_late }} — {{ n.rel_text }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  {% if others|length > 1 %}
+  <label>Other parent
+    <select name="other_parent_id"><option value="">—</option>{% for o in others %}<option value="{{ o.id }}" {{ 'selected' if m and m.other_parent_id == o.id }}>{{ o.name }}</option>{% endfor %}</select>
+  </label>
+  {% endif %}
+  {% endif %}
+  <div class="row-2">
+    <label>Name *<input name="name" required maxlength="120" value="{{ f.name or (m.name if m else '') }}"></label>
+    <label>Age<input name="age" inputmode="numeric" value="{{ f.age or (m.age if m and m.age is not none else '') }}"></label>
+  </div>
+  <label class="check"><input type="checkbox" name="is_late" value="1" {{ 'checked' if f.is_late or (m and m.is_late and not f) }}> Late (passed away)</label>
+  <div class="row-2">
+    <label>Phone<input name="phone" inputmode="tel" value="{{ f.phone or (m.phone if m and m.phone else '') }}"></label>
+    <label>WhatsApp <small>(empty = same as phone)</small><input name="whatsapp" inputmode="tel" value="{{ f.whatsapp or (m.whatsapp if m and m.whatsapp and m.whatsapp != m.phone else '') }}"></label>
+  </div>
+  <label>Last year achievement<textarea name="achievement" rows="2" maxlength="500">{{ f.achievement or (m.achievement if m and m.achievement else '') }}</textarea></label>
+  <label>Cultural program<input name="program" maxlength="200" value="{{ f.program or (m.program if m and m.program else '') }}"></label>
+  <div class="row-2">
+    <label>Coming to the meetup?
+      {% set att = f.attending if f else (m.attending|string if m and m.attending is not none else '') %}
+      <select name="attending"><option value="">—</option><option value="1" {{ 'selected' if att == '1' }}>Yes</option><option value="0" {{ 'selected' if att == '0' }}>No</option></select>
+    </label>
+    <label>Photo {% if m and m.photo %}{{ avatar(node or m, 40) }}{% endif %}<input type="file" name="photo" accept="image/*"></label>
+  </div>
+  {% if m and m.photo %}<label class="check"><input type="checkbox" name="remove_photo" value="1"> Remove photo</label>{% endif %}
+  <fieldset>
+    <legend>Fee</legend>
+    <p class="small muted">Fee is set from the age: {{ rs(st.fee) }} above {{ st.free_upto_age }} years. {% if m %}Now: <b>{{ rs(m.fee) if m.fee else 'Free' }}</b>{% endif %}</p>
+    <label class="check"><input type="checkbox" name="fee_manual" value="1" id="fee-manual"> Set the fee by hand</label>
+    <label id="fee-box" hidden>Fee (₹)<input name="fee" inputmode="decimal" value="{{ (m.fee / 100)|int if m and m.fee else '' }}"></label>
+    <label class="check"><input type="checkbox" name="paid" value="1" {{ 'checked' if f.paid or (m and m.paid and not f) }}> Fee paid</label>
+    <label>UPI transaction ID<input name="upi_ref" maxlength="60" value="{{ f.upi_ref or (m.upi_ref if m and m.upi_ref else '') }}"></label>
+  </fieldset>
+  {% if not (m and m.is_root) %}
+  <label class="check"><input type="checkbox" name="registered" value="1" {{ 'checked' if (m and m.registered) or f.registered }}> Registered <small class="muted">(untick = name only in the tree, "Not registered")</small></label>
+  {% endif %}
+  <div class="actions"><button class="btn btn-fam btn-big">💾 Save</button><a class="btn" href="{{ request.args.get('next') or url_for('fam.members') }}">Cancel</a></div>
+</form>
+<script>
+document.getElementById("fee-manual").addEventListener("change", function () { document.getElementById("fee-box").hidden = !this.checked; });
+var kc = document.getElementById("keep-claim");
+if (kc) { var lb = document.getElementById("link-box"); var t = function () { lb.style.display = kc.checked ? "none" : ""; }; kc.addEventListener("change", t); t(); }
+</script>
+{% if m and not m.is_root and is_admin() and not viewing %}
+<div class="grid-2">
+  <form method="post" action="{{ url_for('fam.member_merge', mid=m.id) }}" class="card form" onsubmit="return confirm('Merge {{ m.name|e }} into the chosen person? This one will be removed.')">
+    {{ csrf() }}<h2>🔗 Same person twice? Merge</h2>
+    <label>Keep this person instead<select name="into" required><option value="">— choose —</option>{% for n in merge_targets %}<option value="{{ n.id }}">{{ n.name }} — {{ n.rel_text }}</option>{% endfor %}</select></label>
+    <p class="small muted">Children and partner move to the one kept; its empty details are filled from this one.</p>
+    <button class="btn">Merge</button>
+  </form>
+  <form method="post" action="{{ url_for('fam.member_delete', mid=m.id) }}" class="card form" onsubmit="return confirm('Delete {{ m.name|e }}?')">
+    {{ csrf() }}<h2>🗑 Delete</h2><p class="small muted">Only when nobody is connected under this person.</p><button class="btn btn-danger">Delete</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

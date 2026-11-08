@@ -1,0 +1,34 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar, late, fee_cell with context %}
+{% block title %}Members{% endblock %}
+{% block content %}
+<div class="page-head"><h1>👥 Members ({{ rows|length }})</h1>
+  <div class="actions"><a class="btn btn-sm" href="{{ url_for('fam.export') }}">⬇️ Excel</a></div>
+</div>
+<form method="get" class="filters card">
+  <input name="q" value="{{ q }}" placeholder="Search name / phone / Reg No">
+  <select name="branch" onchange="this.form.submit()"><option value="">All branches</option>{% for h in heads %}<option value="{{ h.id }}" {{ 'selected' if branch == h.id }}>{{ h.name }}</option>{% endfor %}</select>
+  <button class="btn btn-sm btn-primary">Search</button>
+  <div class="chips">{% for k, label in SHOWS %}<a class="chip {{ 'on' if show == k }}" href="{{ url_for('fam.members', show=k, branch=branch or None, q=q or None) }}">{{ label }}</a>{% endfor %}</div>
+</form>
+<div class="table-wrap">
+<table class="table fam-table">
+  <thead><tr><th>Reg</th><th>Name</th><th>Gen</th><th class="num">Age</th><th>Phone</th><th>Coming</th><th>Fee</th><th></th></tr></thead>
+  <tbody>
+  {% for n in rows %}<tr class="{{ 'fam-unreg' if not n.registered }}">
+    <td class="small muted">{{ n.reg_no or '' }}</td>
+    <td><div class="fam-name">{{ avatar(n, 36) }}<div><b>{{ n.name }}</b>{{ late(n) }}{% if not n.registered %} <span class="badge b-none">Not registered</span>{% endif %}
+      <div class="small muted">{{ n.rel_text }}</div>{% if n.rel_sub %}<div class="small muted">{{ n.rel_sub }}</div>{% endif %}
+      {% if n.achievement %}<div class="small">🏆 {{ n.achievement }}</div>{% endif %}{% if n.program %}<div class="small">🎭 {{ n.program }}</div>{% endif %}</div></div></td>
+    <td><span class="fam-dot" style="background: {{ n.color }}"></span> {{ n.gen }}</td>
+    <td class="num">{{ n.age if n.age is not none else '' }}</td>
+    <td class="nowrap">{% if n.phone %}<a href="tel:{{ n.phone }}">{{ n.phone }}</a>{% endif %}
+      {% if n.whatsapp %}<a class="wa-btn" href="https://wa.me/{{ wa(n.whatsapp) }}?text={{ ('Hi ' ~ n.name ~ ',')|urlencode }}" target="_blank" rel="noopener" title="WhatsApp">🟢</a>{% endif %}</td>
+    <td>{{ {1: 'Yes', 0: 'No'}.get(n.attending, '') }}</td>
+    <td class="nowrap">{{ fee_cell(n, rs, request.full_path) }}</td>
+    <td class="nowrap">{% if fcan('edit') and not viewing %}<a class="edit-btn" href="{{ url_for('fam.member_edit', mid=n.id) }}" title="Edit">✏️</a>
+      {% if not n.spouse_of or n.is_root %}<a class="small" href="{{ url_for('fam.member_new', of=n.id, rel='son') }}" title="Add a child">+ child</a>{% endif %}{% endif %}</td>
+  </tr>{% else %}<tr><td colspan="8" class="muted">Nobody here.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

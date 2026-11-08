@@ -236,14 +236,14 @@ def load_user():
 
     g.req_ts = now()
     ep = request.endpoint or ""
-    if g.get("user") and g.get("org") and ep and not ep.startswith(("cafe.", "prod.", "admin_")) \
+    if g.get("user") and g.get("org") and ep and not ep.startswith(("cafe.", "prod.", "fam.", "admin_")) \
             and ep not in SHARED_ENDPOINTS:
         mods = user_modules()
         if "crm" not in mods:  # this organization (or this person) does not use the CRM
             if request.method == "GET":
                 return redirect(module_home(mods[0]))
             abort(404)
-        if session.get("app_mode") in ("cafe", "prod") and ep != "dashboard":
+        if session.get("app_mode") in ("cafe", "prod", "fam") and ep != "dashboard":
             session["app_mode"] = "crm"  # opening a CRM page from a link: show the CRM menu
 
 
@@ -314,7 +314,8 @@ def start_session(user):
 
 MODULES = {"crm": {"label": "CRM", "icon": "💼", "color": "#2563eb"},
            "cafe": {"label": "Cafe", "icon": "☕", "color": "#92400e"},
-           "prod": {"label": "Production", "icon": "🏭", "color": "#ea580c"}}
+           "prod": {"label": "Production", "icon": "🏭", "color": "#ea580c"},
+           "fam": {"label": "Family", "icon": "🌳", "color": "#15803d"}}
 MODULE_KEYS = tuple(MODULES)
 
 
@@ -329,6 +330,7 @@ def org_modules(org=None):
         "crm": org["mod_crm"] if "mod_crm" in keys and org["mod_crm"] is not None else t in ("crm", "both"),
         "cafe": org["mod_cafe"] if "mod_cafe" in keys and org["mod_cafe"] is not None else t in ("cafe", "both"),
         "prod": org["mod_prod"] if "mod_prod" in keys else 0,
+        "fam": org["mod_fam"] if "mod_fam" in keys else 0,
     }
     mods = [k for k in MODULE_KEYS if on[k]]
     return mods or ["crm"]
@@ -347,6 +349,8 @@ def user_modules(user=None, org=None):
             continue
         if m == "prod" and not production.user_perms(user):
             continue
+        if m == "fam" and not family.user_perms(user):
+            continue
         out.append(m)
     return out or mods[:1]
 
@@ -358,7 +362,7 @@ def current_module():
 
 
 def module_home(m):
-    return url_for({"cafe": "cafe.home", "prod": "prod.home"}.get(m, "dashboard"))
+    return url_for({"cafe": "cafe.home", "prod": "prod.home", "fam": "fam.home"}.get(m, "dashboard"))
 
 
 def set_module(m):
@@ -2709,7 +2713,7 @@ def save_cafe_perms(uid, role):
 def save_prod_perms(uid, role):
     mods = org_modules()
     if role != STAFF:
-        execute("UPDATE users SET prod_role = NULL, prod_perms = NULL, crm_off = 0 WHERE id = ? AND org_id = ?",
+        execute("UPDATE users SET prod_role = NULL, prod_perms = NULL, fam_perms = NULL, crm_off = 0 WHERE id = ? AND org_id = ?",
                 (uid, org_id()))
         return
     if "prod" in mods:
@@ -2719,6 +2723,12 @@ def save_prod_perms(uid, role):
             perms = json.dumps([p for p in json.loads(perms) if p in mine])
         execute("UPDATE users SET prod_role = ?, prod_perms = ? WHERE id = ? AND org_id = ?",
                 (prole, perms, uid, org_id()))
+    if "fam" in mods:
+        perms = family.staff_form_perms()
+        if not is_admin():
+            mine = family.user_perms()
+            perms = [p for p in perms if p in mine]
+        execute("UPDATE users SET fam_perms = ? WHERE id = ? AND org_id = ?", (json.dumps(perms), uid, org_id()))
     if "crm" in mods and len(mods) > 1 and request.form.get("mods_form"):
         execute("UPDATE users SET crm_off = ? WHERE id = ? AND org_id = ?",
                 (0 if request.form.get("uses_crm") else 1, uid, org_id()))
@@ -2830,6 +2840,7 @@ def staff_edit(uid):
 def staff_form_extra(member):
     mods = org_modules()
     extra = {"prod_perms": production.staff_form_extra(member) if "prod" in mods else None,
+             "fam_perms": family.staff_form_extra(member) if "fam" in mods else None,
              "org_mods": mods,
              "uses_crm": (not request.form.get("mods_form") or bool(request.form.get("uses_crm")))
              if request.method == "POST" else not (member is not None and member["crm_off"])}
@@ -3407,7 +3418,7 @@ def form_modules():
     else:
         t = form_app_type()
         mods = {"crm": int(t in ("crm", "both")), "cafe": int(t in ("cafe", "both")),
-                "prod": 1 if request.form.get("mod_prod") else 0}
+                "prod": 1 if request.form.get("mod_prod") else 0, "fam": 1 if request.form.get("mod_fam") else 0}
     return mods
 
 
@@ -3418,8 +3429,8 @@ def modules_app_type(mods):
 
 
 def save_org_modules(oid, mods):
-    execute("UPDATE organizations SET mod_crm = ?, mod_cafe = ?, mod_prod = ?, app_type = ? WHERE id = ?",
-            (mods["crm"], mods["cafe"], mods["prod"], modules_app_type(mods), oid))
+    execute("UPDATE organizations SET mod_crm = ?, mod_cafe = ?, mod_prod = ?, mod_fam = ?, app_type = ? WHERE id = ?",
+            (mods["crm"], mods["cafe"], mods["prod"], mods.get("fam", 0), modules_app_type(mods), oid))
 
 
 @app.route("/admin/organizations/new", methods=["GET", "POST"])
@@ -3438,7 +3449,7 @@ def admin_org_new():
         errors += validate_user(admin)
         mods = form_modules()
         if not any(mods.values()):
-            errors.append("Tick at least one module (CRM, Cafe or Production).")
+            errors.append("Tick at least one module (CRM, Cafe, Production or Family).")
         if request.form.get("onboarding") == "password":
             problem = password_problem(request.form.get("password"))
             if problem:
@@ -3463,7 +3474,7 @@ def admin_org_new():
                   "They must change the initial password at first login.", "success")
             return redirect(url_for("admin_orgs"))
     data.setdefault("app_type", request.form.get("app_type") or "crm")
-    data["mods"] = form_modules() if request.method == "POST" else {"crm": 1, "cafe": 0, "prod": 0}
+    data["mods"] = form_modules() if request.method == "POST" else {"crm": 1, "cafe": 0, "prod": 0, "fam": 0}
     return render_template("admin_org_form.html", data=data, admin=admin, org=None)
 
 
@@ -3722,10 +3733,12 @@ import sys  # noqa: E402
 import backup_drive  # noqa: E402
 import cafe  # noqa: E402
 import instagram_stories  # noqa: E402
+import family  # noqa: E402
 import production  # noqa: E402
 
 cafe.init(sys.modules[__name__])
 production.init(sys.modules[__name__])
+family.init(sys.modules[__name__])
 backup_drive.init(sys.modules[__name__])
 instagram_stories.init(sys.modules[__name__])
 

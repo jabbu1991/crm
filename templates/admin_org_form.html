@@ -19,7 +19,7 @@
     <div class="module-switches">
       <b>Modules * <small class="muted">(what this client uses — switch on / off any time)</small></b>
       {% set mods = data.mods or {'crm': 1} %}
-      {% for k, hint in (('crm', 'leads, follow-ups, reports'), ('cafe', 'billing, menu, QR, online orders'), ('prod', 'orders through production stages, warranty, customer tracking link')) %}
+      {% for k, hint in (('crm', 'leads, follow-ups, reports'), ('cafe', 'billing, menu, QR, online orders'), ('prod', 'orders through production stages, warranty, customer tracking link'), ('fam', 'family meetup registration, family tree, income & expense')) %}
       <label class="check module-check" style="--mc: {{ MODULES[k].color }}"><input type="checkbox" name="mod_{{ k }}" value="1" {{ 'checked' if mods[k] }}> <span class="mc-name">{{ MODULES[k].icon }} {{ MODULES[k].label }}</span> <small class="muted">— {{ hint }}</small></label>
       {% endfor %}
       <p class="small muted">More than one ON → a switch at the top of the screen. Switching a module OFF only hides it; its data is kept and comes back when it is switched ON again.</p>
