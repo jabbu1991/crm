@@ -9,11 +9,14 @@
   {{ csrf() }}<input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
   {% if m and m.is_root %}
     <p class="muted">Root of the tree (Gen 1).</p>
+  {% elif head %}
+    <p class="muted">🌿 One of the 7 branches (Gen 2) — fixed in the tree. You can correct the name and details.</p>
+    <label>Son / Daughter<select name="relation"><option value="son" {{ 'selected' if m.relation == 'son' }}>Son</option><option value="daughter" {{ 'selected' if m.relation == 'daughter' }}>Daughter</option></select></label>
   {% elif claim and m.status == 'pending' %}
     <p>🙋 This registration says <b>"This is me"</b> for <b>{{ claim.name }}</b> ({{ claim.rel_text }}).</p>
     <label class="check"><input type="checkbox" name="keep_claim" value="1" checked id="keep-claim"> Keep it that way (on approval it fills {{ claim.name }})</label>
   {% endif %}
-  {% if not (m and m.is_root) %}
+  {% if not (m and m.is_root) and not head %}
   <div class="row-2" id="link-box">
     <label>Relation *
       <select name="relation">{% for k, v in RELATIONS.items() %}<option value="{{ k }}" {{ 'selected' if (f.relation or cur_rel or pre_rel) == k }}>{{ v }}</option>{% endfor %}</select>
@@ -21,7 +24,7 @@
     <label>of *
       <select name="of_id" id="of-sel">
         <option value="">— choose —</option>
-        {% for n in opts %}<option value="{{ n.id }}" {{ 'selected' if (f.of_id|int if f.of_id else (cur_of or pre_of)) == n.id }}>Gen {{ n.gen }} · {{ n.name }}{{ ' (Late)' if n.is_late }} — {{ n.rel_text }}</option>{% endfor %}
+        {% for n in opts %}<option value="{{ n.id }}" {{ 'selected' if (f.of_id|int if f.of_id else (cur_of or pre_of)) == n.id }}>Gen {{ n.gen }} · {{ n.name }} — {{ n.rel_text }}</option>{% endfor %}
       </select>
     </label>
   </div>
@@ -35,7 +38,6 @@
     <label>Name *<input name="name" required maxlength="120" value="{{ f.name or (m.name if m else '') }}"></label>
     <label>Age<input name="age" inputmode="numeric" value="{{ f.age or (m.age if m and m.age is not none else '') }}"></label>
   </div>
-  <label class="check"><input type="checkbox" name="is_late" value="1" {{ 'checked' if f.is_late or (m and m.is_late and not f) }}> Late (passed away)</label>
   <div class="row-2">
     <label>Phone<input name="phone" inputmode="tel" value="{{ f.phone or (m.phone if m and m.phone else '') }}"></label>
     <label>WhatsApp <small>(empty = same as phone)</small><input name="whatsapp" inputmode="tel" value="{{ f.whatsapp or (m.whatsapp if m and m.whatsapp and m.whatsapp != m.phone else '') }}"></label>
@@ -69,7 +71,7 @@ document.getElementById("fee-manual").addEventListener("change", function () { d
 var kc = document.getElementById("keep-claim");
 if (kc) { var lb = document.getElementById("link-box"); var t = function () { lb.style.display = kc.checked ? "none" : ""; }; kc.addEventListener("change", t); t(); }
 </script>
-{% if m and not m.is_root and is_admin() and not viewing %}
+{% if m and not m.is_root and not head and is_admin() and not viewing %}
 <div class="grid-2">
   <form method="post" action="{{ url_for('fam.member_merge', mid=m.id) }}" class="card form" onsubmit="return confirm('Merge {{ m.name|e }} into the chosen person? This one will be removed.')">
     {{ csrf() }}<h2>🔗 Same person twice? Merge</h2>

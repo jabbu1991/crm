@@ -33,7 +33,7 @@ document.addEventListener("click", function (e) {
     <td>{{ {1: 'Yes', 0: 'No'}.get(n.attending, '') }}</td>
     <td class="nowrap">{{ fee_cell(n, rs, request.full_path) }}</td>
     <td class="nowrap">{% if fcan('edit') and not viewing %}<a class="edit-btn" href="{{ url_for('fam.member_edit', mid=n.id) }}" title="Edit">✏️</a>
-      {% if not n.spouse_of or n.is_root %}<a class="small" href="{{ url_for('fam.member_new', of=n.id, rel='son') }}" title="Add a child">+ child</a>{% endif %}{% endif %}</td>
+      {% if not n.spouse_of and not n.is_root %}<a class="small" href="{{ url_for('fam.member_new', of=n.id, rel='son') }}" title="Add a child">+ child</a>{% endif %}{% endif %}</td>
   </tr>{% else %}<tr><td colspan="8" class="muted">Nobody here.</td></tr>{% endfor %}
   </tbody>
 </table>

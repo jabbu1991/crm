@@ -31,8 +31,8 @@
     {% if m.sponsor %}<p class="f-muted">🤝 <span data-ml="സ്പോൺസർഷിപ്പ്:">Sponsorship:</span> {{ m.sponsor }}</p>{% endif %}
     <p class="f-muted small" data-ml="സ്റ്റാറ്റസ് നോക്കാൻ ഈ പേജ് സൂക്ഷിക്കുക (bookmark / screenshot).">Keep this page (bookmark / screenshot) to check your status.</p>
     <div class="f-actions">
-      <a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower, b=b or None) }}" data-ml="+ മറ്റൊരാളെ രജിസ്റ്റർ ചെയ്യുക">+ Register another person</a>
-      <a class="f-btn f-btn-ghost" href="https://wa.me/?text={{ (st.event_name ~ ' — register here: ' ~ url_for('fam.public_form', code=org.code|lower, _external=True))|urlencode }}" target="_blank" rel="noopener" data-ml="🟢 ഫോം ഷെയർ ചെയ്യുക">🟢 Share the form</a>
+      <a class="f-btn" href="{{ url_for('fam.public_tree', code=org.code|lower) }}" data-ml="+ മറ്റൊരാളെ രജിസ്റ്റർ ചെയ്യുക (കുടുംബവൃക്ഷത്തിൽ നിന്ന്)">+ Register another person (from the family tree)</a>
+      <a class="f-btn f-btn-ghost" href="https://wa.me/?text={{ (st.event_name ~ ' — open the family tree, tap your name and register: ' ~ url_for('fam.public_tree', code=org.code|lower, _external=True))|urlencode }}" target="_blank" rel="noopener" data-ml="🟢 ഫോം ഷെയർ ചെയ്യുക">🟢 Share the form</a>
     </div>
   </div>
 </main>

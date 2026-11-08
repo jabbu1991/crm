@@ -77,8 +77,11 @@ def test_module_switch_and_start(fw):
     assert c.execute("SELECT mod_fam FROM organizations WHERE kind = 'agency'").fetchone()[0] == 0
     tree = Browser().get("/f/kmh")
     assert tree.status_code == 200 and "Moideenkutti" in tree.text and "Not registered" in tree.text
-    form = Browser().get("/f/kmh/register")
-    assert form.status_code == 200 and "Sakeena" in form.text
+    form = Browser().get("/f/kmh/register")   # registration starts from the tree
+    assert form.status_code == 302 and form.headers["Location"].endswith("/f/kmh")
+    sak = member(fw, "Sakeena")
+    form = Browser().get(f"/f/kmh/register?branch={sak['id']}&mode=me&claim_id={sak['id']}")
+    assert form.status_code == 200 and "This is me: Sakeena" in form.text and "is_late" not in form.text
     # second start is refused
     assert "already exists" in start(b).text
 
@@ -138,10 +141,12 @@ def test_validation_and_reject(fw):
     b.post(f"/family/members/{fat['id']}/approve", {})
     r = register(fw, mode="new", relation="husband", of_id=fat["id"], name="X", age="50")
     assert "married into the family" in r.text
-    # late person: no phone, no age, no fee
+    # no Late option any more: a "Late" tick sent anyway is ignored (age / phone still needed)
     r = register(fw, mode="new", relation="son", of_id=moi["id"], name="Old Son", age="", phone="", attending="",
                  is_late="1")
-    assert "Registered!" in r.text and member(fw, "Old Son")["fee"] == 0
+    assert "Enter the age" in r.text and member(fw, "Old Son") is None
+    r = register(fw, mode="new", relation="son", of_id=moi["id"], name="Old Son", age="40", attending="0", is_late="1")
+    assert "Registered!" in r.text and member(fw, "Old Son")["fee"] == 0 and member(fw, "Old Son")["is_late"] == 0
     # reject needs a reason
     oid = member(fw, "Old Son")["id"]
     assert "Write the reason" in b.post(f"/family/members/{oid}/reject", {"reason": ""}).text
@@ -282,7 +287,7 @@ def test_whatsapp_messages_on_approve_and_reject(fw):
     w = member(fw, "Wrong")
     d = b.post(f"/family/members/{w['id']}/reject", {"ajax": "1", "reason": "Already registered",
                                                      "send_wa": "1"}).get_json()
-    assert d["ok"] and "Reason: Already registered" in d["text"] and "/f/kmh/register" in d["text"]
+    assert d["ok"] and "Reason: Already registered" in d["text"] and d["text"].endswith("/f/kmh")
     assert member(fw, "Wrong")["status"] == "rejected"
     assert b.post(f"/family/members/{w['id']}/reject", {"ajax": "1", "reason": "x"}).get_json()["ok"] is False
     # members list: WhatsApp button carries the approval message
@@ -299,7 +304,8 @@ def test_whatsapp_messages_on_approve_and_reject(fw):
 def test_form_languages_and_tree_image_button(fw):
     b = fw["fam"]
     start(b)
-    form = Browser().get("/f/kmh/register").text
+    moi = member(fw, "Moideenkutti")
+    form = Browser().get(f"/f/kmh/register?branch={moi['id']}&mode=new&relation=son&of_id={moi['id']}").text
     assert 'data-lang="ml"' in form and "നിങ്ങളുടെ ശാഖ" in form and 'name="lang"' in form
     r = Browser().post("/f/kmh/register", {"mode": "new", "relation": "son", "name": ""})
     assert "പേര് നൽകുക." in r.text
@@ -359,3 +365,31 @@ def test_fee_not_coming_sponsorship_and_tree_links(fw, monkeypatch):
     d = b.get("/family/pending.json").get_json()
     assert d["count"] == 2 and d["latest"] == member(fw, "Ziya")["id"]
     assert "fam-toast" in b.get("/family").text
+
+
+
+def test_branches_fixed_and_claimed_name_locked(fw):
+    b = fw["fam"]
+    start(b)
+    moi = member(fw, "Moideenkutti")
+    root = member(fw, "KUNJIMUHAMMED HAJI")
+    # "This is me": a different typed name is ignored
+    register(fw, mode="me", claim_id=moi["id"], name="Someone Else", age="62")
+    assert member(fw, "Moideenkutti")["status"] == "pending" and member(fw, "Someone Else") is None
+    # no new children of the root (branches fixed), public or admin
+    r = register(fw, relation="son", of_id=root["id"], name="New Branch", age="40")
+    assert member(fw, "New Branch") is None and "branches are fixed" in r.text
+    b.post("/family/members/new", {"relation": "son", "of_id": root["id"], "name": "Admin Branch"})
+    assert member(fw, "Admin Branch") is None
+    # branches cannot be deleted / merged / moved; the name can be corrected; Late stays as it was
+    r = b.post(f"/family/members/{moi['id']}/delete", {})
+    assert "fixed" in r.text and member(fw, "Moideenkutti") is not None
+    ay = member(fw, "Ayishumma")
+    b.post(f"/family/members/{ay['id']}/merge", {"into": moi["id"]})
+    assert member(fw, "Ayishumma") is not None
+    b.post(f"/family/members/{ay['id']}/edit", {"name": "Ayishumma K", "relation": "daughter", "of_id": moi["id"]})
+    ay2 = member(fw, "Ayishumma K")
+    assert ay2 and ay2["parent_id"] == root["id"]
+    b.post(f"/family/members/{root['id']}/edit", {"name": "KUNJIMUHAMMED HAJI"})
+    assert member(fw, "KUNJIMUHAMMED HAJI")["is_late"] == 1
+    assert "is_late" not in b.get(f"/family/members/{ay2['id']}/edit").text

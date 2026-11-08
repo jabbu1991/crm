@@ -34,7 +34,6 @@
       <button class="btn" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText('{{ tree_link }}'); this.textContent='Copied ✓'">📋 Copy link</button>
       <a class="btn" href="{{ url_for('fam.qr_poster') }}" target="_blank">🖨 QR poster</a>
     </div>
-    <p class="small muted">Form only: <a href="{{ form_link }}" target="_blank" rel="noopener">{{ form_link }}</a></p>
     {% if fcan('acc_view') %}
     <h2>💰 Fees</h2>
     <div class="stats compact-stats">

@@ -146,3 +146,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #86efac; border-c
 .f-tap-hint { font-weight: 700; margin: 8px 0 2px; }
 .ft-reg { border-top: 1px solid #e2e8f0; margin-top: 12px; padding-top: 6px; display: flex; flex-direction: column; }
 .ft-reg .f-btn { margin: 3px 0; text-align: center; }
+.f-pick { border-left: 6px solid var(--c); }
+.f-pick-main { font-size: 1.15rem; font-weight: 800; margin: 0 0 2px; }
+input.f-locked { background: #f1f5f9; color: #334155; font-weight: 700; }

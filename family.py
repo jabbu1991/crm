@@ -310,7 +310,7 @@ def message_values(m, st, org=None, reason=""):
             "venue": st["venue"], "fee": (m["fee"] or 0) // 100 or "",
             "tree_link": url_for("fam.public_tree", code=code, me=m["claim_of"] or m["id"], _external=True),
             "status_link": url_for("fam.public_status", code=code, tok=tok, _external=True) if tok else "",
-            "form_link": url_for("fam.public_form", code=code, _external=True), "reason": reason}
+            "form_link": url_for("fam.public_tree", code=code, _external=True), "reason": reason}
 
 
 def compose(kind, m, st, lang="en", paid=None, reason="", org=None):
@@ -466,6 +466,13 @@ def ensure_seed(oid=None):
     return True
 
 
+def is_branch_head(m):
+    """One of the root couple's children (the fixed branches)."""
+    if not m["parent_id"] or m["spouse_of"]:
+        return False
+    return bool(H.scalar("SELECT is_root FROM fam_members WHERE id = ?", (m["parent_id"],)))
+
+
 def get_member(mid, oid=None):
     return H.query("SELECT * FROM fam_members WHERE id = ? AND org_id = ?", (mid, oid or H.org_id()),
                    one=True) or abort(404)
@@ -486,6 +493,8 @@ def resolve_link(t, relation, of_id):
         if target["spouse_of"] or target["is_root"]:
             return None, f"{target['name']} married into the family — choose the family member instead."
         return (None, None, of_id), None
+    if target["is_root"]:
+        return None, "The branches are fixed. Choose the person from your branch."
     if target["spouse_of"]:   # child of a person who married in: the blood parent is the partner
         partner = t["nodes"].get(target["spouse_of"])
         if not partner:
@@ -526,7 +535,7 @@ ERR_ML = {
 def person_fields(st, existing=None, admin=False):
     """Name, age, late, phone, WhatsApp, achievement, program, attending, UPI ref from the form. -> (data, errors)"""
     f = request.form
-    data = {"name": clean(f.get("name"), 120), "is_late": 1 if f.get("is_late") else 0,
+    data = {"name": clean(f.get("name"), 120), "is_late": existing["is_late"] if existing is not None else 0,
             "achievement": clean(f.get("achievement"), 500), "program": clean(f.get("program"), 200),
             "upi_ref": clean(f.get("upi_ref"), 60)}
     errors = []
@@ -641,6 +650,8 @@ def public_form(code):
     if not reg_open(st):
         return render_template("family/public_closed.html", org=org, st=st, message="Registration is closed.")
     errors, form = [], (request.form if request.method == "POST" else request.args)
+    if request.method == "GET" and not (form.get("claim_id") or form.get("of_id")):
+        return redirect(public_tree_url(org))   # registration starts by tapping a person in the family tree
     if request.method == "POST":
         if form.get("website"):   # honeypot
             return redirect(public_tree_url(org))
@@ -654,6 +665,9 @@ def public_form(code):
             claim = t["nodes"].get(form.get("claim_id", type=int))
             if not claim or claim["registered"] or claim["is_root"] or claim["status"] != "approved":
                 errors.append("Choose your name from the list (or choose 'I am new').")
+            else:
+                data["name"] = claim["name"]          # the name in the tree cannot be changed here
+                errors = [e for e in errors if e != "Enter the name."]
         else:
             link, err = resolve_link(t, form.get("relation"), form.get("of_id", type=int))
             if err:
@@ -687,7 +701,22 @@ def public_form(code):
                                      "spouse": bool(n["spouse_of"]), "gen": n["gen"],
                                      "photo": url_for("media", name=n["photo"]) if n["photo"] else None}
                                     for n in people]})
+    pick = None
+    target = t["nodes"].get(form.get("claim_id", type=int) if form.get("mode") == "me" else form.get("of_id", type=int))
+    if target and target["gen"] is not None:
+        rel = form.get("relation")
+        ml_rel = {"son": "മകൻ", "daughter": "മകൾ", "husband": "ഭർത്താവ്", "wife": "ഭാര്യ"}
+        if form.get("mode") == "me":
+            pick = {"en": f"This is me: {target['name']}", "ml": f"ഇത് ഞാനാണ്: {target['name']}",
+                    "sub": target["rel_text"] or ""}
+        elif rel in RELATIONS:
+            pick = {"en": f"{RELATIONS[rel]} of {target['name']}", "ml": f"{target['name']} യുടെ {ml_rel[rel]}",
+                    "sub": target["rel_text"] or ""}
+        if pick:
+            pick["branch"] = target["branch_name"]
+            pick["color"] = target["color"]
     return render_template("family/public_form.html", org=org, st=st, branches=branches, errors=errors, ERR_ML=ERR_ML,
+                           pick=pick, tree_link=public_tree_url(org),
                            form=form, RELATIONS=RELATIONS, fee_rs=(st["fee"] or 0) // 100,
                            pre_branch=request.values.get("b", type=int) or request.values.get("branch", type=int),
                            upi=upi_link(st, st["fee"] or 0),
@@ -928,7 +957,7 @@ def reject(mid):
 # ---------------------------------------------------------------- admin: members
 
 SHOWS = [("all", "All"), ("registered", "Registered"), ("not_registered", "Not registered"), ("coming", "Coming"),
-         ("not_coming", "Not coming"), ("not_paid", "Fee not paid"), ("paid", "Fee paid"), ("late", "Late")]
+         ("not_coming", "Not coming"), ("not_paid", "Fee not paid"), ("paid", "Fee paid")]
 
 
 def filtered_members(t, branch=None, show="all", q=""):
@@ -1010,9 +1039,10 @@ def member_form(m=None):
     if request.method == "POST":
         data, errors = person_fields(st, existing=m, admin=True)
         link = None
-        if m is not None and m["is_root"]:
+        if m is not None and (m["is_root"] or is_branch_head(m)):   # root couple and the 7 branches stay in place
             link = (m["parent_id"], m["other_parent_id"], m["spouse_of"])
-            rel = m["relation"]
+            rel = m["relation"] if m["is_root"] else (request.form.get("relation") if request.form.get("relation")
+                                                       in ("son", "daughter") else m["relation"])
         elif m is not None and m["claim_of"] and m["status"] == "pending" and request.form.get("keep_claim"):
             link, rel = (None, None, None), m["relation"]
         else:
@@ -1090,6 +1120,7 @@ def member_form(m=None):
         others = [t["nodes"][s] for s in t["nodes"][m["parent_id"]]["spouses"]]
     merge_targets = [n for n in opts if not n["is_root"]] if m is not None else []
     return render_template("family/member_form.html", m=m, node=node, st=st, opts=opts, cur_of=cur_of,
+                           head=bool(m is not None and is_branch_head(m)),
                            cur_rel=cur_rel, RELATIONS=RELATIONS, others=others, merge_targets=merge_targets,
                            claim=t["nodes"].get(m["claim_of"]) if m is not None and m["claim_of"] else None, rs=rs,
                            pre_of=request.args.get("of", type=int), pre_rel=request.args.get("rel"))
@@ -1117,6 +1148,9 @@ def member_delete(mid):
     if m["is_root"]:
         flash("The root couple cannot be deleted (use Clear all to start again).", "error")
         return redirect(url_for("fam.member_edit", mid=mid))
+    if is_branch_head(m):
+        flash("The 7 branches are fixed and cannot be deleted. You can only correct the name.", "error")
+        return redirect(url_for("fam.member_edit", mid=mid))
     linked = H.scalar("SELECT COUNT(*) FROM fam_members WHERE (parent_id = ? OR spouse_of = ? OR other_parent_id = ?"
                       " OR claim_of = ?) AND status != 'rejected'", (mid, mid, mid, mid))
     if linked:
@@ -1141,6 +1175,9 @@ def member_merge(mid):
     m = get_member(mid)
     target = get_member(request.form.get("into", type=int) or 0)
     t = build(H.org_id(), include_pending=True)
+    if is_branch_head(m):
+        flash("The 7 branches are fixed: merge the other person into this one instead.", "error")
+        return redirect(url_for("fam.member_edit", mid=mid))
     if target["id"] == m["id"] or m["is_root"] or target["id"] in descendants(t, m["id"]):
         flash("Choose another person to merge into.", "error")
         return redirect(url_for("fam.member_edit", mid=mid))

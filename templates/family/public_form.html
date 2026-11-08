@@ -18,6 +18,14 @@
   <input type="hidden" name="lang" id="lang" value="{{ form.lang or 'ml' }}">
   <input type="hidden" name="branch" id="branch" value="{{ form.branch or pre_branch or '' }}">
 
+  {% if pick %}
+  <section class="f-card f-pick" style="--c: {{ pick.color }}">
+    <p class="f-pick-main" data-ml="{{ pick.ml }}">{{ pick.en }}</p>
+    {% if pick.sub %}<p class="f-muted small">{{ pick.sub }}</p>{% endif %}
+    <p class="f-muted small">🌿 {{ pick.branch }} · <a href="{{ tree_link }}" data-ml="↩ മാറ്റാൻ കുടുംബവൃക്ഷത്തിലേക്ക്">↩ Change: back to the family tree</a></p>
+  </section>
+  {% endif %}
+  <div {% if pick %}style="display:none"{% endif %}>
   <section class="f-card" id="s1">
     <h2><span class="f-step">1</span> <span data-ml="നിങ്ങളുടെ ശാഖ">Your branch</span></h2>
     <p class="f-muted" data-ml="കുടുംബത്തിലെ മുതിർന്നവരുടെ ഏത് മകൻ്റെ / മകളുടെ ശാഖയിലാണ് നിങ്ങൾ?">Which child of the family elders do you come under?</p>
@@ -52,10 +60,12 @@
     </div>
   </section>
 
+  </div>
+
   <section class="f-card" id="s3" hidden>
-    <h2><span class="f-step">3</span> <span data-ml="നിങ്ങളുടെ വിവരങ്ങൾ">Your details</span></h2>
+    <h2><span class="f-step">{{ 1 if pick else 3 }}</span> <span data-ml="നിങ്ങളുടെ വിവരങ്ങൾ">Your details</span></h2>
     <label><span data-ml="പേര് *">Name *</span><input name="name" id="name" required maxlength="120" value="{{ form.name or '' }}" autocomplete="name"></label>
-    <label class="f-check"><input type="checkbox" name="is_late" value="1" id="is-late" {{ 'checked' if form.is_late }}> <span data-ml="മരിച്ചുപോയ ഒരാൾക്ക് വേണ്ടി രജിസ്റ്റർ ചെയ്യുന്നു (Late)">Registering for someone who passed away (Late)</span></label>
+    <p class="f-muted small" id="name-lock" hidden data-ml="🔒 കുടുംബവൃക്ഷത്തിലുള്ള പേര് (മാറ്റാൻ പറ്റില്ല — തെറ്റുണ്ടെങ്കിൽ Admin-നെ അറിയിക്കുക)">🔒 The name in the family tree (cannot be changed here — tell the Admin if it is wrong)</p>
     <div id="alive-box">
       <div class="f-row">
         <label><span data-ml="വയസ്സ് *">Age *</span><input name="age" id="age" inputmode="numeric" maxlength="3" value="{{ form.age or '' }}"></label>
@@ -142,7 +152,7 @@
   }
 
   function sync() {
-    var m = mode(), late = $("is-late").checked;
+    var m = mode(), late = false;
     show("me-box", m === "me"); show("new-box", m !== "me");
     var ready = cur && (m === "me" ? !!document.querySelector("input[name=claim_id]:checked") : !!$("of-id").value);
     show("s3", !!ready); show("s5", !!ready);
@@ -152,11 +162,12 @@
     show("s4", !!ready && !late && att !== "0" && !isNaN(age) && age > FREE && FEE > 0);
     show("s-sp", !!ready);
     show("wa-box", !$("wa-same").checked);
-    var c = document.querySelector("input[name=claim_id]:checked");
-    if (m === "me" && c && !$("name").dataset.typed) {
+    var c = document.querySelector("input[name=claim_id]:checked"), lock = m === "me" && !!c;
+    if (lock) {   // "This is me": the name comes from the tree and cannot be changed
       var p = cur.people.filter(function (x) { return x.id == c.value; })[0];
       if (p) $("name").value = p.name;
-    }
+    } else if ($("name").readOnly) { $("name").value = ""; }
+    $("name").readOnly = lock; $("name").classList.toggle("f-locked", lock); show("name-lock", lock);
   }
 
   document.querySelectorAll(".f-branch").forEach(function (b) { b.addEventListener("click", function () { pickBranch(b.dataset.id); }); });
@@ -164,7 +175,7 @@
   $("me-list").addEventListener("change", function () { sync(); $("s3").scrollIntoView({ behavior: "smooth", block: "start" }); });
   $("relation").addEventListener("change", function () { fillOf(); sync(); });
   $("of-id").addEventListener("change", sync);
-  ["is-late", "wa-same"].forEach(function (id) { $(id).addEventListener("change", sync); });
+  $("wa-same").addEventListener("change", sync);
   $("age").addEventListener("input", sync);
   document.querySelectorAll("input[name=attending]").forEach(function (r) { r.addEventListener("change", sync); });
   $("name").addEventListener("input", function () { this.dataset.typed = "1"; });
