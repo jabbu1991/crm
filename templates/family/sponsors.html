@@ -1,0 +1,36 @@
+{% extends 'base.html' %}{% from 'family/_f.html' import avatar, late with context %}
+{% block title %}Sponsorship{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🤝 Sponsorship offers ({{ rows|length }})</h1>
+  {% if got %}<div class="muted">Received in Accounts: <b>{{ rs(got) }}</b></div>{% endif %}
+</div>
+{% for n in rows %}
+<div class="card fam-sp {{ 'fam-sp-done' if n.sponsor_done }}">
+  <div class="fam-appr-head">
+    {{ avatar(n, 48) }}
+    <div style="flex:1">
+      <b>{{ n.name }}</b>{{ late(n) }} {% if n.status == 'pending' %}<span class="badge b-none">Waiting for approval</span>{% endif %}
+      <div class="small muted">{{ n.rel_text }}{% if n.reg_no %} · Reg No {{ n.reg_no }}{% endif %}</div>
+      <p class="fam-sp-text">🤝 {{ n.sponsor }}</p>
+      <div class="small">
+        {% if n.phone %}📞 <a href="tel:{{ n.phone }}">{{ n.phone }}</a>{% endif %}
+        {% if n.whatsapp or n.phone %} <a class="wa-btn" href="https://wa.me/{{ (n.whatsapp or n.phone)|wa_number }}?text={{ ('Hi ' ~ n.name ~ ', thank you for offering to sponsor: ' ~ n.sponsor)|urlencode }}" target="_blank" rel="noopener">🟢 WhatsApp</a>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if n.sponsor_done %}
+    <p class="fam-sp-ok">✅ Received{% if n.sponsor_acc_id and acc.get(n.sponsor_acc_id) %} — {{ rs(acc[n.sponsor_acc_id].amount) }} in Accounts ({{ acc[n.sponsor_acc_id].entry_date }}){% endif %}</p>
+    {% if is_admin() and not viewing %}<form method="post" action="{{ url_for('fam.sponsor_undo', mid=n.id) }}" class="inline" onsubmit="return confirm('Mark as not received?{{ ' The Accounts entry will be removed.' if n.sponsor_acc_id }}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm">↩ Not received</button></form>{% endif %}
+  {% elif fcan('edit') and not viewing %}
+    <form method="post" action="{{ url_for('fam.sponsor_received', mid=n.id) }}" class="fam-sp-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="amount" inputmode="decimal" placeholder="Amount ₹ (if money)">
+      <select name="payment_mode">{% for pm in PAY_MODES %}<option>{{ pm }}</option>{% endfor %}</select>
+      <input type="date" name="entry_date" value="{{ today }}">
+      <button class="btn btn-fam btn-sm">✅ Received</button>
+    </form>
+    <p class="small muted">Money: type the amount → it is added to Accounts as Sponsorship income. Things (food, gifts …): leave the amount empty.</p>
+  {% endif %}
+</div>
+{% else %}<div class="card"><p class="muted">No sponsorship offers yet.</p></div>{% endfor %}
+{% endblock %}

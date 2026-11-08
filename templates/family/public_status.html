@@ -3,7 +3,7 @@
 {% block body %}
 <main class="f-wrap">
   <div class="f-card f-center">
-    <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="en" class="on">English</button><button type="button" data-lang="ml">മലയാളം</button></div>
+    <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="ml" class="on">മലയാളം</button><button type="button" data-lang="en">English</button></div>
     {% if new %}<div class="f-big-ok">✅</div><h1 data-ml="രജിസ്റ്റർ ചെയ്തു!">Registered!</h1>{% else %}<h1>🌳 {{ st.event_name }}</h1>{% endif %}
     {% if m.photo %}<img class="f-status-photo" src="{{ url_for('media', name=m.photo) }}" alt="">{% endif %}
     <p class="f-name">{{ m.name }}{% if m.is_late %} <small>(Late)</small>{% endif %}</p>
@@ -11,7 +11,7 @@
     <p class="f-regno"><span data-ml="രജിസ്ട്രേഷൻ നമ്പർ">Registration No</span> <b>{{ m.reg_no }}</b></p>
     {% if m.status == 'pending' %}
       <p class="f-pill f-pill-wait" data-ml="⏳ അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു">⏳ Waiting for approval</p>
-      <p class="f-muted small" data-ml="കുടുംബ Admin അംഗീകരിച്ച ശേഷം നിങ്ങൾ കുടുംബവൃക്ഷത്തിൽ വരും.">You will appear in the family tree after the family admin approves it.</p>
+      <p class="f-approve-note" data-ml="ℹ️ Admin അംഗീകരിച്ച ശേഷം നിങ്ങൾ കുടുംബവൃക്ഷത്തിൽ അംഗമാകും.">ℹ️ You will become a member of the family tree after the Admin approves your registration.</p>
     {% elif m.status == 'approved' %}
       <p class="f-pill f-pill-ok" data-ml="✅ അംഗീകരിച്ചു — നിങ്ങൾ കുടുംബവൃക്ഷത്തിൽ ഉണ്ട്">✅ Approved — you are in the family tree</p>
       <a class="f-btn" href="{{ url_for('fam.public_tree', code=org.code|lower, me=m.id) }}" data-ml="🌳 കുടുംബവൃക്ഷത്തിൽ എന്നെ കാണുക">🌳 See me in the tree</a>
@@ -28,6 +28,7 @@
       {% endif %}
     </div>
     {% endif %}
+    {% if m.sponsor %}<p class="f-muted">🤝 <span data-ml="സ്പോൺസർഷിപ്പ്:">Sponsorship:</span> {{ m.sponsor }}</p>{% endif %}
     <p class="f-muted small" data-ml="സ്റ്റാറ്റസ് നോക്കാൻ ഈ പേജ് സൂക്ഷിക്കുക (bookmark / screenshot).">Keep this page (bookmark / screenshot) to check your status.</p>
     <div class="f-actions">
       <a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower, b=b or None) }}" data-ml="+ മറ്റൊരാളെ രജിസ്റ്റർ ചെയ്യുക">+ Register another person</a>

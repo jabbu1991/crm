@@ -534,3 +534,12 @@ body.board-dragging { cursor: grabbing; user-select: none; }
   .fam-nav, .topbar, .site-footer, .page-head .actions, .no-print { display: none !important; }
   .fam-cards { grid-template-columns: 1fr 1fr; }
 }
+.fam-sp-text { margin: 6px 0; font-weight: 600; white-space: pre-wrap; }
+.fam-sp-done { opacity: .8; }
+.fam-sp-ok { color: #15803d; font-weight: 700; margin: 6px 0; }
+.fam-sp-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.fam-sp-form input[name=amount] { width: 150px; }
+#fam-toast { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 60; background: #dc2626; color: #fff; font-weight: 700; padding: 14px 18px; border-radius: 12px; box-shadow: 0 8px 24px rgba(220, 38, 38, .4); text-decoration: none; text-align: center; }
+#fam-toast[hidden] { display: none; }
+.fam-alert-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.fam-alert-tools .btn.on { background: #dcfce7; border-color: #86efac; color: #166534; }

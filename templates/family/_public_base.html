@@ -11,10 +11,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='family.css') }}">
   <script>
   /* English / Malayalam switch: elements carry data-ml (Malayalam text) and data-ml-ph (Malayalam placeholder).
-     English is the default; the choice is remembered on this phone. */
+     Malayalam is the default; the choice is remembered on this phone. */
   window.famLang = (function () {
-    var KEY = "fam_lang", cur = "en", subs = [];
-    try { cur = localStorage.getItem(KEY) === "ml" ? "ml" : "en"; } catch (e) {}
+    var KEY = "fam_lang", cur = "ml", subs = [];
+    try { cur = localStorage.getItem(KEY) === "en" ? "en" : "ml"; } catch (e) {}
     function apply() {
       document.documentElement.lang = cur;
       document.querySelectorAll("[data-ml]").forEach(function (el) {

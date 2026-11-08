@@ -88,11 +88,11 @@ def test_claim_new_relations_and_tree(fw):
     start(b)
     moi = member(fw, "Moideenkutti")
     r = register(fw, mode="me", claim_id=moi["id"], name="Moideenkutti", age="62", branch=moi["id"])
-    assert "Registered!" in r.text and "Waiting for approval" in r.text and "₹800" in r.text
+    assert "Registered!" in r.text and "Waiting for approval" in r.text and "₹500" in r.text
     # not approved yet: still not registered in the tree
     assert db(fw).execute("SELECT registered FROM fam_members WHERE id = ?", (moi["id"],)).fetchone()[0] == 0
     pend = db(fw).execute("SELECT * FROM fam_members WHERE status = 'pending'").fetchone()
-    assert pend["claim_of"] == moi["id"] and pend["fee"] == 80000
+    assert pend["claim_of"] == moi["id"] and pend["fee"] == 50000
     r = b.get("/family/approvals")
     assert "This is me" in r.text
     r = b.post(f"/family/members/{pend['id']}/approve", {})
@@ -162,7 +162,7 @@ def test_fee_paid_accounts_and_permissions(fw):
     b.post("/family/accounts/save", {"kind": "income", "amount": "5000", "category": "Sponsorship"})
     b.post("/family/accounts/save", {"kind": "expense", "amount": "1200", "category": "Food"})
     r = b.get("/family/accounts")
-    assert "₹5,800" in r.text and "₹1,200" in r.text and "₹4,600" in r.text   # 800 fee + 5000; balance 4600
+    assert "₹5,500" in r.text and "₹1,200" in r.text and "₹4,300" in r.text   # 500 fee + 5000; balance 4300
     x = b.get("/family/export.xlsx")
     assert x.status_code == 200 and x.data[:2] == b"PK"
 
@@ -278,7 +278,7 @@ def test_whatsapp_messages_on_approve_and_reject(fw):
     d = b.post(f"/family/members/{z['id']}/approve", {"ajax": "1", "message": "Custom text"}).get_json()
     assert d["text"] == "Custom text"
     # reject: reason goes into the message
-    register(fw, relation="son", of_id=moi["id"], name="Wrong", age="20", phone="9000000003")
+    register(fw, relation="son", of_id=moi["id"], name="Wrong", age="20", phone="9000000003", lang="en")
     w = member(fw, "Wrong")
     d = b.post(f"/family/members/{w['id']}/reject", {"ajax": "1", "reason": "Already registered",
                                                      "send_wa": "1"}).get_json()
@@ -290,7 +290,7 @@ def test_whatsapp_messages_on_approve_and_reject(fw):
     # own default message in Settings
     b.post("/family/settings", {"what": "event", "event_name": "KMH Family Meetup", "fee": "800",
                                 "free_upto_age": "5", "reg_open": "1", "msg_paid_en": "Thanks {name}! #{reg_no}"})
-    register(fw, relation="daughter", of_id=moi["id"], name="Nafla", age="25", phone="9000000004")
+    register(fw, relation="daughter", of_id=moi["id"], name="Nafla", age="25", phone="9000000004", lang="en")
     nf = member(fw, "Nafla")
     d = b.post(f"/family/members/{nf['id']}/approve", {"ajax": "1", "paid_box": "1", "paid": "1"}).get_json()
     assert d["text"] == f"Thanks Nafla! #{nf['reg_no']}"
@@ -305,3 +305,57 @@ def test_form_languages_and_tree_image_button(fw):
     assert "പേര് നൽകുക." in r.text
     tree = Browser().get("/f/kmh").text
     assert "⬇️ Image" in tree and "var SHAPE" in tree
+
+
+def test_fee_not_coming_sponsorship_and_tree_links(fw, monkeypatch):
+    import json as _json
+    import cafe_push
+    b = fw["fam"]
+    start(b)
+    moi = member(fw, "Moideenkutti")
+    # not coming: no fee even above 5; sponsorship saved; Malayalam is the default language
+    register(fw, mode="me", claim_id=moi["id"], name="Moideenkutti", age="62", attending="0",
+             sponsor="Lunch for everyone", lang="")
+    p = member(fw, "Moideenkutti")
+    assert p["fee"] == 0 and p["sponsor"] == "Lunch for everyone" and p["lang"] == "ml"
+    page = b.get("/family/approvals").text
+    assert "Lunch for everyone" in page and "Payment received" not in page
+    b.post(f"/family/members/{p['id']}/approve", {})
+    moi = member(fw, "Moideenkutti")
+    assert moi["sponsor"] == "Lunch for everyone" and moi["status"] == "approved"
+    register(fw, relation="son", of_id=moi["id"], name="Shafi", age="30", sponsor="₹5000")
+    assert member(fw, "Shafi")["fee"] == 50000
+    # sponsorship list: received with an amount → Accounts income
+    sp = b.get("/family/sponsors").text
+    assert "Lunch for everyone" in sp and "₹5000" in sp
+    sh = member(fw, "Shafi")
+    r = b.post(f"/family/sponsors/{sh['id']}/received", {"amount": "5000", "payment_mode": "UPI"})
+    assert "₹5,000 added to Accounts" in r.text
+    sh = member(fw, "Shafi")
+    acc = db(fw).execute("SELECT * FROM fam_accounts WHERE id = ?", (sh["sponsor_acc_id"],)).fetchone()
+    assert sh["sponsor_done"] == 1 and acc["category"] == "Sponsorship" and acc["amount"] == 500000
+    b.post(f"/family/sponsors/{sh['id']}/undo", {})
+    assert member(fw, "Shafi")["sponsor_done"] == 0
+    assert db(fw).execute("SELECT COUNT(*) FROM fam_accounts").fetchone()[0] == 0
+    b.post(f"/family/sponsors/{moi['id']}/received", {})   # things, no amount
+    assert member(fw, "Moideenkutti")["sponsor_done"] == 1
+    # the form opened from the tree comes filled in; Malayalam first
+    f = Browser().get(f"/f/kmh/register?branch={moi['id']}&mode=new&relation=daughter&of_id={moi['id']}").text
+    assert 'value="daughter" selected' in f and 'data-lang="ml" class="on"' in f and "അംഗമാകും" in f
+    tree = Browser().get("/f/kmh").text
+    assert "regButtons" in tree and "tap" in tree
+    assert "/f/kmh" in b.get("/family").text
+    # new registration: pending count for the bell + phone notification to approvers
+    sent = []
+    monkeypatch.setattr(cafe_push, "sender", lambda sub, data, key: sent.append(_json.loads(data)))
+    c = db(fw)
+    oid = c.execute("SELECT id FROM organizations WHERE code = 'KMH'").fetchone()[0]
+    uid = c.execute("SELECT id FROM users WHERE username = 'kmh_admin'").fetchone()[0]
+    c.execute("INSERT INTO push_subscriptions (org_id, user_id, endpoint, p256dh, auth, created_at) "
+              "VALUES (?,?,?,?,?,datetime('now'))", (oid, uid, "https://push.example/x", "k", "a"))
+    c.commit()
+    register(fw, relation="son", of_id=moi["id"], name="Ziya", age="20")
+    assert sent and sent[-1]["title"] == "🌳 New registration: Ziya" and sent[-1]["url"] == "/family/approvals"
+    d = b.get("/family/pending.json").get_json()
+    assert d["count"] == 2 and d["latest"] == member(fw, "Ziya")["id"]
+    assert "fam-toast" in b.get("/family").text

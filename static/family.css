@@ -142,3 +142,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #86efac; border-c
 .f-wrap .f-langs button.on { background: var(--g); color: #fff; }
 .ft-img-opts { display: flex; flex-direction: column; gap: 4px; }
 .ft-img-opts .f-btn { margin: 2px 0; }
+.f-approve-note { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; border-radius: 10px; padding: 10px 12px; font-weight: 600; text-align: center; font-size: .95rem; }
+.f-tap-hint { font-weight: 700; margin: 8px 0 2px; }
+.ft-reg { border-top: 1px solid #e2e8f0; margin-top: 12px; padding-top: 6px; display: flex; flex-direction: column; }
+.ft-reg .f-btn { margin: 3px 0; text-align: center; }

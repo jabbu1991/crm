@@ -42,6 +42,7 @@
   </div>
   <label>Last year achievement<textarea name="achievement" rows="2" maxlength="500">{{ f.achievement or (m.achievement if m and m.achievement else '') }}</textarea></label>
   <label>Cultural program<input name="program" maxlength="200" value="{{ f.program or (m.program if m and m.program else '') }}"></label>
+  <label>🤝 Sponsorship <small>(what they offered)</small><textarea name="sponsor" rows="2" maxlength="500">{{ f.sponsor or (m.sponsor if m and m.sponsor else '') }}</textarea></label>
   <div class="row-2">
     <label>Coming to the meetup?
       {% set att = f.attending if f else (m.attending|string if m and m.attending is not none else '') %}

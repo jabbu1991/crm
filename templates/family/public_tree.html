@@ -37,7 +37,9 @@
   <h1>🌳 {{ st.family_name or st.event_name }}</h1>
   {% if st.family_name %}<p class="f-fam">{{ st.event_name }}{% if st.event_date %} · {{ st.event_date }}{% endif %}</p>{% endif %}
   <p class="f-stats"><b>{{ stats.members }}</b> members · <b>{{ stats.gens }}</b> generations · <b>{{ stats.registered }}</b> registered</p>
-  {% if open_ %}<a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower) }}">📝 Register</a>{% endif %}
+  {% if open_ %}<p class="f-tap-hint" data-ml="👇 നിങ്ങളുടെ പേരിലോ ഉപ്പ / ഉമ്മയുടെ പേരിലോ tap ചെയ്ത് രജിസ്റ്റർ ചെയ്യുക">👇 Tap your name (or your father / mother) to register</p>
+  <a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower) }}" data-ml="📝 രജിസ്റ്റർ ചെയ്യുക">📝 Register</a>{% endif %}
+  <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="ml" class="on">മലയാളം</button><button type="button" data-lang="en">English</button></div>
 </header>
 
 {% if tree %}
@@ -119,6 +121,27 @@
   // branch chips
   document.querySelectorAll(".ft-chip").forEach(function (c) { c.onclick = function () { reveal(c.dataset.id); }; });
 
+  // register from the tree: "This is me" / "Son of …" / "Wife of …" open the form already filled in
+  var OPEN = {{ open_|tojson }}, FORM = {{ url_for('fam.public_form', code=org.code|lower)|tojson }}, T = famLang.T;
+  function regLink(q, label, cls) {
+    var u = FORM + "?" + Object.keys(q).map(function (k) { return k + "=" + encodeURIComponent(q[k]); }).join("&");
+    return '<a class="f-btn ' + (cls || "") + '" href="' + u + '">' + label + '</a>';
+  }
+  function regButtons(p) {
+    if (!OPEN || p.root || !p.bh) return "";
+    var h = '<div class="ft-reg"><p class="f-muted small">' + T("Register from here:", "ഇവിടെ നിന്ന് രജിസ്റ്റർ ചെയ്യാം:") + '</p>';
+    if (!p.reg && !p.late) h += regLink({ branch: p.bh, mode: "me", claim_id: p.id }, T("🙋 This is me — Register", "🙋 ഇത് ഞാനാണ് — രജിസ്റ്റർ ചെയ്യുക"));
+    else if (!p.reg) h += regLink({ branch: p.bh, mode: "me", claim_id: p.id }, T("📝 Register for " + p.name + " (Late)", "📝 " + p.name + " (Late) — രജിസ്റ്റർ ചെയ്യുക"));
+    var nm = p.name.split(" ")[0];
+    h += regLink({ branch: p.bh, mode: "new", relation: "son", of_id: p.id }, T("+ Son of " + nm, "+ " + nm + " യുടെ മകൻ"), "f-btn-ghost");
+    h += regLink({ branch: p.bh, mode: "new", relation: "daughter", of_id: p.id }, T("+ Daughter of " + nm, "+ " + nm + " യുടെ മകൾ"), "f-btn-ghost");
+    if (!p.msp) {
+      if (p.g === "F") h += regLink({ branch: p.bh, mode: "new", relation: "husband", of_id: p.id }, T("+ Husband of " + nm, "+ " + nm + " യുടെ ഭർത്താവ്"), "f-btn-ghost");
+      else h += regLink({ branch: p.bh, mode: "new", relation: "wife", of_id: p.id }, T("+ Wife of " + nm, "+ " + nm + " യുടെ ഭാര്യ"), "f-btn-ghost");
+    }
+    return h + '</div>';
+  }
+
   // person details
   function open(id) {
     var p = P[id]; if (!p) return;
@@ -130,6 +153,7 @@
     if (p.kids.length) h += '<p><b>Children (' + p.kids.length + '):</b> ' + p.kids.map(esc).join(", ") + '</p>';
     if (p.ach) h += '<p>🏆 ' + esc(p.ach) + '</p>';
     if (p.prog) h += '<p>🎭 ' + esc(p.prog) + '</p>';
+    h += regButtons(p);
     $("ft-body").innerHTML = h; $("ft-modal").hidden = false;
   }
   document.addEventListener("click", function (e) { var b = e.target.closest(".ft-p"); if (b) open(b.dataset.id); });

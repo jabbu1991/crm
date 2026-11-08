@@ -25,15 +25,16 @@
 </div>
 <div class="grid-2">
   <section class="card">
-    <h2>📝 Registration link</h2>
-    <p><a href="{{ form_link }}" target="_blank" rel="noopener" class="fam-link">{{ form_link }}</a></p>
+    <h2>📝 Registration link (family tree)</h2>
+    <p class="small muted">Share the family tree: people tap their own name (or their father / mother) and register from there.</p>
+    <p><a href="{{ tree_link }}" target="_blank" rel="noopener" class="fam-link">{{ tree_link }}</a></p>
     <div class="fam-qr">{{ qr|safe }}</div>
     <div class="actions">
       <a class="btn btn-fam" href="{{ share }}" target="_blank" rel="noopener">🟢 Share on WhatsApp</a>
-      <button class="btn" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText('{{ form_link }}'); this.textContent='Copied ✓'">📋 Copy link</button>
+      <button class="btn" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText('{{ tree_link }}'); this.textContent='Copied ✓'">📋 Copy link</button>
       <a class="btn" href="{{ url_for('fam.qr_poster') }}" target="_blank">🖨 QR poster</a>
     </div>
-    <p class="small muted">Family tree: <a href="{{ tree_link }}" target="_blank" rel="noopener">{{ tree_link }}</a></p>
+    <p class="small muted">Form only: <a href="{{ form_link }}" target="_blank" rel="noopener">{{ form_link }}</a></p>
     {% if fcan('acc_view') %}
     <h2>💰 Fees</h2>
     <div class="stats compact-stats">

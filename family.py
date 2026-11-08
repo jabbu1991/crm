@@ -35,6 +35,7 @@ def init(host):
     host.app.register_blueprint(bp)
     host.app.jinja_env.globals["fcan"] = lambda p: can(p)
     host.app.jinja_env.globals["fam_pending"] = pending_count
+    host.app.jinja_env.globals["fam_alerts_on"] = lambda: bool(g.get("org") and has_fam() and can("approve"))
 
 
 # ---------------------------------------------------------------- constants
@@ -66,7 +67,7 @@ DEFAULT_SETTINGS = {
     "venue": "",
     "about": "",
     "cover": None,              # cover / poster photo
-    "fee": 80000,               # paise (₹800)
+    "fee": 50000,               # paise (₹500)
     "free_upto_age": 5,         # age 5 and below: no fee
     "upi_id": "",
     "upi_name": "",
@@ -247,8 +248,9 @@ def save_settings(data, oid=None):
     g.setdefault("fam_settings", {}).pop(oid, None)
 
 
-def fee_for(age, late, st):
-    if late or age is None:
+def fee_for(age, late, st, attending=None):
+    """Fee by age; nothing for the Late and for those not coming to the meetup."""
+    if late or age is None or attending == 0:
         return 0
     return int(st["fee"] or 0) if age > int(st["free_upto_age"] or 0) else 0
 
@@ -554,7 +556,8 @@ def person_fields(st, existing=None, admin=False):
         data["attending"] = None
         if not admin:
             errors.append("Tell us: coming to the meetup? Yes / No")
-    data["fee"] = fee_for(data["age"], data["is_late"], st)
+    data["fee"] = fee_for(data["age"], data["is_late"], st, data["attending"])
+    data["sponsor"] = (f.get("sponsor") or "").strip()[:500]
     return data, errors
 
 
@@ -597,7 +600,8 @@ def node_json(n):
     return {"id": n["id"], "name": n["name"], "photo": url_for("media", name=n["photo"]) if n["photo"] else None,
             "late": bool(n["is_late"]), "reg": bool(n["registered"]), "rel": n["rel_text"], "sub": n["rel_sub"],
             "gen": n["gen"], "branch": n["branch_name"], "color": n["color"],
-            "ach": n["achievement"] or "", "prog": n["program"] or "", "g": n["gender"]}
+            "ach": n["achievement"] or "", "prog": n["program"] or "", "g": n["gender"],
+            "bh": n["branch"], "msp": bool(n["spouse_of"]), "root": bool(n["is_root"])}
 
 
 @bp.route("/f/<code>")
@@ -636,7 +640,7 @@ def public_form(code):
                                message="The family tree is not set up yet. Please try again later.")
     if not reg_open(st):
         return render_template("family/public_closed.html", org=org, st=st, message="Registration is closed.")
-    errors, form = [], request.form
+    errors, form = [], (request.form if request.method == "POST" else request.args)
     if request.method == "POST":
         if form.get("website"):   # honeypot
             return redirect(public_tree_url(org))
@@ -662,14 +666,16 @@ def public_form(code):
             parent_id, other_id, spouse_of = (None, None, None) if claim else link
             db.execute("""INSERT INTO fam_members (org_id, name, gender, relation, parent_id, other_parent_id,
                                 spouse_of, claim_of, is_late, registered, status, age, phone, whatsapp, achievement,
-                                program, photo, attending, fee, upi_ref, reg_no, token, created_at, lang)
-                                VALUES (?,?,?,?,?,?,?,?,?, 1, 'pending', ?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                program, photo, attending, fee, upi_ref, reg_no, token, created_at, lang, sponsor)
+                                VALUES (?,?,?,?,?,?,?,?,?, 1, 'pending', ?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                              (oid, data["name"], claim["gender"] if claim else GENDER[rel], rel, parent_id, other_id,
                               spouse_of, claim["id"] if claim else None, data["is_late"], data["age"], data["phone"],
                               data["whatsapp"], data["achievement"] or None, data["program"] or None, photo,
                               data["attending"], data["fee"], data["upi_ref"] or None, next_reg_no(db, oid), tok,
-                              _now(), "ml" if form.get("lang") == "ml" else "en"))
+                              _now(), "en" if form.get("lang") == "en" else "ml", data["sponsor"] or None))
+            new_id = db.execute("SELECT id FROM fam_members WHERE token = ?", (tok,)).fetchone()[0]
             db.commit()
+            notify_new_registration(org, new_id, data["name"])
             return redirect(url_for("fam.public_status", code=code, tok=tok, new=1,
                                     b=form.get("branch", type=int) or ""))
     branches = []
@@ -751,17 +757,20 @@ def home():
     recent = H.query("""SELECT * FROM fam_members WHERE org_id = ? AND registered = 1 AND is_root = 0
                         ORDER BY created_at DESC, id DESC LIMIT 8""", (oid,))
     link = form_url()
-    share = "https://wa.me/?text=" + quote(f"{st['event_name']} — please register here:\n{link}")
+    tlink = tree_url()
+    share = "https://wa.me/?text=" + quote(
+        f"🌳 {st['event_name']}\nOpen our family tree, tap your name (or your father / mother) and register:\n{tlink}\n\n"
+        f"🌳 {st['event_name']}\nകുടുംബവൃക്ഷം തുറന്ന് നിങ്ങളുടെ പേരിലോ ഉപ്പ / ഉമ്മയുടെ പേരിലോ tap ചെയ്ത് രജിസ്റ്റർ ചെയ്യുക:\n{tlink}")
     return render_template("family/home.html", st=st, stats=stats, fees=fee_sums(oid), branches=branch_stats(t),
-                           recent=recent, form_link=link, tree_link=tree_url(), share=share,
-                           qr=qr_svg(link, 5), setup_needed=not t["root"], rs=rs, nodes=t["nodes"])
+                           recent=recent, form_link=link, tree_link=tlink, share=share,
+                           qr=qr_svg(tlink, 5), setup_needed=not t["root"], rs=rs, nodes=t["nodes"])
 
 
 @bp.route("/family/qr")
 @fam_view()
 def qr_poster():
     st = get_settings()
-    return render_template("family/qr_poster.html", st=st, link=form_url(), qr=qr_svg(form_url(), 10))
+    return render_template("family/qr_poster.html", st=st, link=tree_url(), qr=qr_svg(tree_url(), 10))
 
 
 # ---------------------------------------------------------------- admin: approvals
@@ -825,10 +834,10 @@ def approve_member(m, paid=None):
         db.execute("""UPDATE fam_members SET name = ?, is_late = ?, registered = 1, age = ?, phone = ?, whatsapp = ?,
                       achievement = ?, program = ?, photo = COALESCE(?, photo), attending = ?, fee = ?, paid = ?,
                       paid_at = ?, paid_by = ?, upi_ref = ?, reg_no = ?, created_at = ?, approved_by = ?,
-                      approved_at = ?, updated_at = ?, lang = ? WHERE id = ?""",
+                      approved_at = ?, updated_at = ?, lang = ?, sponsor = COALESCE(?, sponsor) WHERE id = ?""",
                    (m["name"], m["is_late"], m["age"], m["phone"], m["whatsapp"], m["achievement"], m["program"],
                     m["photo"], m["attending"], m["fee"], m["paid"], m["paid_at"], m["paid_by"], m["upi_ref"],
-                    m["reg_no"], m["created_at"], uid, ts, ts, m["lang"], target_id))
+                    m["reg_no"], m["created_at"], uid, ts, ts, m["lang"], m["sponsor"], target_id))
         db.execute("UPDATE fam_members SET token = NULL WHERE id = ?", (m["id"],))
         db.execute("DELETE FROM fam_members WHERE id = ?", (m["id"],))
         db.execute("UPDATE fam_members SET token = ? WHERE id = ?", (m["token"], target_id))
@@ -1033,14 +1042,14 @@ def member_form(m=None):
                 db.execute("""INSERT INTO fam_members (org_id, name, gender, relation, parent_id, other_parent_id,
                                     spouse_of, is_late, registered, status, age, phone, whatsapp, achievement, program,
                                     photo, attending, fee, paid, paid_at, paid_by, upi_ref, reg_no, token, created_by,
-                                    created_at, approved_by, approved_at)
-                                    VALUES (?,?,?,?,?,?,?,?,?, 'approved', ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    created_at, approved_by, approved_at, sponsor)
+                                    VALUES (?,?,?,?,?,?,?,?,?, 'approved', ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                                  (oid, data["name"], GENDER[rel], rel, parent_id, other_id, spouse_of, data["is_late"],
                                   registered, data["age"], data["phone"], data["whatsapp"], data["achievement"] or None,
                                   data["program"] or None, photo, data["attending"], data["fee"], paid,
                                   ts if paid else None, g.user["id"] if paid else None, data["upi_ref"] or None,
                                   next_reg_no(db, oid) if registered else None, secrets.token_urlsafe(9),
-                                  g.user["id"], ts, g.user["id"], ts))
+                                  g.user["id"], ts, g.user["id"], ts, data["sponsor"] or None))
                 db.commit()
                 H.audit("family_add", data["name"])
                 flash(f"{data['name']} added to the tree.", "success")
@@ -1057,12 +1066,12 @@ def member_form(m=None):
                           achievement = ?, program = ?, photo = COALESCE(?, photo), attending = ?, fee = ?, paid = ?,
                           paid_at = CASE WHEN ? = 1 THEN COALESCE(paid_at, ?) END,
                           paid_by = CASE WHEN ? = 1 THEN COALESCE(paid_by, ?) END, upi_ref = ?, reg_no = ?,
-                          updated_at = ? WHERE id = ?""",
+                          sponsor = ?, updated_at = ? WHERE id = ?""",
                        (data["name"], m["gender"] if m["is_root"] else GENDER.get(rel, m["gender"]),
                         rel, parent_id, other_id, spouse_of, keep_claim, data["is_late"], registered, data["age"],
                         data["phone"], data["whatsapp"], data["achievement"] or None, data["program"] or None, photo,
                         data["attending"], data["fee"], paid, paid, ts, paid, g.user["id"], data["upi_ref"] or None,
-                        reg_no, ts, m["id"]))
+                        reg_no, data["sponsor"] or None, ts, m["id"]))
             db.commit()
             H.audit("family_edit", data["name"])
             flash(f"{data['name']} saved.", "success")
@@ -1266,11 +1275,157 @@ def account_save():
 @fam_view(admin=True)
 def account_delete(eid):
     e = H.query("SELECT * FROM fam_accounts WHERE id = ? AND org_id = ?", (eid, H.org_id()), one=True) or abort(404)
+    H.execute("UPDATE fam_members SET sponsor_done = 0, sponsor_acc_id = NULL WHERE sponsor_acc_id = ? AND org_id = ?",
+              (eid, H.org_id()))
     H.execute("DELETE FROM fam_accounts WHERE id = ?", (eid,))
     H.remove_media(e["photo"])
     H.audit("family_account_delete", f"{e['kind']} {rs(e['amount'])} {e['category']}")
     flash("Entry deleted.", "success")
     return redirect(url_for("fam.accounts"))
+
+
+# ---------------------------------------------------------------- sponsorship offers
+
+@bp.route("/family/sponsors")
+@fam_view("view")
+def sponsors():
+    oid = H.org_id()
+    t = build(oid, include_pending=True)
+    rows = [n for n in t["nodes"].values() if (n["sponsor"] or "").strip()]
+    rows.sort(key=lambda n: (n["sponsor_done"], -(n["id"])))
+    acc = {r["id"]: r for r in H.query("SELECT * FROM fam_accounts WHERE org_id = ? AND id IN (SELECT sponsor_acc_id "
+                                        "FROM fam_members WHERE org_id = ? AND sponsor_acc_id IS NOT NULL)", (oid, oid))}
+    got = sum(a["amount"] for a in acc.values())
+    return render_template("family/sponsors.html", rows=rows, acc=acc, got=got, rs=rs, PAY_MODES=PAY_MODES,
+                           today=H.today())
+
+
+@bp.route("/family/sponsors/<int:mid>/received", methods=["POST"])
+@fam_view("edit")
+def sponsor_received(mid):
+    m = get_member(mid)
+    if m["sponsor_done"]:
+        flash("Already marked received.", "info")
+        return redirect(url_for("fam.sponsors"))
+    amount = money_in(request.form.get("amount"))
+    acc_id = None
+    if amount and amount > 0:
+        if not (can("acc_add") or H.is_admin()):
+            flash("You can mark it received, but adding money to Accounts needs the 'Add income / expense' tick.",
+                  "error")
+            return redirect(url_for("fam.sponsors"))
+        mode = request.form.get("payment_mode") if request.form.get("payment_mode") in PAY_MODES else "Cash"
+        cur = H.get_db().execute("""INSERT INTO fam_accounts (org_id, kind, entry_date, amount, category, party,
+                                    payment_mode, note, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                 (H.org_id(), "income", H.valid_date(request.form.get("entry_date")) or H.today(),
+                                  amount, "Sponsorship", m["name"], mode, (m["sponsor"] or "")[:300], g.user["id"],
+                                  _now()))
+        acc_id = cur.lastrowid
+    H.get_db().execute("UPDATE fam_members SET sponsor_done = 1, sponsor_acc_id = ?, updated_at = ? WHERE id = ?",
+                       (acc_id, _now(), mid))
+    H.get_db().commit()
+    H.audit("family_sponsor", f"{m['name']}: received" + (f" {rs(amount)}" if acc_id else ""))
+    flash(f"🤝 {m['name']}: sponsorship received" + (f" — {rs(amount)} added to Accounts." if acc_id else "."),
+          "success")
+    return redirect(url_for("fam.sponsors"))
+
+
+@bp.route("/family/sponsors/<int:mid>/undo", methods=["POST"])
+@fam_view(admin=True)
+def sponsor_undo(mid):
+    m = get_member(mid)
+    db = H.get_db()
+    if m["sponsor_acc_id"]:
+        db.execute("DELETE FROM fam_accounts WHERE id = ? AND org_id = ?", (m["sponsor_acc_id"], H.org_id()))
+    db.execute("UPDATE fam_members SET sponsor_done = 0, sponsor_acc_id = NULL WHERE id = ?", (mid,))
+    db.commit()
+    H.audit("family_sponsor_undo", m["name"])
+    flash(f"{m['name']}: marked not received (the Accounts entry was removed).", "success")
+    return redirect(url_for("fam.sponsors"))
+
+
+# ---------------------------------------------------------------- new registration: sound + phone notifications
+
+def _push_subs(org_id):
+    rows = H.query("""SELECT s.*, u.role, u.fam_perms FROM push_subscriptions s JOIN users u ON u.id = s.user_id
+                      WHERE s.org_id = ? AND u.active = 1""", (org_id,))
+    return [dict(r) for r in rows if "approve" in user_perms(r)]
+
+
+def notify_new_registration(org, mid, name):
+    """Phones of the Admin / approvers get "New registration" (even with the screen off). Never stops the form."""
+    try:
+        import cafe_push
+        subs = _push_subs(org["id"])
+        if not subs:
+            return 0
+        st = get_settings(org["id"])
+        n = H.scalar("SELECT COUNT(*) FROM fam_members WHERE org_id = ? AND status = 'pending'", (org["id"],)) or 1
+        data = json.dumps({"title": f"🌳 New registration: {name}",
+                           "body": f"{st['event_name']} · {n} waiting for approval — tap to open",
+                           "url": "/family/approvals", "tag": f"fam-{org['id']}-{mid}"}, ensure_ascii=False)
+        cafe_push._dispatch(subs, data)
+        return len(subs)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+@bp.route("/family/pending.json")
+@fam_view()
+def pending_json():
+    if not can("approve"):
+        return {"count": 0, "latest": 0}
+    r = H.query("SELECT COUNT(*) n, COALESCE(MAX(id), 0) latest FROM fam_members "
+                "WHERE org_id = ? AND status = 'pending'", (H.org_id(),), one=True)
+    last = H.query("SELECT name FROM fam_members WHERE org_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1",
+                   (H.org_id(),), one=True)
+    return {"count": r["n"], "latest": r["latest"], "name": last["name"] if last else ""}
+
+
+@bp.route("/family/push/key")
+@fam_view("approve")
+def push_key():
+    import cafe_push
+    return {"ok": True, "key": cafe_push.vapid()[1]}
+
+
+@bp.route("/family/push/subscribe", methods=["POST"])
+@fam_view("approve")
+def push_subscribe():
+    try:
+        sub = json.loads(request.form.get("payload") or "{}")
+        endpoint = str(sub["endpoint"])[:1000]
+        keys = sub.get("keys") or {}
+        p256dh, auth = str(keys["p256dh"])[:200], str(keys["auth"])[:100]
+        assert endpoint.startswith("https://")
+    except (ValueError, KeyError, TypeError, AssertionError):
+        return {"ok": False, "error": "This browser cannot get notifications."}, 400
+    db = H.get_db()
+    db.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    db.execute("""INSERT INTO push_subscriptions (org_id, user_id, endpoint, p256dh, auth, created_at)
+                  VALUES (?,?,?,?,?,?)""", (g.org["id"], g.user["id"], endpoint, p256dh, auth, _now()))
+    db.commit()
+    return {"ok": True}
+
+
+@bp.route("/family/push/unsubscribe", methods=["POST"])
+@fam_view()
+def push_unsubscribe():
+    H.execute("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?",
+              ((request.form.get("endpoint") or "")[:1000], g.user["id"]))
+    return {"ok": True}
+
+
+@bp.route("/family/push/test", methods=["POST"])
+@fam_view("approve")
+def push_test():
+    import cafe_push
+    rows = [dict(r) for r in H.query("SELECT * FROM push_subscriptions WHERE user_id = ?", (g.user["id"],))]
+    if not rows:
+        return {"ok": False, "error": "Notifications are not on for this phone yet."}
+    cafe_push._dispatch(rows, json.dumps({"title": "🌳 Test notification", "body": "New registrations will show like this.",
+                                          "url": "/family/approvals", "tag": "fam-test"}, ensure_ascii=False))
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- Excel
@@ -1286,14 +1441,16 @@ def export():
     ws = wb.active
     ws.title = "Members"
     head = ["Reg No", "Name", "Relation", "More", "Branch", "Gen", "Age", "Phone", "WhatsApp", "Coming", "Fee (₹)",
-            "Paid", "UPI ref", "Achievement", "Cultural program", "Late", "Registered", "Status"]
+            "Paid", "UPI ref", "Achievement", "Cultural program", "Sponsorship", "Sponsorship received", "Late",
+            "Registered", "Status"]
     ws.append(head)
     rows = sorted(t["nodes"].values(), key=lambda n: (n["gen"] or 99, n["branch_name"], n["id"]))
     for n in rows:
         ws.append([n["reg_no"], n["name"], n["rel_text"], n["rel_sub"], n["branch_name"], n["gen"], n["age"],
                    n["phone"], n["whatsapp"], {1: "Yes", 0: "No"}.get(n["attending"], ""),
                    (n["fee"] or 0) / 100 if n["fee"] else "", "Yes" if n["paid"] else ("No" if n["fee"] else ""),
-                   n["upi_ref"], n["achievement"], n["program"], "Yes" if n["is_late"] else "",
+                   n["upi_ref"], n["achievement"], n["program"], n["sponsor"],
+                   ("Yes" if n["sponsor_done"] else "No") if n["sponsor"] else "", "Yes" if n["is_late"] else "",
                    "Yes" if n["registered"] else "No", n["status"].title()])
     if can("acc_view"):
         wa = wb.create_sheet("Accounts")

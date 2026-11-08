@@ -2,6 +2,15 @@
 {% block title %}Approvals{% endblock %}
 {% block content %}
 <div class="page-head"><h1>⏳ Waiting for approval ({{ rows|length }})</h1></div>
+{% if not viewing %}
+<div class="fam-alert-tools">
+  <button type="button" class="btn btn-sm" id="fam-sound-btn">🔇 Tap to turn on the sound</button>
+  <button type="button" class="btn btn-sm" id="push-btn" hidden>📲 Turn on phone notifications</button>
+  <button type="button" class="btn btn-sm" id="push-test" hidden>Send a test</button>
+  <a class="btn btn-sm btn-fam" id="fam-new" href="" hidden>🔄 New registration — tap to see</a>
+</div>
+<p class="small muted" id="push-msg"></p>
+{% endif %}
 {% for n in rows %}
 <div class="card fam-appr">
   <div class="fam-appr-head">
@@ -22,6 +31,7 @@
   </div>
   {% if n.achievement %}<p class="small">🏆 {{ n.achievement }}</p>{% endif %}
   {% if n.program %}<p class="small">🎭 {{ n.program }}</p>{% endif %}
+  {% if n.sponsor %}<p class="small">🤝 <b>Sponsorship:</b> {{ n.sponsor }}</p>{% endif %}
   {% if not viewing %}
   {% if n.problem %}<div class="fam-warn">⚠️ {{ n.problem }}</div>{% endif %}
   <div class="fam-decide" data-msgs="{{ n.msgs|tojson|forceescape }}" data-phone="{{ n.wa_to }}" data-fee="{{ 1 if n.fee else 0 }}">
@@ -109,6 +119,44 @@
       });
     });
   });
+  window.famApprovalsNew = function () { var b = document.getElementById("fam-new"); if (b) b.hidden = false; };
+  var sb = document.getElementById("fam-sound-btn");
+  if (sb) sb.onclick = function () { setTimeout(function () { sb.textContent = window.famSoundOn && window.famSoundOn() ? "🔔 Sound on ✓" : "🔇 Tap to turn on the sound"; sb.classList.toggle("on", !!(window.famSoundOn && window.famSoundOn())); }, 300); };
+
+  // Phone notifications (Web Push): "New registration" even when the screen is off
+  var csrf = "{{ csrf_token() }}", msg = document.getElementById("push-msg");
+  var pb = document.getElementById("push-btn"), pt = document.getElementById("push-test");
+  if (pb && "serviceWorker" in navigator && "PushManager" in window && window.Notification) {
+    var b64 = function (s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; };
+    var post = function (url, data) { var fd = new FormData(); fd.append("csrf_token", csrf); Object.keys(data).forEach(function (k) { fd.append(k, data[k]); }); return fetch(url, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }); };
+    pb.hidden = false;
+    navigator.serviceWorker.register("{{ url_for('cafe.service_worker') }}", {scope: "/"}).then(function (reg) {
+      var paintP = function (sub) {
+        var on = !!sub && Notification.permission === "granted";
+        pb.classList.toggle("on", on); pb.textContent = on ? "📲 Notifications on ✓" : "📲 Turn on phone notifications"; pt.hidden = !on;
+        if (Notification.permission === "denied") msg.textContent = "Notifications are blocked. Chrome ⋮ → Settings → Site settings → Notifications → allow this site.";
+      };
+      reg.pushManager.getSubscription().then(paintP);
+      pb.onclick = function () {
+        reg.pushManager.getSubscription().then(function (sub) {
+          if (sub && Notification.permission === "granted") {
+            return post("{{ url_for('fam.push_unsubscribe') }}", {endpoint: sub.endpoint}).then(function () { return sub.unsubscribe(); }).then(function () { paintP(null); msg.textContent = "Notifications off for this phone."; });
+          }
+          return fetch("{{ url_for('fam.push_key') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (k) {
+            return reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64(k.key)});
+          }).then(function (s) {
+            return post("{{ url_for('fam.push_subscribe') }}", {payload: JSON.stringify(s)}).then(function (d) {
+              paintP(d.ok ? s : null); msg.textContent = d.ok ? "Done. New registrations will show on this phone even when the screen is off." : (d.error || "");
+            });
+          });
+        }).catch(function () { paintP(null); msg.textContent = Notification.permission === "denied" ? "Notifications are blocked for this site in Chrome settings." : "Could not turn on notifications on this browser."; });
+      };
+      pt.onclick = function () { post("{{ url_for('fam.push_test') }}", {}).then(function (d) { msg.textContent = d.ok ? "Test sent. It should arrive in a few seconds." : (d.error || ""); }); };
+    }).catch(function () { pb.hidden = true; });
+  } else if (msg && /iPhone|iPad/.test(navigator.userAgent)) {
+    msg.textContent = "iPhone notifications: open this page in Safari → Share ⬆️ → Add to Home Screen, then open Real View from the Home Screen icon and turn them on here.";
+  }
+
   function alertBox(box, text) { var p = box.querySelector(".fam-err") || document.createElement("div"); p.className = "fam-warn fam-err"; p.textContent = "⚠️ " + text; box.prepend(p); }
 })();
 </script>

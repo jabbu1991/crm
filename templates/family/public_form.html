@@ -8,14 +8,14 @@
   {% if st.event_date or st.venue %}<p class="f-when">{{ st.event_date }}{{ ' · ' if st.event_date and st.venue }}{{ st.venue }}</p>{% endif %}
   {% if st.about %}<p class="f-about">{{ st.about }}</p>{% endif %}
   <p class="f-note" data-ml="ഒരു രജിസ്ട്രേഷൻ = ഒരാൾ. കുടുംബത്തിലെ ഓരോരുത്തരെയും വെവ്വേറെ രജിസ്റ്റർ ചെയ്യുക.">One registration = one person. Register each family member separately.</p>
-  <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="en" class="on">English</button><button type="button" data-lang="ml">മലയാളം</button></div>
+  <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="ml" class="on">മലയാളം</button><button type="button" data-lang="en">English</button></div>
 </header>
 <main class="f-wrap">
 {% if errors %}<div class="f-errors">{% for e in errors %}<p{% if ERR_ML.get(e) %} data-ml="⚠️ {{ ERR_ML[e] }}"{% endif %}>⚠️ {{ e }}</p>{% endfor %}</div>{% endif %}
 <form method="post" enctype="multipart/form-data" id="reg" novalidate>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="text" name="website" class="f-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
-  <input type="hidden" name="lang" id="lang" value="{{ form.lang or 'en' }}">
+  <input type="hidden" name="lang" id="lang" value="{{ form.lang or 'ml' }}">
   <input type="hidden" name="branch" id="branch" value="{{ form.branch or pre_branch or '' }}">
 
   <section class="f-card" id="s1">
@@ -87,9 +87,15 @@
     {% endif %}
   </section>
 
+  <section class="f-card" id="s-sp" hidden>
+    <h2>🤝 <span data-ml="സ്പോൺസർഷിപ്പ്">Sponsorship</span></h2>
+    <label><span data-ml="സ്പോൺസർ ചെയ്യാൻ താല്പര്യമുണ്ടെങ്കിൽ എഴുതുക (തുകയോ സാധനങ്ങളോ)">If you would like to sponsor, write it here (an amount or things)</span> <small data-ml="(നിർബന്ധമില്ല)">(optional)</small>
+      <textarea name="sponsor" rows="2" maxlength="500" placeholder="e.g. ₹5000 / food for lunch / gifts for children" data-ml-ph="ഉദാ: ₹5000 / ഉച്ചഭക്ഷണം / കുട്ടികൾക്കുള്ള സമ്മാനങ്ങൾ">{{ form.sponsor or '' }}</textarea></label>
+  </section>
+
   <div id="s5" hidden>
     <button class="f-btn f-btn-big" id="submit" data-ml="✅ രജിസ്റ്റർ ചെയ്യുക">✅ Register</button>
-    <p class="f-muted small f-center" data-ml="കുടുംബ Admin പരിശോധിച്ച ശേഷം നിങ്ങളെ കുടുംബവൃക്ഷത്തിൽ ചേർക്കും.">The family admin will check and add you to the tree.</p>
+    <p class="f-approve-note" data-ml="ℹ️ Admin അംഗീകരിച്ച ശേഷം നിങ്ങൾ കുടുംബവൃക്ഷത്തിൽ അംഗമാകും.">ℹ️ You will become a member of the family tree after the Admin approves your registration.</p>
   </div>
 </form>
 <p class="f-center"><a href="{{ url_for('fam.public_tree', code=org.code|lower) }}" data-ml="🌳 കുടുംബവൃക്ഷം കാണുക">🌳 See the family tree</a></p>
@@ -142,7 +148,9 @@
     show("s3", !!ready); show("s5", !!ready);
     show("alive-box", !late);
     var age = parseInt($("age").value, 10);
-    show("s4", !!ready && !late && !isNaN(age) && age > FREE && FEE > 0);
+    var att = (document.querySelector("input[name=attending]:checked") || {}).value;
+    show("s4", !!ready && !late && att !== "0" && !isNaN(age) && age > FREE && FEE > 0);
+    show("s-sp", !!ready);
     show("wa-box", !$("wa-same").checked);
     var c = document.querySelector("input[name=claim_id]:checked");
     if (m === "me" && c && !$("name").dataset.typed) {
@@ -158,11 +166,14 @@
   $("of-id").addEventListener("change", sync);
   ["is-late", "wa-same"].forEach(function (id) { $(id).addEventListener("change", sync); });
   $("age").addEventListener("input", sync);
+  document.querySelectorAll("input[name=attending]").forEach(function (r) { r.addEventListener("change", sync); });
   $("name").addEventListener("input", function () { this.dataset.typed = "1"; });
   {% if form.name %}$("name").dataset.typed = "1";{% endif %}
   $("reg").addEventListener("submit", function () { $("submit").disabled = true; $("submit").textContent = T("Saving…", "സേവ് ചെയ്യുന്നു…"); });
   if (branchIn.value) pickBranch(branchIn.value); else pre.done = true;
   famLang.onChange(function () { fillOf(); });
+  // opened from the family tree ("This is me" / "Son of …"): go straight to the details
+  if ((pre.claim || pre.of) && !{{ errors|length }}) setTimeout(function () { sync(); if (!$("s3").hidden) $("s3").scrollIntoView({ block: "start" }); }, 60);
 })();
 </script>
 {% endblock %}
