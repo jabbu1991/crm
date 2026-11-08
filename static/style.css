@@ -543,3 +543,11 @@ body.board-dragging { cursor: grabbing; user-select: none; }
 #fam-toast[hidden] { display: none; }
 .fam-alert-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
 .fam-alert-tools .btn.on { background: #dcfce7; border-color: #86efac; color: #166534; }
+.fam-branches { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.fam-branch-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; }
+.fam-branch-edit { display: flex; gap: 6px; align-items: center; flex: 1 1 260px; }
+.fam-branch-edit input[name=name] { flex: 1; min-width: 120px; margin: 0; }
+.fam-branch-edit select { width: auto; margin: 0; }
+.fam-branch-no { font-weight: 700; color: #64748b; width: 18px; }
+.fam-branch-add { margin-bottom: 6px; }
+.fam-del { border: 0; background: none; cursor: pointer; font-size: 1rem; padding: 2px 4px; }

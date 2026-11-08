@@ -6,7 +6,37 @@
   <h2>🌳 Family start (root of the tree)</h2>
   {% if has_tree %}
     <p>The tree starts from <b>{{ start.h or '—' }}{{ ' (Late)' if start.h_late }}</b>{% if start.w %} &amp; <b>{{ start.w }}{{ ' (Late)' if start.w_late }}</b>{% endif %}
-    with {{ (start.heads or [])|length }} children (branches). Change names in <a href="{{ url_for('fam.members') }}">Members</a>.</p>
+    with {{ branches|length }} children (branches).</p>
+    {% if is_admin() and not viewing %}
+    <h3 id="branches">🌿 Branches <small class="muted">(only the Admin can change these; the form shows them in this order)</small></h3>
+    <div class="fam-branches">
+    {% for b in branches %}
+      <div class="fam-branch-row">
+        <form method="post" action="{{ url_for('fam.branches_save') }}" class="fam-branch-edit">
+          {{ csrf() }}<input type="hidden" name="what" value="rename"><input type="hidden" name="id" value="{{ b.id }}">
+          <span class="fam-branch-no">{{ loop.index }}</span>
+          <input name="name" value="{{ b.name }}" required maxlength="120">
+          <select name="relation"><option value="son" {{ 'selected' if b.relation == 'son' }}>Son</option><option value="daughter" {{ 'selected' if b.relation == 'daughter' }}>Daughter</option></select>
+          <button class="btn btn-sm" title="Save">💾</button>
+        </form>
+        <form method="post" action="{{ url_for('fam.branches_save') }}" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ b.id }}">
+          <button class="btn btn-sm" name="what" value="up" title="Move up" {{ 'disabled' if loop.first }}>⬆️</button><button class="btn btn-sm" name="what" value="down" title="Move down" {{ 'disabled' if loop.last }}>⬇️</button>
+        </form>
+        <form method="post" action="{{ url_for('fam.member_delete', mid=b.id) }}" class="inline" onsubmit="return confirm('Delete the branch {{ b.name|e }}?')">{{ csrf() }}<input type="hidden" name="next" value="{{ url_for('fam.settings') }}#branches">
+          <button class="btn btn-sm btn-danger" title="{{ b.linked ~ ' connected — move them first' if b.linked else 'Delete' }}">🗑</button>
+        </form>
+        <span class="small muted">{% if b.registered %}✅ registered{% else %}not registered{% endif %}{% if b.linked %} · {{ b.linked }} under this branch{% endif %}</span>
+      </div>
+    {% endfor %}
+    </div>
+    <form method="post" action="{{ url_for('fam.branches_save') }}" class="fam-branch-edit fam-branch-add">
+      {{ csrf() }}<input type="hidden" name="what" value="add">
+      <input name="name" placeholder="New branch name" required maxlength="120">
+      <select name="relation"><option value="son">Son</option><option value="daughter">Daughter</option></select>
+      <button class="btn btn-sm btn-fam">+ Add branch</button>
+    </form>
+    <p class="small muted">A branch with people under it cannot be deleted — move them first (Members → ✏️ → Relation / of).</p>
+    {% endif %}
   {% else %}
   <form method="post" class="form">
     {{ csrf() }}<input type="hidden" name="what" value="start">

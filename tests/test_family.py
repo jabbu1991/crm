@@ -382,8 +382,8 @@ def test_branches_fixed_and_claimed_name_locked(fw):
     b.post("/family/members/new", {"relation": "son", "of_id": root["id"], "name": "Admin Branch"})
     assert member(fw, "Admin Branch") is None
     # branches cannot be deleted / merged / moved; the name can be corrected; Late stays as it was
-    r = b.post(f"/family/members/{moi['id']}/delete", {})
-    assert "fixed" in r.text and member(fw, "Moideenkutti") is not None
+    r = b.post(f"/family/members/{moi['id']}/delete", {})   # a pending "This is me" is connected to it
+    assert "Cannot delete Moideenkutti" in r.text and member(fw, "Moideenkutti") is not None
     ay = member(fw, "Ayishumma")
     b.post(f"/family/members/{ay['id']}/merge", {"into": moi["id"]})
     assert member(fw, "Ayishumma") is not None
@@ -393,3 +393,40 @@ def test_branches_fixed_and_claimed_name_locked(fw):
     b.post(f"/family/members/{root['id']}/edit", {"name": "KUNJIMUHAMMED HAJI"})
     assert member(fw, "KUNJIMUHAMMED HAJI")["is_late"] == 1
     assert "is_late" not in b.get(f"/family/members/{ay2['id']}/edit").text
+
+
+def test_admin_branches_edit_add_order_delete(fw):
+    b = fw["fam"]
+    start(b)
+    page = b.get("/family/settings").text
+    assert "🌿 Branches" in page and "+ Add branch" in page
+    moi, sak = member(fw, "Moideenkutti"), member(fw, "Sakeena")
+    # rename + Son/Daughter
+    b.post("/family/branches", {"what": "rename", "id": moi["id"], "name": "Moideenkutty", "relation": "son"})
+    assert member(fw, "Moideenkutty")["id"] == moi["id"]
+    # add a new branch: last in the list, on the form and the tree; Settings start follows (Clear all keeps it)
+    b.post("/family/branches", {"what": "add", "name": "Usman", "relation": "son"})
+    us = member(fw, "Usman")
+    root = member(fw, "KUNJIMUHAMMED HAJI")
+    assert us["parent_id"] == root["id"] and us["registered"] == 0
+    assert "Usman" in Browser().get("/f/kmh").text
+    # order: Usman up one place (above Sakeena)
+    b.post("/family/branches", {"what": "up", "id": us["id"]})
+    t = Browser().get("/f/kmh").text
+    assert t.index("Usman") < t.index("Sakeena")
+    # delete an empty branch; a branch with people under it is blocked
+    r = b.post(f"/family/members/{sak['id']}/delete", {"next": "/family/settings"})
+    assert member(fw, "Sakeena") is None and "Branch Sakeena deleted" in r.text
+    register(fw, relation="son", of_id=us["id"], name="Usman Jr", age="20")
+    r = b.post(f"/family/members/{us['id']}/delete", {"next": "/family/settings"})
+    assert member(fw, "Usman") is not None and "Cannot delete Usman" in r.text
+    # each entry: Admin deletes a pending registration from Approvals (no message)
+    assert "🗑 Delete" in b.get("/family/approvals").text
+    b.post(f"/family/members/{member(fw, 'Usman Jr')['id']}/delete", {"next": "/family/approvals"})
+    assert member(fw, "Usman Jr") is None
+    b.post("/family/clear", {"confirm": "CLEAR"})
+    names = {r["name"] for r in db(fw).execute("SELECT name FROM fam_members").fetchall()}
+    assert "Usman" in names and "Moideenkutty" in names and "Sakeena" not in names
+    # the next link stays inside the site
+    r = b.post(f"/family/members/{member(fw, 'Usman')['id']}/delete", {"next": "https://evil.example"}, follow=False)
+    assert r.headers["Location"].endswith("/family/members")

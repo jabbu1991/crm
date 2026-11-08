@@ -359,9 +359,11 @@ def build(oid, include_pending=False):
         elif n["parent_id"] and n["parent_id"] in nodes:
             nodes[n["parent_id"]]["children"].append(n["id"])
     root = next((n for n in nodes.values() if n["is_root"] and not n["spouse_of"]), None)
-    for n in nodes.values():   # eldest first (the root's children keep the order they were entered in)
+    for n in nodes.values():   # eldest first (the root's children: the branch order set by the Admin)
         if not n["is_root"]:
             n["children"].sort(key=lambda c: (-(nodes[c]["age"] if nodes[c]["age"] is not None else -1), c))
+        else:
+            n["children"].sort(key=lambda c: (nodes[c]["sort_order"] or 0, c))
     roots = [root["id"]] if root else []
     heads = list(root["children"]) if root else []
 
@@ -1148,14 +1150,15 @@ def member_delete(mid):
     if m["is_root"]:
         flash("The root couple cannot be deleted (use Clear all to start again).", "error")
         return redirect(url_for("fam.member_edit", mid=mid))
-    if is_branch_head(m):
-        flash("The 7 branches are fixed and cannot be deleted. You can only correct the name.", "error")
-        return redirect(url_for("fam.member_edit", mid=mid))
+    back = request.form.get("next") or ""
+    if not back.startswith("/") or back.startswith("//"):
+        back = url_for("fam.members")
     linked = H.scalar("SELECT COUNT(*) FROM fam_members WHERE (parent_id = ? OR spouse_of = ? OR other_parent_id = ?"
                       " OR claim_of = ?) AND status != 'rejected'", (mid, mid, mid, mid))
     if linked:
-        flash("Children / partner are connected to this person. Move them (or merge) first.", "error")
-        return redirect(url_for("fam.member_edit", mid=mid))
+        flash(f"Cannot delete {m['name']}: {linked} person(s) are connected (children / partner / a registration "
+              "saying 'This is me'). Move them to someone else first (✏️ Edit → Relation / of), then delete.", "error")
+        return redirect(back)
     db = H.get_db()
     db.execute("UPDATE fam_members SET parent_id = NULL, spouse_of = NULL, other_parent_id = NULL, claim_of = NULL"
                " WHERE (parent_id = ? OR spouse_of = ? OR other_parent_id = ? OR claim_of = ?) AND org_id = ?",
@@ -1163,9 +1166,12 @@ def member_delete(mid):
     db.execute("DELETE FROM fam_members WHERE id = ? AND org_id = ?", (mid, H.org_id()))
     db.commit()
     H.remove_media(m["photo"])
+    head = is_branch_head(m)
     H.audit("family_delete", m["name"])
-    flash(f"{m['name']} deleted.", "success")
-    return redirect(url_for("fam.members"))
+    if head:
+        sync_start_heads(H.org_id())
+    flash(f"{'Branch ' if head else ''}{m['name']} deleted.", "success")
+    return redirect(back)
 
 
 @bp.route("/family/members/<int:mid>/merge", methods=["POST"])
@@ -1203,6 +1209,81 @@ def member_merge(mid):
     H.audit("family_merge", f"{m['name']} → {target['name']}")
     flash(f"Merged into {target['name']}.", "success")
     return redirect(url_for("fam.member_edit", mid=target["id"]))
+
+
+# ---------------------------------------------------------------- branches (Admin): edit, add, order, delete
+
+def branch_rows(oid):
+    root = H.query("SELECT * FROM fam_members WHERE org_id = ? AND is_root = 1 AND spouse_of IS NULL", (oid,), one=True)
+    if not root:
+        return None, []
+    rows = H.query("""SELECT m.*, (SELECT COUNT(*) FROM fam_members c WHERE c.org_id = m.org_id
+                                    AND (c.parent_id = m.id OR c.spouse_of = m.id OR c.claim_of = m.id)
+                                    AND c.status != 'rejected') AS linked
+                      FROM fam_members m WHERE m.org_id = ? AND m.parent_id = ? AND m.spouse_of IS NULL
+                      AND m.status = 'approved' ORDER BY m.sort_order, m.id""", (oid, root["id"]))
+    return root, rows
+
+
+def sync_start_heads(oid):
+    """Keep Settings → Family start in step with the branches (Clear all starts again from these)."""
+    _, rows = branch_rows(oid)
+    st = dict(get_settings(oid))
+    if st.get("start"):
+        st["start"] = dict(st["start"], heads=[[r["name"], r["relation"] if r["relation"] in ("son", "daughter")
+                                                else "son"] for r in rows])
+        save_settings(st, oid)
+
+
+@bp.route("/family/branches", methods=["POST"])
+@fam_view(admin=True)
+def branches_save():
+    oid = H.org_id()
+    root, rows = branch_rows(oid)
+    if not root:
+        abort(404)
+    f = request.form
+    what = f.get("what")
+    db = H.get_db()
+    if what == "add":
+        name = clean(f.get("name"), 120)
+        rel = f.get("relation") if f.get("relation") in ("son", "daughter") else "son"
+        if not name:
+            flash("Enter the name of the new branch.", "error")
+        else:
+            wife = H.query("SELECT id FROM fam_members WHERE org_id = ? AND spouse_of = ? AND is_root = 1",
+                           (oid, root["id"]), one=True)
+            db.execute("""INSERT INTO fam_members (org_id, name, gender, relation, parent_id, other_parent_id,
+                          registered, status, sort_order, created_by, created_at) VALUES (?,?,?,?,?,?, 0, 'approved',
+                          ?,?,?)""", (oid, name, GENDER[rel], rel, root["id"], wife["id"] if wife else None,
+                                      len(rows) + 1, g.user["id"], _now()))
+            db.commit()
+            H.audit("family_branch_add", name)
+            flash(f"🌿 Branch {name} added.", "success")
+    elif what in ("rename", "up", "down"):
+        bid = f.get("id", type=int)
+        ids = [r["id"] for r in rows]
+        if bid not in ids:
+            abort(404)
+        if what == "rename":
+            name = clean(f.get("name"), 120)
+            rel = f.get("relation") if f.get("relation") in ("son", "daughter") else None
+            if not name:
+                flash("The name cannot be empty.", "error")
+                return redirect(url_for("fam.settings") + "#branches")
+            db.execute("UPDATE fam_members SET name = ?, relation = COALESCE(?, relation), gender = COALESCE(?, gender), "
+                       "updated_at = ? WHERE id = ?", (name, rel, GENDER.get(rel), _now(), bid))
+            flash(f"🌿 Branch saved: {name}.", "success")
+        else:
+            i = ids.index(bid)
+            j = i - 1 if what == "up" else i + 1
+            if 0 <= j < len(ids):
+                ids[i], ids[j] = ids[j], ids[i]
+            for k, x in enumerate(ids, 1):
+                db.execute("UPDATE fam_members SET sort_order = ? WHERE id = ?", (k, x))
+        db.commit()
+    sync_start_heads(oid)
+    return redirect(url_for("fam.settings") + "#branches")
 
 
 # ---------------------------------------------------------------- achievers + programs
@@ -1574,8 +1655,9 @@ def settings():
     heads = list(start.get("heads") or [])
     heads += [["", "son"]] * max(3, 12 - len(heads))
     msgs = {k: message_template(st, k) for k in MSG_KEYS}
+    _, branches = branch_rows(oid)
     return render_template("family/settings.html", st=st, has_tree=has_tree, start=start, heads=heads, msgs=msgs,
-                           PLACEHOLDERS=PLACEHOLDERS,
+                           PLACEHOLDERS=PLACEHOLDERS, branches=branches,
                            fee_rs=(st["fee"] or 0) / 100, form_link=form_url(), tree_link=tree_url())
 
 

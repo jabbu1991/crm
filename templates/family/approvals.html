@@ -39,6 +39,7 @@
       <button type="button" class="fam-tab on" data-act="approve">✅ Approve</button>
       <button type="button" class="fam-tab" data-act="reject">❌ Reject</button>
       {% if fcan('edit') %}<a class="btn btn-sm" href="{{ url_for('fam.member_edit', mid=n.id, next=url_for('fam.approvals')) }}">✏️ Edit</a>{% endif %}
+      {% if is_admin() %}<form method="post" action="{{ url_for('fam.member_delete', mid=n.id) }}" class="inline" onsubmit="return confirm('Delete this registration of {{ n.name|e }}? (no message is sent)')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('fam.approvals') }}"><button class="btn btn-sm">🗑 Delete</button></form>{% endif %}
       <span class="fam-lang"><button type="button" data-lang="en" class="{{ 'on' if n.lang != 'ml' }}">EN</button><button type="button" data-lang="ml" class="{{ 'on' if n.lang == 'ml' }}">മലയാളം</button></span>
     </div>
     <form method="post" action="{{ url_for('fam.approve', mid=n.id) }}" class="fam-act" data-act="approve">
