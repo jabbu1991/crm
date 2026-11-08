@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 /* Family module: public registration form, status page and family tree (phone first). */
 :root { --g: #15803d; --gd: #14532d; --bg: #f0fdf4; --ink: #1f2937; --mut: #6b7280; --line: #cbd5e1; }
 * { box-sizing: border-box; }
@@ -133,3 +134,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #86efac; border-c
   body { background: #fff; }
   .ft-couple, .ft-av { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+.f-langs { display: inline-flex; margin-top: 8px; background: rgba(255,255,255,.2); border-radius: 99px; padding: 3px; }
+.f-langs button { border: 0; background: none; color: #fff; font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 99px; cursor: pointer; }
+.f-langs button.on { background: #fff; color: var(--gd); }
+.f-card .f-langs, .f-wrap .f-langs { background: #f1f5f9; }
+.f-wrap .f-langs button { color: var(--mut); }
+.f-wrap .f-langs button.on { background: var(--g); color: #fff; }
+.ft-img-opts { display: flex; flex-direction: column; gap: 4px; }
+.ft-img-opts .f-btn { margin: 2px 0; }

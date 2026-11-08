@@ -512,6 +512,19 @@ body.board-dragging { cursor: grabbing; user-select: none; }
 .fam-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; }
 .fam-warn { background: #fef3c7; border-radius: 6px; padding: 4px 8px; margin-top: 4px; font-size: .9em; }
 .fam-reject { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.fam-decide { border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 10px; }
+.fam-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.fam-tab { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+.fam-tab.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+.fam-lang { margin-left: auto; display: inline-flex; }
+.fam-lang button { border: 1px solid #cbd5e1; background: #fff; padding: 5px 10px; font: inherit; font-size: .85rem; cursor: pointer; }
+.fam-lang button:first-child { border-radius: 8px 0 0 8px; } .fam-lang button:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+.fam-lang button.on { background: #15803d; color: #fff; border-color: #15803d; }
+.fam-act { display: flex; flex-direction: column; gap: 8px; }
+.fam-act[hidden] { display: none; }
+.fam-act textarea { width: 100%; font-size: .9rem; }
+.fam-act .btn { align-self: flex-start; }
+.fam-paid { font-weight: 600; background: #f0fdf4; border-radius: 8px; padding: 8px 10px; }
 .fam-reject input { min-width: 180px; }
 .fam-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .fam-ach { display: flex; gap: 12px; align-items: flex-start; break-inside: avoid; }

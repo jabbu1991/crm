@@ -7,42 +7,44 @@
   {% if st.family_name %}<p class="f-fam">{{ st.family_name }}</p>{% endif %}
   {% if st.event_date or st.venue %}<p class="f-when">{{ st.event_date }}{{ ' · ' if st.event_date and st.venue }}{{ st.venue }}</p>{% endif %}
   {% if st.about %}<p class="f-about">{{ st.about }}</p>{% endif %}
-  <p class="f-note">One registration = one person. Register each family member separately.</p>
+  <p class="f-note" data-ml="ഒരു രജിസ്ട്രേഷൻ = ഒരാൾ. കുടുംബത്തിലെ ഓരോരുത്തരെയും വെവ്വേറെ രജിസ്റ്റർ ചെയ്യുക.">One registration = one person. Register each family member separately.</p>
+  <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="en" class="on">English</button><button type="button" data-lang="ml">മലയാളം</button></div>
 </header>
 <main class="f-wrap">
-{% if errors %}<div class="f-errors">{% for e in errors %}<p>⚠️ {{ e }}</p>{% endfor %}</div>{% endif %}
+{% if errors %}<div class="f-errors">{% for e in errors %}<p{% if ERR_ML.get(e) %} data-ml="⚠️ {{ ERR_ML[e] }}"{% endif %}>⚠️ {{ e }}</p>{% endfor %}</div>{% endif %}
 <form method="post" enctype="multipart/form-data" id="reg" novalidate>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="text" name="website" class="f-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <input type="hidden" name="lang" id="lang" value="{{ form.lang or 'en' }}">
   <input type="hidden" name="branch" id="branch" value="{{ form.branch or pre_branch or '' }}">
 
   <section class="f-card" id="s1">
-    <h2><span class="f-step">1</span> Your branch</h2>
-    <p class="f-muted">Which child of the family elders do you come under?</p>
+    <h2><span class="f-step">1</span> <span data-ml="നിങ്ങളുടെ ശാഖ">Your branch</span></h2>
+    <p class="f-muted" data-ml="കുടുംബത്തിലെ മുതിർന്നവരുടെ ഏത് മകൻ്റെ / മകളുടെ ശാഖയിലാണ് നിങ്ങൾ?">Which child of the family elders do you come under?</p>
     <div class="f-branches" id="branches">
       {% for b in branches %}<button type="button" class="f-branch" data-id="{{ b.id }}" style="--c: {{ b.color }}">{{ b.name }}</button>{% endfor %}
     </div>
   </section>
 
   <section class="f-card" id="s2" hidden>
-    <h2><span class="f-step">2</span> Who are you?</h2>
+    <h2><span class="f-step">2</span> <span data-ml="നിങ്ങൾ ആര്?">Who are you?</span></h2>
     <div class="f-seg">
-      <label><input type="radio" name="mode" value="me" {{ 'checked' if form.mode == 'me' }}> My name is already in the list</label>
-      <label><input type="radio" name="mode" value="new" {{ 'checked' if form.mode != 'me' }}> I am new</label>
+      <label><input type="radio" name="mode" value="me" {{ 'checked' if form.mode == 'me' }}> <span data-ml="എൻ്റെ പേര് ലിസ്റ്റിൽ ഉണ്ട്">My name is already in the list</span></label>
+      <label><input type="radio" name="mode" value="new" {{ 'checked' if form.mode != 'me' }}> <span data-ml="ഞാൻ പുതിയ ആളാണ്">I am new</span></label>
     </div>
     <div id="me-box" hidden>
-      <p class="f-muted">Tap your name ("This is me"):</p>
+      <p class="f-muted" data-ml="നിങ്ങളുടെ പേര് tap ചെയ്യുക (&quot;ഇത് ഞാനാണ്&quot;):">Tap your name ("This is me"):</p>
       <div class="f-people" id="me-list"></div>
-      <p class="f-muted small" id="me-empty" hidden>Everyone in this branch is already registered. Choose "I am new".</p>
+      <p class="f-muted small" id="me-empty" hidden data-ml="ഈ ശാഖയിലെ എല്ലാവരും രജിസ്റ്റർ ചെയ്തുകഴിഞ്ഞു. &quot;ഞാൻ പുതിയ ആളാണ്&quot; തിരഞ്ഞെടുക്കുക.">Everyone in this branch is already registered. Choose "I am new".</p>
     </div>
     <div id="new-box">
       <div class="f-row">
-        <label>I am the
+        <label><span data-ml="ഞാൻ">I am the</span>
           <select name="relation" id="relation">
-            {% for k, v in RELATIONS.items() %}<option value="{{ k }}" {{ 'selected' if form.relation == k }}>{{ v }}</option>{% endfor %}
+            {% for k, v in RELATIONS.items() %}<option value="{{ k }}" {{ 'selected' if form.relation == k }} data-ml="{{ {'son': 'മകൻ (Son)', 'daughter': 'മകൾ (Daughter)', 'husband': 'ഭർത്താവ് (Husband)', 'wife': 'ഭാര്യ (Wife)'}[k] }}">{{ v }}</option>{% endfor %}
           </select>
         </label>
-        <label>of
+        <label><span data-ml="ആരുടെ">of</span>
           <select name="of_id" id="of-id"><option value="">— choose —</option></select>
         </label>
       </div>
@@ -51,52 +53,53 @@
   </section>
 
   <section class="f-card" id="s3" hidden>
-    <h2><span class="f-step">3</span> Your details</h2>
-    <label>Name *<input name="name" id="name" required maxlength="120" value="{{ form.name or '' }}" autocomplete="name"></label>
-    <label class="f-check"><input type="checkbox" name="is_late" value="1" id="is-late" {{ 'checked' if form.is_late }}> Registering for someone who passed away (Late)</label>
+    <h2><span class="f-step">3</span> <span data-ml="നിങ്ങളുടെ വിവരങ്ങൾ">Your details</span></h2>
+    <label><span data-ml="പേര് *">Name *</span><input name="name" id="name" required maxlength="120" value="{{ form.name or '' }}" autocomplete="name"></label>
+    <label class="f-check"><input type="checkbox" name="is_late" value="1" id="is-late" {{ 'checked' if form.is_late }}> <span data-ml="മരിച്ചുപോയ ഒരാൾക്ക് വേണ്ടി രജിസ്റ്റർ ചെയ്യുന്നു (Late)">Registering for someone who passed away (Late)</span></label>
     <div id="alive-box">
       <div class="f-row">
-        <label>Age *<input name="age" id="age" inputmode="numeric" maxlength="3" value="{{ form.age or '' }}"></label>
-        <label>Phone number *<input name="phone" inputmode="tel" maxlength="15" value="{{ form.phone or '' }}" autocomplete="tel"></label>
+        <label><span data-ml="വയസ്സ് *">Age *</span><input name="age" id="age" inputmode="numeric" maxlength="3" value="{{ form.age or '' }}"></label>
+        <label><span data-ml="ഫോൺ നമ്പർ *">Phone number *</span><input name="phone" inputmode="tel" maxlength="15" value="{{ form.phone or '' }}" autocomplete="tel"></label>
       </div>
-      <label class="f-check"><input type="checkbox" name="wa_same" value="1" id="wa-same" {{ 'checked' if not form or form.wa_same or not form.whatsapp }}> WhatsApp number is the same</label>
-      <label id="wa-box" hidden>WhatsApp number<input name="whatsapp" inputmode="tel" maxlength="15" value="{{ form.whatsapp or '' }}"></label>
-      <label>Last year achievement <small>(if any — for the special honouring)</small>
-        <textarea name="achievement" rows="2" maxlength="500" placeholder="e.g. SSLC full A+, new job, award, sports medal …">{{ form.achievement or '' }}</textarea></label>
-      <label>Participating cultural program <small>(if any)</small>
-        <input name="program" maxlength="200" value="{{ form.program or '' }}" placeholder="e.g. Song, Speech, Oppana …"></label>
-      <div class="f-ask">Coming to the meetup? *
+      <label class="f-check"><input type="checkbox" name="wa_same" value="1" id="wa-same" {{ 'checked' if not form or form.wa_same or not form.whatsapp }}> <span data-ml="WhatsApp നമ്പറും ഇത് തന്നെ">WhatsApp number is the same</span></label>
+      <label id="wa-box" hidden><span data-ml="WhatsApp നമ്പർ">WhatsApp number</span><input name="whatsapp" inputmode="tel" maxlength="15" value="{{ form.whatsapp or '' }}"></label>
+      <label><span data-ml="കഴിഞ്ഞ വർഷത്തെ നേട്ടം">Last year achievement</span> <small data-ml="(ഉണ്ടെങ്കിൽ — പ്രത്യേക ആദരിക്കലിന്)">(if any — for the special honouring)</small>
+        <textarea name="achievement" rows="2" maxlength="500" placeholder="e.g. SSLC full A+, new job, award, sports medal …" data-ml-ph="ഉദാ: SSLC full A+, പുതിയ ജോലി, അവാർഡ്, സ്പോർട്സ് മെഡൽ …">{{ form.achievement or '' }}</textarea></label>
+      <label><span data-ml="പങ്കെടുക്കുന്ന കലാപരിപാടി">Participating cultural program</span> <small data-ml="(ഉണ്ടെങ്കിൽ)">(if any)</small>
+        <input name="program" maxlength="200" value="{{ form.program or '' }}" placeholder="e.g. Song, Speech, Oppana …" data-ml-ph="ഉദാ: പാട്ട്, പ്രസംഗം, ഒപ്പന …"></label>
+      <div class="f-ask"><span data-ml="മീറ്റപ്പിന് വരുന്നുണ്ടോ? *">Coming to the meetup? *</span>
         <div class="f-seg">
-          <label><input type="radio" name="attending" value="1" {{ 'checked' if form.attending == '1' }}> ✅ Yes</label>
-          <label><input type="radio" name="attending" value="0" {{ 'checked' if form.attending == '0' }}> No</label>
+          <label><input type="radio" name="attending" value="1" {{ 'checked' if form.attending == '1' }}> ✅ <span data-ml="വരും">Yes</span></label>
+          <label><input type="radio" name="attending" value="0" {{ 'checked' if form.attending == '0' }}> <span data-ml="ഇല്ല">No</span></label>
         </div>
       </div>
     </div>
-    <label>Photo <small>(a clear face photo)</small><input type="file" name="photo" accept="image/*"></label>
+    <label><span data-ml="ഫോട്ടോ">Photo</span> <small data-ml="(മുഖം വ്യക്തമായ ഫോട്ടോ)">(a clear face photo)</small><input type="file" name="photo" accept="image/*"></label>
   </section>
 
   <section class="f-card f-fee" id="s4" hidden>
-    <h2>Registration fee: <b>₹{{ fee_rs }}</b></h2>
-    <p class="f-muted small">For age above {{ st.free_upto_age }} years. You can register now and pay later — registration is complete either way.</p>
+    <h2><span data-ml="രജിസ്ട്രേഷൻ ഫീസ്:">Registration fee:</span> <b>₹{{ fee_rs }}</b></h2>
+    <p class="f-muted small" data-ml="{{ st.free_upto_age }} വയസ്സിന് മുകളിലുള്ളവർക്ക്. ഇപ്പോൾ രജിസ്റ്റർ ചെയ്ത് പിന്നീട് പണം അടയ്ക്കാം — രണ്ടായാലും രജിസ്ട്രേഷൻ പൂർത്തിയാകും.">For age above {{ st.free_upto_age }} years. You can register now and pay later — registration is complete either way.</p>
     {% if st.upi_qr or upi %}
       {% if st.upi_qr %}<img class="f-qr-img" src="{{ url_for('media', name=st.upi_qr) }}" alt="UPI QR">{% elif upi_qr %}<div class="f-qr">{{ upi_qr|safe }}</div>{% endif %}
-      {% if upi %}<a class="f-btn f-btn-pay" href="{{ upi }}">Pay ₹{{ fee_rs }} by UPI</a>{% endif %}
-      <label>UPI transaction ID <small>(optional, after paying)</small><input name="upi_ref" maxlength="60" value="{{ form.upi_ref or '' }}"></label>
+      {% if upi %}<a class="f-btn f-btn-pay" href="{{ upi }}" data-ml="₹{{ fee_rs }} UPI വഴി അടയ്ക്കുക">Pay ₹{{ fee_rs }} by UPI</a>{% endif %}
+      <label><span data-ml="UPI transaction ID">UPI transaction ID</span> <small data-ml="(നിർബന്ധമില്ല, പണം അടച്ച ശേഷം)">(optional, after paying)</small><input name="upi_ref" maxlength="60" value="{{ form.upi_ref or '' }}"></label>
     {% endif %}
   </section>
 
   <div id="s5" hidden>
-    <button class="f-btn f-btn-big" id="submit">✅ Register</button>
-    <p class="f-muted small f-center">The family admin will check and add you to the tree.</p>
+    <button class="f-btn f-btn-big" id="submit" data-ml="✅ രജിസ്റ്റർ ചെയ്യുക">✅ Register</button>
+    <p class="f-muted small f-center" data-ml="കുടുംബ Admin പരിശോധിച്ച ശേഷം നിങ്ങളെ കുടുംബവൃക്ഷത്തിൽ ചേർക്കും.">The family admin will check and add you to the tree.</p>
   </div>
 </form>
-<p class="f-center"><a href="{{ url_for('fam.public_tree', code=org.code|lower) }}">🌳 See the family tree</a></p>
+<p class="f-center"><a href="{{ url_for('fam.public_tree', code=org.code|lower) }}" data-ml="🌳 കുടുംബവൃക്ഷം കാണുക">🌳 See the family tree</a></p>
 </main>
 <script>
 (function () {
   var BR = {{ branches|tojson }}, FREE = {{ st.free_upto_age|int }}, FEE = {{ fee_rs|int }};
   var pre = { claim: {{ (form.claim_id or '')|tojson }}, of: {{ (form.of_id or '')|tojson }} };
   var $ = function (id) { return document.getElementById(id); };
+  var T = famLang.T;
   var branchIn = $("branch"), cur = null;
 
   function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
@@ -125,11 +128,11 @@
     var rel = $("relation").value, spouseRel = rel === "husband" || rel === "wife";
     var keep = $("of-id").value || pre.of;
     var opts = cur.people.filter(function (p) { return !(spouseRel && p.spouse); });
-    $("of-id").innerHTML = '<option value="">— choose —</option>' + opts.map(function (p) {
+    $("of-id").innerHTML = '<option value="">' + T("— choose —", "— തിരഞ്ഞെടുക്കുക —") + '</option>' + opts.map(function (p) {
       return '<option value="' + p.id + '"' + (keep == p.id ? " selected" : "") + '>' + esc(p.name) + (p.rel ? " — " + esc(p.rel) : "") + '</option>';
     }).join("");
-    $("rel-hint").textContent = spouseRel ? "Married into the family? Choose your husband / wife from the family." :
-      "Choose your father or mother.";
+    $("rel-hint").textContent = spouseRel ? T("Married into the family? Choose your husband / wife from the family.", "വിവാഹം കഴിച്ച് കുടുംബത്തിൽ വന്നതാണോ? കുടുംബത്തിലെ നിങ്ങളുടെ ഭർത്താവ് / ഭാര്യയെ തിരഞ്ഞെടുക്കുക.") :
+      T("Choose your father or mother.", "നിങ്ങളുടെ ഉപ്പ / ഉമ്മയെ തിരഞ്ഞെടുക്കുക.");
   }
 
   function sync() {
@@ -157,8 +160,9 @@
   $("age").addEventListener("input", sync);
   $("name").addEventListener("input", function () { this.dataset.typed = "1"; });
   {% if form.name %}$("name").dataset.typed = "1";{% endif %}
-  $("reg").addEventListener("submit", function () { $("submit").disabled = true; $("submit").textContent = "Saving…"; });
+  $("reg").addEventListener("submit", function () { $("submit").disabled = true; $("submit").textContent = T("Saving…", "സേവ് ചെയ്യുന്നു…"); });
   if (branchIn.value) pickBranch(branchIn.value); else pre.done = true;
+  famLang.onChange(function () { fillOf(); });
 })();
 </script>
 {% endblock %}

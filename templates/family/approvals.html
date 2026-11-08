@@ -23,10 +23,37 @@
   {% if n.achievement %}<p class="small">🏆 {{ n.achievement }}</p>{% endif %}
   {% if n.program %}<p class="small">🎭 {{ n.program }}</p>{% endif %}
   {% if not viewing %}
-  <div class="actions">
-    <form method="post" action="{{ url_for('fam.approve', mid=n.id) }}" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-fam">✅ Approve</button></form>
-    {% if fcan('edit') %}<a class="btn" href="{{ url_for('fam.member_edit', mid=n.id, next=url_for('fam.approvals')) }}">✏️ Edit</a>{% endif %}
-    <form method="post" action="{{ url_for('fam.reject', mid=n.id) }}" class="inline fam-reject"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="reason" placeholder="Reason for rejecting" required maxlength="200"><button class="btn btn-danger">❌ Reject</button></form>
+  {% if n.problem %}<div class="fam-warn">⚠️ {{ n.problem }}</div>{% endif %}
+  <div class="fam-decide" data-msgs="{{ n.msgs|tojson|forceescape }}" data-phone="{{ n.wa_to }}" data-fee="{{ 1 if n.fee else 0 }}">
+    <div class="fam-tabs">
+      <button type="button" class="fam-tab on" data-act="approve">✅ Approve</button>
+      <button type="button" class="fam-tab" data-act="reject">❌ Reject</button>
+      {% if fcan('edit') %}<a class="btn btn-sm" href="{{ url_for('fam.member_edit', mid=n.id, next=url_for('fam.approvals')) }}">✏️ Edit</a>{% endif %}
+      <span class="fam-lang"><button type="button" data-lang="en" class="{{ 'on' if n.lang != 'ml' }}">EN</button><button type="button" data-lang="ml" class="{{ 'on' if n.lang == 'ml' }}">മലയാളം</button></span>
+    </div>
+    <form method="post" action="{{ url_for('fam.approve', mid=n.id) }}" class="fam-act" data-act="approve">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="lang" value="{{ n.lang or 'en' }}">
+      {% if n.fee %}<input type="hidden" name="paid_box" value="1">
+      <label class="check fam-paid"><input type="checkbox" name="paid" value="1" {{ 'checked' if n.paid }}> 💰 Payment received ({{ rs(n.fee) }}){% if n.upi_ref %} <span class="small muted">· UPI ref {{ n.upi_ref }}</span>{% endif %}</label>{% endif %}
+      {% if n.wa_to %}
+        <label class="small muted">WhatsApp message to {{ n.whatsapp or n.phone }} <small>(you can change it)</small>
+          <textarea name="message" rows="7"></textarea></label>
+        <input type="hidden" name="send_wa" value="1">
+        <button class="btn btn-fam" {{ 'disabled' if n.problem }}>📲 Approve &amp; Send on WhatsApp</button>
+      {% else %}
+        <p class="small muted">No phone number — no WhatsApp message.</p>
+        <button class="btn btn-fam" {{ 'disabled' if n.problem }}>✅ Approve</button>
+      {% endif %}
+    </form>
+    <form method="post" action="{{ url_for('fam.reject', mid=n.id) }}" class="fam-act" data-act="reject" hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="lang" value="{{ n.lang or 'en' }}">
+      <label>Reason for rejecting *<input name="reason" required maxlength="200" placeholder="e.g. Already registered / wrong family branch"></label>
+      {% if n.wa_to %}
+        <label class="small muted">WhatsApp message <small>(you can change it)</small><textarea name="message" rows="5"></textarea></label>
+        <input type="hidden" name="send_wa" value="1">
+        <button class="btn btn-danger">📲 Reject &amp; Send on WhatsApp</button>
+      {% else %}<button class="btn btn-danger">❌ Reject</button>{% endif %}
+    </form>
   </div>
   {% endif %}
 </div>
@@ -36,4 +63,53 @@
   <table class="table compact">{% for r in rejected %}<tr><td>{{ r.name }}</td><td class="small muted">{{ r.reject_reason }}</td></tr>{% endfor %}</table>
 </details>
 {% endif %}
+<script>
+(function () {
+  document.querySelectorAll(".fam-decide").forEach(function (box) {
+    var M = JSON.parse(box.dataset.msgs), lang = (box.querySelector(".fam-lang .on") || {}).dataset.lang || "en";
+    var ap = box.querySelector('form[data-act=approve]'), rj = box.querySelector('form[data-act=reject]');
+    var paid = ap.querySelector("input[name=paid]"), amsg = ap.querySelector("textarea"), rmsg = rj.querySelector("textarea");
+    var reason = rj.querySelector("input[name=reason]"), rEdited = false;
+    function fillA() { if (amsg) amsg.value = M[((paid && !paid.checked) ? "due_" : "paid_") + lang]; }
+    function fillR() { if (rmsg && !rEdited) rmsg.value = M["reject_" + lang].split("{reason}").join(reason.value.trim()); }
+    function setLang(l) {
+      lang = l; box.querySelectorAll(".fam-lang button").forEach(function (b) { b.classList.toggle("on", b.dataset.lang === l); });
+      box.querySelectorAll("input[name=lang]").forEach(function (i) { i.value = l; });
+      rEdited = false; fillA(); fillR();
+    }
+    box.querySelectorAll(".fam-lang button").forEach(function (b) { b.onclick = function () { setLang(b.dataset.lang); }; });
+    box.querySelectorAll(".fam-tab").forEach(function (t) { t.onclick = function () {
+      box.querySelectorAll(".fam-tab").forEach(function (x) { x.classList.toggle("on", x === t); });
+      ap.hidden = t.dataset.act !== "approve"; rj.hidden = t.dataset.act !== "reject"; if (!rj.hidden) reason.focus();
+    }; });
+    if (paid) paid.onchange = fillA;
+    reason.oninput = fillR;
+    if (rmsg) rmsg.oninput = function () { rEdited = true; };
+    fillA(); fillR();
+
+    [ap, rj].forEach(function (form) {
+      form.addEventListener("submit", function (e) {
+        if (!box.dataset.phone || !window.fetch || !window.famOpenWhatsApp) return;   // plain submit
+        e.preventDefault();
+        var btn = form.querySelector("button"), label = btn.innerHTML;
+        var tab = window.waWebTab && window.waWebTab() ? window.open("", "_blank") : null;
+        btn.disabled = true; btn.textContent = "Saving…";
+        var fd = new FormData(form); fd.append("ajax", "1");
+        fetch(form.action, { method: "POST", body: fd, credentials: "same-origin" })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) { if (tab) tab.close(); alertBox(box, d.error || "Could not save."); btn.disabled = false; btn.innerHTML = label; return; }
+            var card = box.closest(".fam-appr");
+            card.innerHTML = '<p><b>' + (form === ap ? "✅ Approved" : "❌ Rejected") + ':</b> ' + d.name +
+              ' — WhatsApp opened. <a href="">Refresh</a></p>';
+            if (tab) tab.location = "https://web.whatsapp.com/send?phone=" + d.phone + "&text=" + encodeURIComponent(d.text);
+            else window.famOpenWhatsApp(d.phone, d.text);
+          })
+          .catch(function () { if (tab) tab.close(); alertBox(box, "No internet? Try again."); btn.disabled = false; btn.innerHTML = label; });
+      });
+    });
+  });
+  function alertBox(box, text) { var p = box.querySelector(".fam-err") || document.createElement("div"); p.className = "fam-warn fam-err"; p.textContent = "⚠️ " + text; box.prepend(p); }
+})();
+</script>
 {% endblock %}

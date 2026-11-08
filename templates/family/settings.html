@@ -60,6 +60,17 @@
   <label>Own UPI QR photo <small>(optional — otherwise a QR is made from the UPI ID)</small> {% if st.upi_qr %}<img src="{{ url_for('media', name=st.upi_qr) }}" alt="" style="max-height:60px">{% endif %}<input type="file" name="upi_qr" accept="image/*"></label>
   {% if st.upi_qr %}<label class="check"><input type="checkbox" name="remove_upi_qr" value="1"> Remove QR photo</label>{% endif %}
   <p class="small muted">Empty UPI ID and no QR photo = no payment box on the form.</p>
+  <h2>📲 WhatsApp messages</h2>
+  <p class="small muted">Used when you Approve / Reject (you can still change the text each time before sending).
+    Placeholders: {% for p in PLACEHOLDERS %}<code>{{ '{' ~ p ~ '}' }}</code> {% endfor %}— a line whose placeholders are all empty is left out.
+    Clear a box to go back to the default.</p>
+  {% for key, label in [('msg_paid', '✅ Approved — fee received'), ('msg_due', '✅ Approved — fee not received yet'), ('msg_reject', '❌ Rejected (use {reason})')] %}
+  <h3>{{ label }}</h3>
+  <div class="row-2">
+    <label>English<textarea name="{{ key }}_en" rows="7">{{ msgs[key ~ '_en'] }}</textarea></label>
+    <label>മലയാളം<textarea name="{{ key }}_ml" rows="7">{{ msgs[key ~ '_ml'] }}</textarea></label>
+  </div>
+  {% endfor %}
   <div class="actions"><button class="btn btn-fam btn-big">💾 Save</button></div>
   <p class="small muted">Form: <a href="{{ form_link }}" target="_blank">{{ form_link }}</a> · Tree: <a href="{{ tree_link }}" target="_blank">{{ tree_link }}</a></p>
 </form>

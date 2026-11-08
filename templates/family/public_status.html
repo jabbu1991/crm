@@ -3,34 +3,35 @@
 {% block body %}
 <main class="f-wrap">
   <div class="f-card f-center">
-    {% if new %}<div class="f-big-ok">✅</div><h1>Registered!</h1>{% else %}<h1>🌳 {{ st.event_name }}</h1>{% endif %}
+    <div class="f-langs" role="group" aria-label="Language"><button type="button" data-lang="en" class="on">English</button><button type="button" data-lang="ml">മലയാളം</button></div>
+    {% if new %}<div class="f-big-ok">✅</div><h1 data-ml="രജിസ്റ്റർ ചെയ്തു!">Registered!</h1>{% else %}<h1>🌳 {{ st.event_name }}</h1>{% endif %}
     {% if m.photo %}<img class="f-status-photo" src="{{ url_for('media', name=m.photo) }}" alt="">{% endif %}
     <p class="f-name">{{ m.name }}{% if m.is_late %} <small>(Late)</small>{% endif %}</p>
     {% if rel %}<p class="f-muted">{{ rel }}</p>{% endif %}
-    <p class="f-regno">Registration No <b>{{ m.reg_no }}</b></p>
+    <p class="f-regno"><span data-ml="രജിസ്ട്രേഷൻ നമ്പർ">Registration No</span> <b>{{ m.reg_no }}</b></p>
     {% if m.status == 'pending' %}
-      <p class="f-pill f-pill-wait">⏳ Waiting for approval</p>
-      <p class="f-muted small">You will appear in the family tree after the family admin approves it.</p>
+      <p class="f-pill f-pill-wait" data-ml="⏳ അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു">⏳ Waiting for approval</p>
+      <p class="f-muted small" data-ml="കുടുംബ Admin അംഗീകരിച്ച ശേഷം നിങ്ങൾ കുടുംബവൃക്ഷത്തിൽ വരും.">You will appear in the family tree after the family admin approves it.</p>
     {% elif m.status == 'approved' %}
-      <p class="f-pill f-pill-ok">✅ Approved — you are in the family tree</p>
-      <a class="f-btn" href="{{ url_for('fam.public_tree', code=org.code|lower, me=m.id) }}">🌳 See me in the tree</a>
+      <p class="f-pill f-pill-ok" data-ml="✅ അംഗീകരിച്ചു — നിങ്ങൾ കുടുംബവൃക്ഷത്തിൽ ഉണ്ട്">✅ Approved — you are in the family tree</p>
+      <a class="f-btn" href="{{ url_for('fam.public_tree', code=org.code|lower, me=m.id) }}" data-ml="🌳 കുടുംബവൃക്ഷത്തിൽ എന്നെ കാണുക">🌳 See me in the tree</a>
     {% else %}
-      <p class="f-pill f-pill-no">Not accepted{% if m.reject_reason %}: {{ m.reject_reason }}{% endif %}</p>
+      <p class="f-pill f-pill-no"><span data-ml="സ്വീകരിച്ചില്ല">Not accepted</span>{% if m.reject_reason %}: {{ m.reject_reason }}{% endif %}</p>
     {% endif %}
     {% if m.fee %}
     <div class="f-fee">
-      <p>Registration fee <b>₹{{ (m.fee / 100)|int }}</b> · {{ 'Paid ✅' if m.paid else 'Not paid yet' }}</p>
+      <p><span data-ml="രജിസ്ട്രേഷൻ ഫീസ്">Registration fee</span> <b>₹{{ (m.fee / 100)|int }}</b> · {% if m.paid %}<span data-ml="അടച്ചു ✅">Paid ✅</span>{% else %}<span data-ml="ഇതുവരെ അടച്ചിട്ടില്ല">Not paid yet</span>{% endif %}</p>
       {% if not m.paid %}
         {% if st.upi_qr %}<img class="f-qr-img" src="{{ url_for('media', name=st.upi_qr) }}" alt="UPI QR">{% elif upi_qr %}<div class="f-qr">{{ upi_qr|safe }}</div>{% endif %}
-        {% if upi %}<a class="f-btn f-btn-pay" href="{{ upi }}">Pay ₹{{ (m.fee / 100)|int }} by UPI</a>{% endif %}
-        <p class="f-muted small">You can also pay at the meetup. The family admin marks it as paid.</p>
+        {% if upi %}<a class="f-btn f-btn-pay" href="{{ upi }}" data-ml="₹{{ (m.fee / 100)|int }} UPI വഴി അടയ്ക്കുക">Pay ₹{{ (m.fee / 100)|int }} by UPI</a>{% endif %}
+        <p class="f-muted small" data-ml="മീറ്റപ്പിൽ വെച്ചും പണം അടയ്ക്കാം. കുടുംബ Admin അത് Paid ആയി രേഖപ്പെടുത്തും.">You can also pay at the meetup. The family admin marks it as paid.</p>
       {% endif %}
     </div>
     {% endif %}
-    <p class="f-muted small">Keep this page (bookmark / screenshot) to check your status.</p>
+    <p class="f-muted small" data-ml="സ്റ്റാറ്റസ് നോക്കാൻ ഈ പേജ് സൂക്ഷിക്കുക (bookmark / screenshot).">Keep this page (bookmark / screenshot) to check your status.</p>
     <div class="f-actions">
-      <a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower, b=b or None) }}">+ Register another person</a>
-      <a class="f-btn f-btn-ghost" href="https://wa.me/?text={{ (st.event_name ~ ' — register here: ' ~ url_for('fam.public_form', code=org.code|lower, _external=True))|urlencode }}" target="_blank" rel="noopener">🟢 Share the form</a>
+      <a class="f-btn" href="{{ url_for('fam.public_form', code=org.code|lower, b=b or None) }}" data-ml="+ മറ്റൊരാളെ രജിസ്റ്റർ ചെയ്യുക">+ Register another person</a>
+      <a class="f-btn f-btn-ghost" href="https://wa.me/?text={{ (st.event_name ~ ' — register here: ' ~ url_for('fam.public_form', code=org.code|lower, _external=True))|urlencode }}" target="_blank" rel="noopener" data-ml="🟢 ഫോം ഷെയർ ചെയ്യുക">🟢 Share the form</a>
     </div>
   </div>
 </main>

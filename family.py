@@ -74,7 +74,52 @@ DEFAULT_SETTINGS = {
     "reg_open": True,
     "last_date": "",
     "start": None,              # {"h": name, "h_late": 1, "w": name, "w_late": 1, "heads": [[name, son|daughter]]}
+    # WhatsApp messages (Approve / Reject). A line whose {placeholders} are all empty is left out.
+    "msg_paid_en": "", "msg_paid_ml": "", "msg_due_en": "", "msg_due_ml": "", "msg_reject_en": "", "msg_reject_ml": "",
 }
+
+DEFAULT_MESSAGES = {
+    "msg_paid_en": ("Hi {name},\n"
+                    "Your registration for *{event}* is approved ✅\n"
+                    "Reg No: {reg_no}\n"
+                    "We have received your registration fee of ₹{fee}. Thank you! 🙏\n"
+                    "📅 {date}\n"
+                    "📍 {venue}\n"
+                    "🌳 See yourself in the family tree: {tree_link}"),
+    "msg_paid_ml": ("പ്രിയ {name},\n"
+                    "*{event}* രജിസ്ട്രേഷൻ അംഗീകരിച്ചു ✅\n"
+                    "Reg No: {reg_no}\n"
+                    "രജിസ്ട്രേഷൻ ഫീസ് ₹{fee} ലഭിച്ചു. നന്ദി! 🙏\n"
+                    "📅 {date}\n"
+                    "📍 {venue}\n"
+                    "🌳 കുടുംബവൃക്ഷത്തിൽ നിങ്ങളെ കാണാം: {tree_link}"),
+    "msg_due_en": ("Hi {name},\n"
+                   "Your registration for *{event}* is approved ✅\n"
+                   "Reg No: {reg_no}\n"
+                   "Your registration fee of ₹{fee} is not received yet. Please pay it soon.\n"
+                   "💳 Pay by UPI here: {status_link}\n"
+                   "📅 {date}\n"
+                   "📍 {venue}\n"
+                   "🌳 See yourself in the family tree: {tree_link}"),
+    "msg_due_ml": ("പ്രിയ {name},\n"
+                   "*{event}* രജിസ്ട്രേഷൻ അംഗീകരിച്ചു ✅\n"
+                   "Reg No: {reg_no}\n"
+                   "രജിസ്ട്രേഷൻ ഫീസ് ₹{fee} ഇതുവരെ ലഭിച്ചിട്ടില്ല. ദയവായി ഉടൻ അടയ്ക്കുക.\n"
+                   "💳 UPI വഴി അടയ്ക്കാൻ: {status_link}\n"
+                   "📅 {date}\n"
+                   "📍 {venue}\n"
+                   "🌳 കുടുംബവൃക്ഷത്തിൽ നിങ്ങളെ കാണാം: {tree_link}"),
+    "msg_reject_en": ("Hi {name},\n"
+                      "Sorry, we could not accept your registration for *{event}*.\n"
+                      "Reason: {reason}\n"
+                      "Please register again: {form_link}"),
+    "msg_reject_ml": ("പ്രിയ {name},\n"
+                      "ക്ഷമിക്കണം, *{event}* രജിസ്ട്രേഷൻ സ്വീകരിക്കാൻ കഴിഞ്ഞില്ല.\n"
+                      "കാരണം: {reason}\n"
+                      "ദയവായി വീണ്ടും രജിസ്റ്റർ ചെയ്യുക: {form_link}"),
+}
+MSG_KEYS = list(DEFAULT_MESSAGES)
+PLACEHOLDERS = ["name", "reg_no", "event", "date", "venue", "fee", "tree_link", "status_link", "form_link", "reason"]
 
 
 def _now():
@@ -235,6 +280,50 @@ def form_url(org=None, external=True, **kw):
 def tree_url(org=None, external=True, **kw):
     org = org or g.org
     return url_for("fam.public_tree", code=org["code"].lower(), _external=external, **kw)
+
+
+# ---------------------------------------------------------------- WhatsApp messages (no API: opens WhatsApp)
+
+def message_template(st, key):
+    return (st.get(key) or "").strip() or DEFAULT_MESSAGES[key]
+
+
+def fill_message(body, values):
+    """Put the values in. A line whose placeholders are all empty is left out (e.g. no venue set)."""
+    out = []
+    for line in body.split("\n"):
+        keys = re.findall(r"\{(\w+)\}", line)
+        known = [k for k in keys if k in values]
+        if known and not any(str(values[k] or "").strip() for k in known):
+            continue
+        out.append(re.sub(r"\{(\w+)\}", lambda mt: str(values.get(mt.group(1), mt.group(0)) or ""), line))
+    return "\n".join(out).strip()
+
+
+def message_values(m, st, org=None, reason=""):
+    org = org or g.org
+    code = org["code"].lower()
+    tok = m["token"]
+    return {"name": m["name"], "reg_no": m["reg_no"] or "", "event": st["event_name"], "date": st["event_date"],
+            "venue": st["venue"], "fee": (m["fee"] or 0) // 100 or "",
+            "tree_link": url_for("fam.public_tree", code=code, me=m["claim_of"] or m["id"], _external=True),
+            "status_link": url_for("fam.public_status", code=code, tok=tok, _external=True) if tok else "",
+            "form_link": url_for("fam.public_form", code=code, _external=True), "reason": reason}
+
+
+def compose(kind, m, st, lang="en", paid=None, reason="", org=None):
+    """kind: 'approve' (paid / due chosen by `paid`) or 'reject'."""
+    lang = lang if lang in ("en", "ml") else "en"
+    if kind == "reject":
+        key = "msg_reject_" + lang
+    else:
+        paid = m["paid"] if paid is None else paid
+        key = ("msg_paid_" if paid or not m["fee"] else "msg_due_") + lang
+    return fill_message(message_template(st, key), message_values(m, st, org, reason))
+
+
+def wa_target(m):
+    return H.wa_number(m["whatsapp"] or m["phone"] or "")
 
 
 # ---------------------------------------------------------------- the tree
@@ -419,6 +508,19 @@ def possible_duplicates(t, n):
 
 # ---------------------------------------------------------------- form data (public + admin)
 
+ERR_ML = {
+    "Enter the name.": "പേര് നൽകുക.",
+    "Enter the age (in years).": "വയസ്സ് നൽകുക.",
+    "Phone number looks wrong.": "ഫോൺ നമ്പർ ശരിയല്ലെന്ന് തോന്നുന്നു.",
+    "Enter the phone number.": "ഫോൺ നമ്പർ നൽകുക.",
+    "WhatsApp number looks wrong.": "WhatsApp നമ്പർ ശരിയല്ലെന്ന് തോന്നുന്നു.",
+    "Tell us: coming to the meetup? Yes / No": "മീറ്റപ്പിന് വരുന്നുണ്ടോ? Yes / No തിരഞ്ഞെടുക്കുക.",
+    "Choose your name from the list (or choose 'I am new').": "ലിസ്റ്റിൽ നിന്ന് നിങ്ങളുടെ പേര് തിരഞ്ഞെടുക്കുക (അല്ലെങ്കിൽ 'ഞാൻ പുതിയ ആളാണ്').",
+    "Choose how you are related.": "ബന്ധം തിരഞ്ഞെടുക്കുക.",
+    "Choose the person you are related to.": "ബന്ധമുള്ള ആളെ തിരഞ്ഞെടുക്കുക.",
+    "Choose the parent from the family.": "കുടുംബത്തിൽ നിന്നുള്ള ഉപ്പ / ഉമ്മയെ തിരഞ്ഞെടുക്കുക.",
+}
+
 def person_fields(st, existing=None, admin=False):
     """Name, age, late, phone, WhatsApp, achievement, program, attending, UPI ref from the form. -> (data, errors)"""
     f = request.form
@@ -511,8 +613,13 @@ def public_tree(code):
     stats = {"members": len(blood), "registered": sum(1 for n in blood if n["registered"]),
              "gens": max((n["gen"] for n in blood), default=0)}
     heads = [t["nodes"][h] for h in t["heads"]]
+
+    def ids(nid):   # the tree shape for the "Download image" drawing
+        n = t["nodes"][nid]
+        return {"id": nid, "sp": list(n["spouses"]), "ch": [ids(c) for c in n["children"]]}
+    shape = [ids(r) for r in t["roots"]]
     resp = make_response(render_template("family/public_tree.html", org=org, st=st, tree=tree, people=people,
-                                         stats=stats, heads=heads, focus=request.args.get("me", type=int),
+                                         stats=stats, heads=heads, shape=shape, focus=request.args.get("me", type=int),
                                          open_=reg_open(st)))
     resp.headers["X-Robots-Tag"] = "noindex"
     return resp
@@ -555,13 +662,13 @@ def public_form(code):
             parent_id, other_id, spouse_of = (None, None, None) if claim else link
             db.execute("""INSERT INTO fam_members (org_id, name, gender, relation, parent_id, other_parent_id,
                                 spouse_of, claim_of, is_late, registered, status, age, phone, whatsapp, achievement,
-                                program, photo, attending, fee, upi_ref, reg_no, token, created_at)
-                                VALUES (?,?,?,?,?,?,?,?,?, 1, 'pending', ?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                program, photo, attending, fee, upi_ref, reg_no, token, created_at, lang)
+                                VALUES (?,?,?,?,?,?,?,?,?, 1, 'pending', ?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                              (oid, data["name"], claim["gender"] if claim else GENDER[rel], rel, parent_id, other_id,
                               spouse_of, claim["id"] if claim else None, data["is_late"], data["age"], data["phone"],
                               data["whatsapp"], data["achievement"] or None, data["program"] or None, photo,
                               data["attending"], data["fee"], data["upi_ref"] or None, next_reg_no(db, oid), tok,
-                              _now()))
+                              _now(), "ml" if form.get("lang") == "ml" else "en"))
             db.commit()
             return redirect(url_for("fam.public_status", code=code, tok=tok, new=1,
                                     b=form.get("branch", type=int) or ""))
@@ -574,7 +681,7 @@ def public_form(code):
                                      "spouse": bool(n["spouse_of"]), "gen": n["gen"],
                                      "photo": url_for("media", name=n["photo"]) if n["photo"] else None}
                                     for n in people]})
-    return render_template("family/public_form.html", org=org, st=st, branches=branches, errors=errors,
+    return render_template("family/public_form.html", org=org, st=st, branches=branches, errors=errors, ERR_ML=ERR_ML,
                            form=form, RELATIONS=RELATIONS, fee_rs=(st["fee"] or 0) // 100,
                            pre_branch=request.values.get("b", type=int) or request.values.get("branch", type=int),
                            upi=upi_link(st, st["fee"] or 0),
@@ -663,6 +770,7 @@ def qr_poster():
 @fam_view("approve")
 def approvals():
     oid = H.org_id()
+    st = get_settings(oid)
     t = build(oid, include_pending=True)
     rows = [n for n in t["nodes"].values() if n["status"] == "pending"]
     rows.sort(key=lambda n: n["id"])
@@ -671,43 +779,81 @@ def approvals():
         n["claim"] = t["nodes"].get(n["claim_of"]) if n["claim_of"] else None
         if n["gen"] is None and not n["claim"]:   # parent not approved / removed
             n["rel_text"] = n["rel_text"] or "Relation missing — edit before approving"
+        n["problem"] = approve_problem(n)
+        n["wa_to"] = wa_target(n)
+        n["msgs"] = {f"{k}_{lang}": compose("approve", n, st, lang, paid=(k == "paid"))
+                     for k in ("paid", "due") for lang in ("en", "ml")}
+        n["msgs"].update({"reject_" + lang: compose("reject", n, st, lang, reason="{reason}") for lang in ("en", "ml")})
     rejected = H.query("""SELECT * FROM fam_members WHERE org_id = ? AND status = 'rejected'
                           ORDER BY approved_at DESC LIMIT 30""", (oid,))
     return render_template("family/approvals.html", rows=rows, rejected=rejected, rs=rs)
 
 
-def approve_member(m):
-    """Approve a pending registration. A 'This is me' claim fills the existing (not registered) person."""
-    db, ts, uid = H.get_db(), _now(), g.user["id"]
+def approve_problem(m):
+    """Why this registration cannot be approved now (None = it can)."""
     if m["claim_of"]:
         target = H.query("SELECT * FROM fam_members WHERE id = ? AND org_id = ?", (m["claim_of"], m["org_id"]), one=True)
         if not target or target["status"] != "approved":
             return "The person this registration claims is no longer in the tree. Edit it first."
         if target["registered"]:
             return f"{target['name']} is already registered. Reject this one (or edit it)."
+        return None
+    for col in ("parent_id", "spouse_of"):
+        if m[col]:
+            p = H.query("SELECT status FROM fam_members WHERE id = ?", (m[col],), one=True)
+            if not p or p["status"] != "approved":
+                return "The parent / partner of this person is not approved yet. Approve them first."
+    if not m["parent_id"] and not m["spouse_of"]:
+        return "This registration is not connected to anyone. Edit it first."
+    return None
+
+
+def approve_member(m, paid=None):
+    """Approve a pending registration. A 'This is me' claim fills the existing (not registered) person.
+    paid: True / False sets the fee Paid / Not paid (None = keep). Returns (error, id of the person in the tree)."""
+    err = approve_problem(m)
+    if err:
+        return err, None
+    db, ts, uid = H.get_db(), _now(), g.user["id"]
+    if paid is not None and m["fee"]:
+        if paid and not m["paid"]:
+            m = dict(m, paid=1, paid_at=ts, paid_by=uid)
+        elif not paid and m["paid"]:
+            m = dict(m, paid=0, paid_at=None, paid_by=None)
+    if m["claim_of"]:
+        target_id = m["claim_of"]
         db.execute("""UPDATE fam_members SET name = ?, is_late = ?, registered = 1, age = ?, phone = ?, whatsapp = ?,
                       achievement = ?, program = ?, photo = COALESCE(?, photo), attending = ?, fee = ?, paid = ?,
                       paid_at = ?, paid_by = ?, upi_ref = ?, reg_no = ?, created_at = ?, approved_by = ?,
-                      approved_at = ?, updated_at = ? WHERE id = ?""",
+                      approved_at = ?, updated_at = ?, lang = ? WHERE id = ?""",
                    (m["name"], m["is_late"], m["age"], m["phone"], m["whatsapp"], m["achievement"], m["program"],
                     m["photo"], m["attending"], m["fee"], m["paid"], m["paid_at"], m["paid_by"], m["upi_ref"],
-                    m["reg_no"], m["created_at"], uid, ts, ts, target["id"]))
+                    m["reg_no"], m["created_at"], uid, ts, ts, m["lang"], target_id))
         db.execute("UPDATE fam_members SET token = NULL WHERE id = ?", (m["id"],))
         db.execute("DELETE FROM fam_members WHERE id = ?", (m["id"],))
-        db.execute("UPDATE fam_members SET token = ? WHERE id = ?", (m["token"], target["id"]))
+        db.execute("UPDATE fam_members SET token = ? WHERE id = ?", (m["token"], target_id))
     else:
-        for col in ("parent_id", "spouse_of"):
-            if m[col]:
-                p = H.query("SELECT status FROM fam_members WHERE id = ?", (m[col],), one=True)
-                if not p or p["status"] != "approved":
-                    return "The parent / partner of this person is not approved yet. Approve them first."
-        if not m["parent_id"] and not m["spouse_of"]:
-            return "This registration is not connected to anyone. Edit it first."
-        db.execute("UPDATE fam_members SET status = 'approved', approved_by = ?, approved_at = ?, updated_at = ? "
-                   "WHERE id = ?", (uid, ts, ts, m["id"]))
+        target_id = m["id"]
+        db.execute("UPDATE fam_members SET status = 'approved', paid = ?, paid_at = ?, paid_by = ?, approved_by = ?, "
+                   "approved_at = ?, updated_at = ? WHERE id = ?",
+                   (m["paid"], m["paid_at"], m["paid_by"], uid, ts, ts, m["id"]))
     db.commit()
-    H.audit("family_approve", f"#{m['reg_no']} {m['name']}")
-    return None
+    H.audit("family_approve", f"#{m['reg_no']} {m['name']}" + (f" · fee {'paid' if m['paid'] else 'not paid'}"
+                                                               if m["fee"] else ""))
+    return None, target_id
+
+
+def mark_wa_sent(mid, kind):
+    H.execute("UPDATE fam_members SET wa_sent_at = ?, wa_sent_kind = ? WHERE id = ?", (_now(), kind, mid))
+
+
+def wants_json():
+    return request.form.get("ajax") == "1"
+
+
+def message_from_form(default):
+    msg = (request.form.get("message") or "").replace("\r\n", "\n").strip()[:2000]
+    return msg or default
 
 
 @bp.route("/family/members/<int:mid>/approve", methods=["POST"])
@@ -715,10 +861,25 @@ def approve_member(m):
 def approve(mid):
     m = get_member(mid)
     if m["status"] != "pending":
+        if wants_json():
+            return {"ok": False, "error": "Already handled."}
         flash("Already handled.", "info")
-    else:
-        err = approve_member(m)
-        flash(err or f"✅ {m['name']} approved — now in the family tree.", "error" if err else "success")
+        return redirect(request.form.get("next") or url_for("fam.approvals"))
+    paid = None
+    if "paid" in request.form or request.form.get("paid_box") == "1":
+        paid = request.form.get("paid") == "1"
+    st = get_settings()
+    lang = request.form.get("lang") if request.form.get("lang") in ("en", "ml") else (m["lang"] or "en")
+    msg = message_from_form(compose("approve", m, st, lang, paid))
+    err, tid = approve_member(m, paid)
+    phone = wa_target(m)
+    if not err and request.form.get("send_wa") == "1" and phone:
+        mark_wa_sent(tid, "approve")
+    if wants_json():
+        if err:
+            return {"ok": False, "error": err}
+        return {"ok": True, "phone": phone, "text": msg, "name": m["name"]}
+    flash(err or f"✅ {m['name']} approved — now in the family tree.", "error" if err else "success")
     return redirect(request.form.get("next") or url_for("fam.approvals"))
 
 
@@ -727,18 +888,31 @@ def approve(mid):
 def reject(mid):
     m = get_member(mid)
     reason = clean(request.form.get("reason"), 200)
-    if not reason:
-        flash("Write the reason for rejecting.", "error")
+
+    def fail(text):
+        if wants_json():
+            return {"ok": False, "error": text}
+        flash(text, "error")
         return redirect(url_for("fam.approvals"))
-    if m["status"] == "pending":
-        if H.scalar("SELECT COUNT(*) FROM fam_members WHERE (parent_id = ? OR spouse_of = ? OR other_parent_id = ?)"
-                    " AND status != 'rejected'", (mid, mid, mid)):
-            flash("Others are connected to this person. Move them first.", "error")
-            return redirect(url_for("fam.approvals"))
-        H.execute("UPDATE fam_members SET status = 'rejected', reject_reason = ?, approved_by = ?, approved_at = ? "
-                  "WHERE id = ?", (reason, g.user["id"], _now(), mid))
-        H.audit("family_reject", f"#{m['reg_no']} {m['name']}: {reason}")
-        flash(f"{m['name']} rejected.", "success")
+    if not reason:
+        return fail("Write the reason for rejecting.")
+    if m["status"] != "pending":
+        return fail("Already handled.")
+    if H.scalar("SELECT COUNT(*) FROM fam_members WHERE (parent_id = ? OR spouse_of = ? OR other_parent_id = ?)"
+                " AND status != 'rejected'", (mid, mid, mid)):
+        return fail("Others are connected to this person. Move them first.")
+    st = get_settings()
+    lang = request.form.get("lang") if request.form.get("lang") in ("en", "ml") else (m["lang"] or "en")
+    msg = message_from_form(compose("reject", m, st, lang, reason=reason))
+    H.execute("UPDATE fam_members SET status = 'rejected', reject_reason = ?, approved_by = ?, approved_at = ? "
+              "WHERE id = ?", (reason, g.user["id"], _now(), mid))
+    phone = wa_target(m)
+    if request.form.get("send_wa") == "1" and phone:
+        mark_wa_sent(mid, "reject")
+    H.audit("family_reject", f"#{m['reg_no']} {m['name']}: {reason}")
+    if wants_json():
+        return {"ok": True, "phone": phone, "text": msg, "name": m["name"]}
+    flash(f"{m['name']} rejected.", "success")
     return redirect(url_for("fam.approvals"))
 
 
@@ -775,6 +949,10 @@ def members():
     show = request.args.get("show") or "all"
     q = request.args.get("q") or ""
     rows = filtered_members(t, branch, show, q)
+    st = get_settings(oid)
+    for n in rows:
+        n["wa_to"] = wa_target(n) if n["registered"] else ""
+        n["wa_text"] = compose("approve", n, st, n["lang"] or "en") if n["wa_to"] else ""
     heads = [t["nodes"][h] for h in t["heads"]]
     return render_template("family/members.html", rows=rows, heads=heads, branch=branch, show=show, q=q,
                            SHOWS=SHOWS, rs=rs, wa=H.wa_number)
@@ -1176,6 +1354,9 @@ def settings():
                   venue=clean(f.get("venue"), 200), about=(f.get("about") or "").strip()[:1000],
                   upi_id=clean(f.get("upi_id"), 80).replace(" ", ""), upi_name=clean(f.get("upi_name"), 80),
                   reg_open=bool(f.get("reg_open")), last_date=H.valid_date(f.get("last_date")) or "")
+        for key in MSG_KEYS:
+            text = (f.get(key) or "").replace("\r\n", "\n").strip()[:2000]
+            st[key] = "" if text == DEFAULT_MESSAGES[key] else text
         fee = money_in(f.get("fee"))
         st["fee"] = fee if fee is not None and fee >= 0 else st["fee"]
         age = int_in(f.get("free_upto_age"), 0, 100)
@@ -1198,7 +1379,9 @@ def settings():
     start = st["start"] or {}
     heads = list(start.get("heads") or [])
     heads += [["", "son"]] * max(3, 12 - len(heads))
-    return render_template("family/settings.html", st=st, has_tree=has_tree, start=start, heads=heads,
+    msgs = {k: message_template(st, k) for k in MSG_KEYS}
+    return render_template("family/settings.html", st=st, has_tree=has_tree, start=start, heads=heads, msgs=msgs,
+                           PLACEHOLDERS=PLACEHOLDERS,
                            fee_rs=(st["fee"] or 0) / 100, form_link=form_url(), tree_link=tree_url())
 
 

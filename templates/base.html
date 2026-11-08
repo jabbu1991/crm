@@ -261,6 +261,9 @@
     if (mode() === "app") window.location.href = "whatsapp://send?phone=" + phone + "&text=" + t;
     else window.open("https://web.whatsapp.com/send?phone=" + phone + "&text=" + t, "_blank");
   }
+  window.famOpenWhatsApp = openWhatsApp;
+  // true when WhatsApp opens in a new browser tab: open that tab at the click, before waiting for the server
+  window.waWebTab = function () { return !mobile && mode() === "web"; };
   function askMode(then) {
     var box = popup("Open WhatsApp in");
     [["app", "💻 WhatsApp app"], ["web", "🌐 Browser (WhatsApp Web)"]].forEach(function (o) {

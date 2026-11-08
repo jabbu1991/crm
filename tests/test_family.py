@@ -247,3 +247,61 @@ def test_admin_pages_open(fw):
     baby = member(fw, "Baby")
     assert baby["status"] == "approved" and baby["registered"] == 0 and baby["parent_id"] == sid
     assert "Family permissions" in b.get("/staff/new").text
+
+
+def test_whatsapp_messages_on_approve_and_reject(fw):
+    b = fw["fam"]
+    start(b)
+    b.post("/family/settings", {"what": "event", "event_name": "KMH Family Meetup", "event_date": "28 Dec 2026",
+                                "venue": "", "fee": "800", "free_upto_age": "5", "reg_open": "1"})
+    moi = member(fw, "Moideenkutti")
+    register(fw, mode="me", claim_id=moi["id"], name="Moideenkutti", age="62", phone="9876543210", lang="ml")
+    pend = member(fw, "Moideenkutti")
+    assert pend["status"] == "pending" and pend["lang"] == "ml"
+    page = b.get("/family/approvals").text
+    assert "Approve &amp; Send on WhatsApp" in page and "Payment received" in page
+    # approve with "payment received" ticked: paid + "received" message (Malayalam, as the form was filled)
+    r = b.post(f"/family/members/{pend['id']}/approve", {"ajax": "1", "paid_box": "1", "paid": "1", "send_wa": "1"})
+    d = r.get_json()
+    assert d["ok"] and d["phone"] == "919876543210"
+    assert "ലഭിച്ചു" in d["text"] and "📍" not in d["text"]   # empty venue line left out
+    moi = member(fw, "Moideenkutti")
+    assert moi["registered"] == 1 and moi["paid"] == 1 and moi["wa_sent_kind"] == "approve" and moi["lang"] == "ml"
+    # approve without the tick, English: "not received" + status (pay) link; own text is used when given
+    register(fw, relation="son", of_id=moi["id"], name="Shafi", age="30", phone="9000000001")
+    sh = member(fw, "Shafi")
+    d = b.post(f"/family/members/{sh['id']}/approve", {"ajax": "1", "paid_box": "1", "lang": "en"}).get_json()
+    assert d["ok"] and "not received yet" in d["text"] and "/f/kmh/r/" in d["text"]
+    assert member(fw, "Shafi")["paid"] == 0
+    register(fw, relation="son", of_id=moi["id"], name="Ziya", age="28", phone="9000000002")
+    z = member(fw, "Ziya")
+    d = b.post(f"/family/members/{z['id']}/approve", {"ajax": "1", "message": "Custom text"}).get_json()
+    assert d["text"] == "Custom text"
+    # reject: reason goes into the message
+    register(fw, relation="son", of_id=moi["id"], name="Wrong", age="20", phone="9000000003")
+    w = member(fw, "Wrong")
+    d = b.post(f"/family/members/{w['id']}/reject", {"ajax": "1", "reason": "Already registered",
+                                                     "send_wa": "1"}).get_json()
+    assert d["ok"] and "Reason: Already registered" in d["text"] and "/f/kmh/register" in d["text"]
+    assert member(fw, "Wrong")["status"] == "rejected"
+    assert b.post(f"/family/members/{w['id']}/reject", {"ajax": "1", "reason": "x"}).get_json()["ok"] is False
+    # members list: WhatsApp button carries the approval message
+    assert "Send the approval message again" in b.get("/family/members").text
+    # own default message in Settings
+    b.post("/family/settings", {"what": "event", "event_name": "KMH Family Meetup", "fee": "800",
+                                "free_upto_age": "5", "reg_open": "1", "msg_paid_en": "Thanks {name}! #{reg_no}"})
+    register(fw, relation="daughter", of_id=moi["id"], name="Nafla", age="25", phone="9000000004")
+    nf = member(fw, "Nafla")
+    d = b.post(f"/family/members/{nf['id']}/approve", {"ajax": "1", "paid_box": "1", "paid": "1"}).get_json()
+    assert d["text"] == f"Thanks Nafla! #{nf['reg_no']}"
+
+
+def test_form_languages_and_tree_image_button(fw):
+    b = fw["fam"]
+    start(b)
+    form = Browser().get("/f/kmh/register").text
+    assert 'data-lang="ml"' in form and "നിങ്ങളുടെ ശാഖ" in form and 'name="lang"' in form
+    r = Browser().post("/f/kmh/register", {"mode": "new", "relation": "son", "name": ""})
+    assert "പേര് നൽകുക." in r.text
+    tree = Browser().get("/f/kmh").text
+    assert "⬇️ Image" in tree and "var SHAPE" in tree

@@ -9,6 +9,34 @@
   {% if st.cover %}<meta property="og:image" content="{{ url_for('media', name=st.cover, _external=True) }}">{% endif %}
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
   <link rel="stylesheet" href="{{ url_for('static', filename='family.css') }}">
+  <script>
+  /* English / Malayalam switch: elements carry data-ml (Malayalam text) and data-ml-ph (Malayalam placeholder).
+     English is the default; the choice is remembered on this phone. */
+  window.famLang = (function () {
+    var KEY = "fam_lang", cur = "en", subs = [];
+    try { cur = localStorage.getItem(KEY) === "ml" ? "ml" : "en"; } catch (e) {}
+    function apply() {
+      document.documentElement.lang = cur;
+      document.querySelectorAll("[data-ml]").forEach(function (el) {
+        if (el.dataset.en == null) el.dataset.en = el.innerHTML;
+        if (cur === "ml") el.textContent = el.dataset.ml; else el.innerHTML = el.dataset.en;
+      });
+      document.querySelectorAll("[data-ml-ph]").forEach(function (el) {
+        if (el.dataset.enPh == null) el.dataset.enPh = el.placeholder;
+        el.placeholder = cur === "ml" ? el.dataset.mlPh : el.dataset.enPh;
+      });
+      document.querySelectorAll(".f-langs button").forEach(function (b) { b.classList.toggle("on", b.dataset.lang === cur); });
+      var inp = document.getElementById("lang"); if (inp) inp.value = cur;
+    }
+    function set(l) { cur = l === "ml" ? "ml" : "en"; try { localStorage.setItem(KEY, cur); } catch (e) {} apply(); subs.forEach(function (f) { f(cur); }); }
+    document.addEventListener("DOMContentLoaded", function () {
+      document.querySelectorAll(".f-langs button").forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.lang); }); });
+      apply();
+    });
+    return { T: function (en, ml) { return cur === "ml" ? ml : en; }, lang: function () { return cur; }, set: set,
+             onChange: function (f) { subs.push(f); } };
+  })();
+  </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% block body %}{% endblock %}
