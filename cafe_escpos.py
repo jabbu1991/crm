@@ -198,10 +198,15 @@ def rawbt_link(data):
     return f"intent:base64,{b64}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;"
 
 
-def build(st, name, paper, bill=None, items=(), kots=(), balance=None, order_types=None):
+def receipt_bytes(st, name, paper, bill=None, items=(), kots=(), balance=None, order_types=None):
+    """The raw ESC/POS bytes (the Android app sends these to the printer itself)."""
     r = Receipt(paper if paper in ("58", "80") else "80")
     if bill is not None:
         bill_receipt(r, st, name, bill, items, balance, order_types)
     for k, lines, order in kots:
         kot_receipt(r, k, lines if isinstance(lines, list) else json.loads(lines), order, order_types)
-    return rawbt_link(r.bytes())
+    return r.bytes()
+
+
+def build(st, name, paper, bill=None, items=(), kots=(), balance=None, order_types=None):
+    return rawbt_link(receipt_bytes(st, name, paper, bill, items, kots, balance, order_types))

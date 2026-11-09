@@ -1196,3 +1196,25 @@ def test_customer_choice_on_public_menu(cw):
     # can be turned off
     settings(b, choice_count="3")
     assert top() == []
+
+
+def test_pos_save_gives_pdf_whatsapp_and_print_data(cw):
+    import base64 as b64
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    tea = item_id(w, "Tea")
+    r = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
+                "customer": {"phone": "9876543210", "name": "Anu"}, "items": [{"item_id": tea, "qty": 2}]})
+    d = r[1]
+    assert d["ok"] and d["bill_id"] and d["wa_phone"] == "919876543210"
+    assert "Total: ₹30" in d["wa_text"] and "View bill:" in d["wa_text"]
+    assert b"Tea" in b64.b64decode(d["escpos"]) and d["rawbt"] is None   # RawBT only when Bluetooth print is on
+    page = b.get("/cafe/pos").text
+    assert 'data-after="pdf"' in page and 'data-after="wa"' in page and 'data-after="print"' in page
+    pdf = b.get(d["pdf"])
+    assert pdf.status_code == 200 and pdf.data[:4] == b"%PDF"
+    assert "attachment" in pdf.headers["Content-Disposition"] and ".pdf" in pdf.headers["Content-Disposition"]
+    # another cafe cannot download it
+    assert w["cafe2"].get(d["pdf"]).status_code == 404

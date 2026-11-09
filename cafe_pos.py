@@ -1,5 +1,7 @@
 """Billing screen, orders (counter + online), KOT, bills, and the public digital menu with online ordering."""
+import base64
 import json
+import re
 import threading
 import time
 
@@ -452,11 +454,41 @@ def pos_save():
         out["print"] = url_for("cafe.bill_print", bid=bill_id, kot=kot_id or None, auto=1)
         out["embed"] = url_for("cafe.bill_print", bid=bill_id, kot=kot_id or None, auto=1, embed=1)
         out["view"] = url_for("cafe.bill_view", bid=bill_id)
+        out.update(_bill_send(bill_id, kot_id))
     elif kot_id:
         out["print"] = url_for("cafe.kot_print", kid=kot_id, auto=1)
     if key:
         _remember_save(key, out)
     return jsonify(out)
+
+
+def _bill_send(bill_id, kot_id=None):
+    """What the three POS buttons need right after a bill is saved: the PDF link (Save), the WhatsApp number and text
+    (WhatsApp), and the receipt bytes for a Bluetooth printer (Print: the Android app, or the RawBT link)."""
+    st = get_settings()
+    b = get_bill(bill_id)
+    items = H.query("SELECT * FROM cafe_bill_items WHERE bill_id = ? ORDER BY id", (bill_id,))
+    cust = H.query("SELECT * FROM customers WHERE id = ?", (b["customer_id"],), one=True) if b["customer_id"] else None
+    balance = cust["points"] if cust else None
+    kots = []
+    if kot_id:
+        k = H.query("SELECT * FROM cafe_kots WHERE id = ? AND org_id = ?", (kot_id, _org()), one=True)
+        if k:
+            o = H.query("""SELECT o.*, t.name table_name FROM cafe_orders o LEFT JOIN cafe_tables t ON t.id = o.table_id
+                           WHERE o.id = ?""", (k["order_id"],), one=True)
+            kots = [(k, json.loads(k["lines"]), o)]
+    data = cafe_escpos.receipt_bytes(st, cafe_name(st), st["paper"], bill=b, items=items, kots=kots, balance=balance,
+                                     order_types=ORDER_TYPES)
+    link = url_for("cafe.public_bill", tok=b["token"], _external=True)
+    card = card_url(cust["card_token"]) if cust and cust["card_token"] else None
+    return {
+        "bill_id": bill_id,
+        "pdf": url_for("cafe.bill_pdf", bid=bill_id),
+        "wa_phone": H.wa_number(b["cust_phone"]) if b["cust_phone"] else "",
+        "wa_text": bill_whatsapp_text(st, b, items, link, balance, card),
+        "escpos": base64.b64encode(data).decode("ascii"),
+        "rawbt": cafe_escpos.rawbt_link(data) if st["bt_print"] else None,
+    }
 
 
 # ---------------------------------------------------------------- orders
@@ -717,6 +749,24 @@ def bill_payment(bid):
               " WHERE id = ?", (mode, cash, upi, card, due, json.dumps(log[-50:], ensure_ascii=False), bid))
     flash(("Payment received: " if b["due"] and not due else "Payment changed: ") + after, "success")
     return redirect(url_for("cafe.bill_view", bid=bid))
+
+
+@bp.route("/cafe/bills/<int:bid>/pdf")
+@cafe_view("bills_view")
+def bill_pdf(bid):
+    """The bill as a PDF file that downloads to the phone (POS "Save" button, and the bill page)."""
+    import cafe_pdf
+    b = get_bill(bid)
+    st = get_settings()
+    items = H.query("SELECT * FROM cafe_bill_items WHERE bill_id = ? ORDER BY id", (bid,))
+    cust = H.query("SELECT points FROM customers WHERE id = ?", (b["customer_id"],), one=True) if b["customer_id"] else None
+    data = cafe_pdf.bill_pdf(st, cafe_name(st), b, items, cust["points"] if cust else None, ORDER_TYPES)
+    resp = make_response(data)
+    resp.headers["Content-Type"] = "application/pdf"
+    fname = re.sub(r"[^A-Za-z0-9_-]", "", f"Bill-{st['bill_prefix'] or ''}{b['bill_no']}") or "Bill"
+    resp.headers["Content-Disposition"] = f'attachment; filename="{fname}.pdf"'
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
 
 
 @bp.route("/cafe/bills/<int:bid>/print")

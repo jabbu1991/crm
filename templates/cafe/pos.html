@@ -51,7 +51,10 @@
     <div class="pc-actions">
       {% if cfg.kot_on %}<button type="button" class="btn btn-big" data-act="kot" title="Send to the kitchen; the order stays open">🍳 KOT</button>{% endif %}
       <button type="button" class="btn btn-big" data-act="save" title="Keep the order open without billing">💾 Hold</button>
-      <button type="button" class="btn btn-primary btn-big pc-bill" data-act="bill">🧾 Bill &amp; Print <span class="pc-billtot" id="pc-billtot"></span></button>
+      <div class="pc-total-line">Bill total <b id="pc-billtot"></b></div>
+      <button type="button" class="btn btn-big pc-fin" data-act="bill" data-after="pdf" title="Save the bill and download it as a PDF">💾 Save</button>
+      <button type="button" class="btn btn-big pc-fin btn-wa" data-act="bill" data-after="wa" title="Save the bill and send it on WhatsApp">🟢 WhatsApp</button>
+      <button type="button" class="btn btn-primary btn-big pc-fin pc-bill" data-act="bill" data-after="print" title="Save the bill and print it">🖨 Print</button>
     </div>
   </aside>
   <button type="button" class="pos-cartbar mobile-only" id="pos-cartbar">🛒 <span id="cb-count">0 items</span><b id="cb-total">₹0</b><span>Bill →</span></button>
@@ -87,6 +90,7 @@
   </div>
 </div>
 
+<div class="pos-toast" id="pos-toast" hidden></div>
 <div class="pos-print" id="pos-print" hidden><iframe id="pos-print-frame" title="Bill"></iframe></div>
 
 <script id="pos-cfg" type="application/json">{{ cfg|tojson }}</script>
@@ -123,6 +127,7 @@
   }
   function per(unit) { return unit === "kg" ? "/kg" : unit === "l" ? "/L" : ""; }
   function flash(t, ok) { var m = $("pc-msg"); m.hidden = false; m.className = "pc-msg " + (ok ? "ok" : "err"); m.textContent = t; clearTimeout(m._t); m._t = setTimeout(function () { m.hidden = true; }, 6000); }
+  function toast(t) { var m = $("pos-toast"); m.textContent = t; m.hidden = false; clearTimeout(m._t); m._t = setTimeout(function () { m.hidden = true; }, 4000); }
   function openModal(id) { $(id).hidden = false; }
   function closeModals() { document.querySelectorAll(".pos-modal").forEach(function (m) { m.hidden = true; }); stopCam(); }
   document.querySelectorAll(".pos-modal").forEach(function (m) {
@@ -301,7 +306,7 @@
     row("Total", rs(t.total), "pt-total");
     var n = 0; state.lines.forEach(function (l) { n += l.qty; });
     $("cb-count").textContent = n + " items"; $("cb-total").textContent = rs(t.total);
-    if ($("pc-billtot")) $("pc-billtot").textContent = t.total ? "· " + rs(t.total) : "";
+    if ($("pc-billtot")) $("pc-billtot").textContent = rs(t.total || 0);
   }
   function renderType() {
     document.querySelectorAll("#pc-types button").forEach(function (b) { b.classList.toggle("on", b.dataset.type === state.type); });
@@ -451,6 +456,28 @@
     clearDraft(); renderType(); render(); spShow();
     $("pos-q").focus();
   }
+  // ---- after Save / WhatsApp / Print: the bill is saved; do the one thing asked, then start a new bill
+  function finish(after, d, waTab) {
+    if (after === "pdf") {
+      var a = document.createElement("a"); a.href = d.pdf; a.download = ""; document.body.appendChild(a); a.click(); a.remove();
+      newBill(); toast("✓ Bill saved · PDF downloading"); return;
+    }
+    if (after === "wa") {
+      newBill(); toast("✓ Bill saved · opening WhatsApp");
+      if (waTab) { waTab.location.href = "https://web.whatsapp.com/send?phone=" + d.wa_phone + "&text=" + encodeURIComponent(d.wa_text); return; }
+      if (window.famOpenWhatsApp) window.famOpenWhatsApp(d.wa_phone, d.wa_text);
+      else window.location.href = "https://wa.me/" + d.wa_phone + "?text=" + encodeURIComponent(d.wa_text);
+      return;
+    }
+    // print: the Android app prints straight to its Bluetooth printer; else RawBT; else the print window
+    if (window.RVApp && window.RVApp.printEscpos) {
+      var res = "";
+      try { res = window.RVApp.printEscpos(d.escpos) || ""; } catch (e) { res = "Printer error"; }
+      newBill(); toast(res ? "✓ Bill saved · " + res : "✓ Bill saved · printing"); return;
+    }
+    if (d.rawbt) { newBill(); toast("✓ Bill saved · printing"); window.location.href = d.rawbt; return; }
+    $("pos-print-frame").src = d.embed; $("pos-print").hidden = false;
+  }
   window.addEventListener("message", function (e) { if (e.origin === location.origin && e.data === "pos-new") newBill(); });
 
   // ---- events
@@ -468,6 +495,11 @@
       var act = b.dataset.act;
       if (!state.lines.length && !(act === "save" && state.order)) { flash("Add at least one item."); return; }
       if (state.type === "dine_in" && !state.table) { flash("Choose a table."); return; }
+      var after = b.dataset.after || "";
+      if (after === "wa" && $("pc-phone").value.replace(/\D/g, "").length < 10) {
+        flash("Enter the customer's WhatsApp number first."); $("pc-phone").focus(); return;
+      }
+      var waTab = after === "wa" && window.waWebTab && window.waWebTab() ? window.open("", "_blank") : null;
       var t = totals();
       if (act === "bill" && state.pay === "Split") {
         var sum = spVal("sp-cash") + spVal("sp-upi") + spVal("sp-card");
@@ -502,8 +534,9 @@
           return r.json();
         }).then(function (d) {
           done();
-          if (!d.ok) { flash(d.error || "Could not save."); return; }
+          if (!d.ok) { if (waTab) waTab.close(); flash(d.error || "Could not save."); return; }
           clearDraft();
+          if (after && d.bill_id) { finish(after, d, waTab); return; }
           if (d.embed) { $("pos-print-frame").src = d.embed; $("pos-print").hidden = false; return; }
           if (d.print) { window.location.href = d.print; return; }
           window.location.href = state.type === "dine_in" ? "{{ url_for('cafe.tables') }}" : "{{ url_for('cafe.orders') }}";

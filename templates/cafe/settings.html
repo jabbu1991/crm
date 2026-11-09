@@ -51,7 +51,7 @@
     <label class="check"><input type="checkbox" name="card_qr" value="1" {{ 'checked' if st.card_qr }}> Print a small QR on the bill: the customer scans it to see their points and bills (<b>My Card</b>). Not on Bluetooth prints.</label>
     <h2 style="margin-top:16px">📱 Phone + Bluetooth printer</h2>
     <label class="check"><input type="checkbox" name="bt_print" value="1" {{ 'checked' if st.bt_print }}> Show the <b>🖨 Bluetooth Print</b> button (prints straight to the printer through the RawBT app, no print window)</label>
-    <label class="check"><input type="checkbox" name="bt_auto" value="1" {{ 'checked' if st.bt_auto }}> Print by Bluetooth automatically after <b>Bill &amp; Print</b> / <b>KOT</b></label>
+    <label class="check"><input type="checkbox" name="bt_auto" value="1" {{ 'checked' if st.bt_auto }}> Print by Bluetooth automatically after <b>KOT</b> (the 🖨 Print button on the billing screen always prints by Bluetooth when this is on)</label>
     <p class="muted small">One-time setup on the phone: install "RawBT" from the Play Store, choose Bluetooth and your printer, protocol "ESC/POS general", and the paper width. The first time, Android may ask which app to open: choose RawBT and "Always". RawBT's free version adds a line at the bottom of each receipt; buying its licence removes it.</p>
     <details class="help-box"><summary>🖨 How to set up the printer</summary>
       <ul>
