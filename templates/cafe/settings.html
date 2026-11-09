@@ -50,6 +50,20 @@
     <label class="check"><input type="checkbox" name="kot_with_bill" value="1" {{ 'checked' if st.kot_with_bill }}> When billing takeaway, print the KOT together with the bill (items not yet sent to the kitchen)</label>
     <label class="check"><input type="checkbox" name="card_qr" value="1" {{ 'checked' if st.card_qr }}> Print a small QR on the bill: the customer scans it to see their points and bills (<b>My Card</b>). Not on Bluetooth prints.</label>
     <h2 style="margin-top:16px">📱 Phone + Bluetooth printer</h2>
+    <div class="help-box" id="app-printer" hidden>
+      <b>📱 Real View app:</b> bills print straight to the Bluetooth printer (no RawBT needed).
+      Printer: <b id="app-printer-name">not chosen</b>
+      <button type="button" class="btn btn-sm" id="app-printer-btn">🖨 Choose printer</button>
+    </div>
+    <script>
+    (function () {
+      if (!(window.RVApp && window.RVApp.choosePrinter)) return;
+      var box = document.getElementById("app-printer"); box.hidden = false;
+      function show() { try { document.getElementById("app-printer-name").textContent = window.RVApp.printerName() || "not chosen"; } catch (e) {} }
+      document.getElementById("app-printer-btn").onclick = function () { window.RVApp.choosePrinter(); setTimeout(show, 4000); };
+      show(); window.addEventListener("focus", show);
+    })();
+    </script>
     <label class="check"><input type="checkbox" name="bt_print" value="1" {{ 'checked' if st.bt_print }}> Show the <b>🖨 Bluetooth Print</b> button (prints straight to the printer through the RawBT app, no print window)</label>
     <label class="check"><input type="checkbox" name="bt_auto" value="1" {{ 'checked' if st.bt_auto }}> Print by Bluetooth automatically after <b>KOT</b> (the 🖨 Print button on the billing screen always prints by Bluetooth when this is on)</label>
     <p class="muted small">One-time setup on the phone: install "RawBT" from the Play Store, choose Bluetooth and your printer, protocol "ESC/POS general", and the paper width. The first time, Android may ask which app to open: choose RawBT and "Always". RawBT's free version adds a line at the bottom of each receipt; buying its licence removes it.</p>

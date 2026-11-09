@@ -111,9 +111,19 @@
 {% endfor %}
 
 {% if public and menu_link %}<p class="menu-link"><a href="{{ menu_link }}">📱 See the {{ name }} menu</a></p>{% endif %}
+{% if escpos is defined and escpos and not public %}<script id="escpos-data" type="text/plain">{{ escpos }}</script>{% endif %}
 <script>
+// Inside the Real View Android app: the Print buttons print straight to the Bluetooth printer
+var RVAPP = (window.RVApp && window.RVApp.printEscpos) ? window.RVApp : (window.top !== window && window.top.RVApp && window.top.RVApp.printEscpos ? window.top.RVApp : null);
+function appPrint() { var d = document.getElementById("escpos-data"); if (RVAPP && d) { RVAPP.printEscpos(d.textContent.trim()); return true; } return false; }
+if (RVAPP && document.getElementById("escpos-data")) {
+  document.querySelectorAll('button[onclick="window.print()"]').forEach(function (b) { b.onclick = appPrint; b.className = "primary"; });
+  var btl = document.getElementById("bt-print"); if (btl) btl.style.display = "none";
+}
 function savePdf() { document.getElementById("pdf-hint").hidden = false; setTimeout(function () { window.print(); }, 150); }
+{% if bill and not public %}if (RVAPP) savePdf = function () { location.href = "{{ url_for('cafe.bill_pdf', bid=bill.id) }}"; };{% endif %}
 {% if auto %}window.addEventListener("load", function () { setTimeout(function () {
+  if (appPrint()) return;
   {% if bt_link and st.bt_auto %}{{ 'window.top' if embed else 'window' }}.location.href = document.getElementById("bt-print").href;{% else %}window.print();{% endif %}
 }, 300); });{% endif %}
 </script>

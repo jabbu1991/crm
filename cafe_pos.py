@@ -615,8 +615,10 @@ def kot_print(kid):
     st = get_settings()
     paper = request.args.get("paper") or st["paper"]
     kots = [(k, json.loads(k["lines"]), o)]
-    bt = cafe_escpos.build(st, cafe_name(st), paper, kots=kots, order_types=ORDER_TYPES) if st["bt_print"] else None
+    raw = cafe_escpos.receipt_bytes(st, cafe_name(st), paper, kots=kots, order_types=ORDER_TYPES)
+    bt = cafe_escpos.rawbt_link(raw) if st["bt_print"] else None
     return render_template("cafe/print.html", st=st, kots=kots, bill=None, items=[], bt_link=bt,
+                           escpos=base64.b64encode(raw).decode("ascii"),
                            auto=request.args.get("auto"), name=cafe_name(st), ORDER_TYPES=ORDER_TYPES,
                            paper=paper, back=url_for("cafe.orders"))
 
@@ -785,8 +787,9 @@ def bill_print(bid):
             kots = [(k, json.loads(k["lines"]), o)]
     cust = H.query("SELECT points FROM customers WHERE id = ?", (b["customer_id"],), one=True) if b["customer_id"] else None
     paper = request.args.get("paper") or st["paper"]
-    bt = cafe_escpos.build(st, cafe_name(st), paper, bill=b, items=items, kots=kots,
-                           balance=cust["points"] if cust else None, order_types=ORDER_TYPES) if st["bt_print"] else None
+    raw = cafe_escpos.receipt_bytes(st, cafe_name(st), paper, bill=b, items=items, kots=kots,
+                                    balance=cust["points"] if cust else None, order_types=ORDER_TYPES)
+    bt = cafe_escpos.rawbt_link(raw) if st["bt_print"] else None
     embed = bool(request.args.get("embed"))
     card = None
     if b["customer_id"] and st.get("card_on", True):
@@ -795,6 +798,7 @@ def bill_print(bid):
     resp = make_response(render_template(
         "cafe/print.html", st=st, bill=b, items=items, kots=kots, auto=request.args.get("auto"), embed=embed,
         name=cafe_name(st), ORDER_TYPES=ORDER_TYPES, paper=paper, bt_link=bt, line_qty=line_amount_text,
+        escpos=base64.b64encode(raw).decode("ascii"),
         card=card, card_qr=qr_svg(card) if card and st.get("card_qr") else None,
         balance=cust["points"] if cust else None, back=url_for("cafe.bill_view", bid=bid, new=1)
         if request.args.get("auto") else url_for("cafe.bill_view", bid=bid)))

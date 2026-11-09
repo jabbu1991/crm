@@ -1,0 +1,52 @@
+plugins {
+    id "com.android.application"
+}
+
+// Version: set by the GitHub build (run number); 1 for a local build.
+def runNo = (System.getenv("GITHUB_RUN_NUMBER") ?: "1") as Integer
+
+android {
+    namespace "com.realview.app"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.realview.app"
+        minSdk 23
+        targetSdk 34
+        versionCode runNo
+        versionName "1.0." + runNo
+        // The web address the app opens (change here if the domain changes)
+        buildConfigField "String", "HOME_URL", "\"https://crm.realviewcreativestudio.in/\""
+    }
+
+    buildFeatures { buildConfig true }
+
+    signingConfigs {
+        release {
+            def ks = System.getenv("KEYSTORE_PATH")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("APK_KEY_PASSWORD")
+                keyAlias "realview"
+                keyPassword System.getenv("APK_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

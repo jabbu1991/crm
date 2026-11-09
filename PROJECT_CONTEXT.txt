@@ -186,6 +186,10 @@ Digital Catalogue (built 16 Oct 2026)
   Save -> downloads /cafe/bills/<id>/pdf (cafe_pdf.py, fpdf2 + uharfbuzz, fonts/ DejaVu + Noto Sans Malayalam, 80 mm page);
   WhatsApp -> wa.me with bill_whatsapp_text (needs customer phone); Print -> window.RVApp.printEscpos(base64) if the Android
   app is there, else RawBT link (bt_print on), else the old print frame. pos_save returns pdf, wa_phone, wa_text, escpos, rawbt.
+  Android app (android/, Java WebView, package com.realview.app, minSdk 23): JS bridge window.RVApp
+  {printEscpos(b64), choosePrinter(), printerName(), version()}; Classic SPP then BLE; printer remembered on phone.
+  Built by .github/workflows/android.yml (needs secret APK_KEY_PASSWORD; first run commits android/release.keystore.enc).
+  print.html uses RVApp too (Print buttons + auto print); cafe settings shows "Choose printer" inside the app.
   POS tile photos use object-fit: contain (whole square photo shows).
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).
 - Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).
