@@ -7,7 +7,9 @@ import os
 
 from fpdf import FPDF
 
+import cafe as _cafe
 from cafe import fmt_measure, pay_text
+
 
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 W = 80          # page width, mm
@@ -81,7 +83,7 @@ def _draw(pdf, st, name, bill, items, balance, order_types):
         pdf.line_center("*** CANCELLED ***", 10, True)
     pdf.rule()
     d = bill["bill_date"]
-    pdf.pair(f"Bill: {st.get('bill_prefix') or ''}{bill['bill_no']}", f"{d[8:10]}-{d[5:7]}-{d[:4]} {bill['created_at'][11:16]}",
+    pdf.pair(f"Bill: {st.get('bill_prefix') or ''}{bill['bill_no']}", f"{d[8:10]}-{d[5:7]}-{d[:4]} {_cafe.H.ist_time(bill['created_at'], '%H:%M')}",
              bold=False)
     kind = (order_types or {}).get(bill["order_type"], "") + (f": {bill['table_name']}" if bill["table_name"] else "")
     pdf.pair(kind, pay_text(bill))

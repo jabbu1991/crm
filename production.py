@@ -109,8 +109,12 @@ def today_date():
 
 
 def to_date(value):
+    """A date, or a stored timestamp taken as its India-time day."""
     try:
-        return date.fromisoformat(str(value)[:10])
+        v = str(value)
+        if len(v) >= 19:
+            v = H.ist_time(v, "%Y-%m-%d")
+        return date.fromisoformat(v[:10])
     except (TypeError, ValueError):
         return None
 

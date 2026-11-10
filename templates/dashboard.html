@@ -55,7 +55,7 @@
     <tbody>{% for h in catalog_hot %}<tr>
       <td><a href="{{ url_for('lead_view', lid=h.id) }}"><b>{{ h.customer_name }}</b></a></td>
       <td>{% if h.phone %}<a href="tel:{{ h.phone }}">{{ h.phone }}</a>{% endif %}</td>
-      <td>{{ h.products or 'Catalogue page' }}</td><td class="nowrap">{{ h.last_seen[11:16] }} · {{ h.last_seen[:10] }}</td>
+      <td>{{ h.products or 'Catalogue page' }}</td><td class="nowrap">{{ h.last_seen|ist('%H:%M · %Y-%m-%d') }}</td>
     </tr>{% endfor %}</tbody>
   </table>
 </section>
@@ -126,7 +126,7 @@
         <td class="wrap">{{ l.product_names or '' }}</td><td>{{ l.state or '' }}</td><td>{{ l.project_name }}</td>
         <td>{% if viewing %}<span class="badge {{ l.status|badge }}">{{ l.status }}</span>{% else %}{{ quick_form(l, 'qr') }}{{ quick_select(l, 'status', LEAD_STATUSES, False, '', 'qr') }}{% endif %}</td>
         <td class="col-notes">{{ notes_edit(l) }}</td><td class="col-next_follow_up">{{ fu_edit(l) }}</td>
-        <td>{{ l.staff_name }}</td><td>{{ l.created_at[:10] }}</td>
+        <td>{{ l.staff_name }}</td><td>{{ l.created_at|ist('%Y-%m-%d') }}</td>
         <td>{% if not viewing %}<a class="edit-btn" href="{{ url_for('lead_edit', lid=l.id) }}">✏️</a>{% endif %}</td>
       </tr>
     {% else %}<tr><td colspan="12" class="muted">No leads yet. <a href="{{ url_for('lead_new') }}">Add the first lead →</a></td></tr>{% endfor %}
@@ -134,7 +134,7 @@
   </table>
   </div>
   <div class="lead-cards mobile-only">
-    {% for l in recent %}{{ mini_card(l, 'qrc', l.created_at[:10] ~ ((' · ' ~ l.product_names) if l.product_names else '')) }}
+    {% for l in recent %}{{ mini_card(l, 'qrc', (l.created_at|ist('%Y-%m-%d')) ~ ((' · ' ~ l.product_names) if l.product_names else '')) }}
     {% else %}<p class="muted">No leads yet. <a href="{{ url_for('lead_new') }}">Add the first lead →</a></p>{% endfor %}
   </div>
 </section>

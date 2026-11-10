@@ -3,14 +3,14 @@
 {% block content %}
 <div class="page-head">
   <h1>{{ 'Edit lead' if lead else 'New lead entry' }}</h1>
-  {% if lead %}<span class="muted">Created by <b>{{ lead.staff_name }}</b> on {{ lead.created_at }}</span>
+  {% if lead %}<span class="muted">Created by <b>{{ lead.staff_name }}</b> on {{ lead.created_at|ist }}</span>
   {% else %}<span class="entered-by">Created by: <b>{{ g.user.name }}</b>{% if g.user.designation %} · {{ g.user.designation }}{% endif %} · {{ g.org.name }}</span>{% endif %}
 </div>
 
 {% if duplicates or hidden_duplicates %}
 <div class="card warn-card">
   <h2>Possible duplicate customer</h2>
-  <ul>{% for d in duplicates %}<li><a href="{{ url_for('lead_view', lid=d.id) }}" target="_blank">{{ d.customer_name }}</a> · {{ d.phone or '' }} {{ d.email or '' }} · {{ d.status }} · {{ d.product_names or 'no products' }} · created by {{ d.staff_name }} on {{ d.created_at[:10] }}</li>{% endfor %}
+  <ul>{% for d in duplicates %}<li><a href="{{ url_for('lead_view', lid=d.id) }}" target="_blank">{{ d.customer_name }}</a> · {{ d.phone or '' }} {{ d.email or '' }} · {{ d.status }} · {{ d.product_names or 'no products' }} · created by {{ d.staff_name }} on {{ d.created_at|ist('%Y-%m-%d') }}</li>{% endfor %}
   {% if hidden_duplicates %}<li>{{ hidden_duplicates }} matching lead(s) owned by other staff in your organization. Check with your admin before adding.</li>{% endif %}</ul>
   <p class="small muted">Tip: if this is the same customer asking about another product, open the existing lead and add the product there instead of creating a new record.</p>
 </div>

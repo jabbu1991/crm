@@ -64,7 +64,7 @@
   <div class="c b" style="margin-top:3px">{{ 'TAX INVOICE' if bill.gst_on else 'BILL' }}</div>
   {% if bill.status == 'cancelled' %}<div class="cancelled">CANCELLED</div>{% endif %}
   <hr>
-  <div class="meta"><span>Bill: <b>{{ st.bill_prefix }}{{ bill.bill_no }}</b></span><span>{{ bill.bill_date[8:10] }}-{{ bill.bill_date[5:7] }}-{{ bill.bill_date[:4] }} {{ bill.created_at[11:16] }}</span></div>
+  <div class="meta"><span>Bill: <b>{{ st.bill_prefix }}{{ bill.bill_no }}</b></span><span>{{ bill.bill_date[8:10] }}-{{ bill.bill_date[5:7] }}-{{ bill.bill_date[:4] }} {{ bill.created_at|ist('%H:%M') }}</span></div>
   <div class="meta"><span>{{ ORDER_TYPES.get(bill.order_type, '') }}{% if bill.table_name %}: {{ bill.table_name }}{% endif %}</span><span>{{ pay_text(bill) }}</span></div>
   {% if bill.cust_name %}<div>Customer: {{ bill.cust_name }}{% if bill.cust_phone and not public %} · {{ bill.cust_phone }}{% endif %}</div>{% endif %}
   <hr>
@@ -100,7 +100,7 @@
 <div class="sheet kot {{ 'kot-first' if not bill and loop.first }}">
   <h2>KOT #{{ k.kot_no }}</h2>
   <div class="c big">{% if o.order_type == 'dine_in' %}🍽 {{ o.table_name or 'Table' }}{% elif o.order_type == 'takeaway' %}🥡 TAKEAWAY{% else %}🛵 DELIVERY{% endif %}</div>
-  <div class="meta"><span>Order #{{ o.order_no }}</span><span>{{ k.created_at[11:16] }}</span></div>
+  <div class="meta"><span>Order #{{ o.order_no }}</span><span>{{ k.created_at|ist('%H:%M') }}</span></div>
   {% if o.cust_name %}<div>{{ o.cust_name }}</div>{% endif %}
   <hr>
   <table>

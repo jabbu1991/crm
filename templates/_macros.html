@@ -115,7 +115,7 @@
 {% elif key == 'next_follow_up' %}{{ fu_edit(l) }}
 {% elif key == 'assigned' %}{{ l.assigned_name or '' }}
 {% elif key == 'created_by' %}{{ l.staff_name or '' }}
-{% elif key == 'created' %}{{ (l.created_at or '')[:10] }}
+{% elif key == 'created' %}{{ l.created_at|ist('%Y-%m-%d') }}
 {% elif key == 'stage' %}{% if l.product_stage %}<span class="badge {{ l.product_stage|badge }}">{{ l.product_stage }}</span>{% endif %}
 {% else %}{{ l[key] or '' }}{% endif %}
 {%- endmacro %}

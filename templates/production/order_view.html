@@ -30,7 +30,7 @@
   {% if ph == 'queue' and is_admin() and not viewing and o.status == 'active' %}
   {% if o.pinned_at %}
   <form method="post" action="{{ url_for('prod.order_pin', order_id=o.id) }}" class="inline-form">{{ csrf() }}<input type="hidden" name="action" value="unpin">
-    <span class="small">📌 At the top since {{ o.pinned_at[:16] }} by {{ o.pinned_by_name or '' }} — {{ o.pin_reason }}</span><button class="btn btn-sm">Remove from top</button></form>
+    <span class="small">📌 At the top since {{ o.pinned_at|ist('%Y-%m-%d %H:%M') }} by {{ o.pinned_by_name or '' }} — {{ o.pin_reason }}</span><button class="btn btn-sm">Remove from top</button></form>
   {% else %}
   <details class="pick-stage"><summary class="small">📌 Move to top of the queue (Admin)…</summary>
     <form method="post" action="{{ url_for('prod.order_pin', order_id=o.id) }}" class="inline-form">{{ csrf() }}
@@ -139,7 +139,7 @@
     <section class="card">
       <h2>History</h2>
       <ul class="timeline">
-        {% for h in history %}<li><div>{% if h.from_name %}{{ h.from_name }} → {% endif %}<b>{{ h.stage_name }}</b>{% if h.note %} · {{ h.note }}{% endif %}</div><small class="muted">{{ h.user_name or '' }} · {{ h.created_at[:16] }}</small></li>{% endfor %}
+        {% for h in history %}<li><div>{% if h.from_name %}{{ h.from_name }} → {% endif %}<b>{{ h.stage_name }}</b>{% if h.note %} · {{ h.note }}{% endif %}</div><small class="muted">{{ h.user_name or '' }} · {{ h.created_at|ist('%Y-%m-%d %H:%M') }}</small></li>{% endfor %}
       </ul>
       {% if pcan('edit') and not viewing %}
       <details><summary class="small">{{ 'Restore this order' if o.status != 'active' else 'Cancel this order' }}</summary>

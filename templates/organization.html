@@ -70,7 +70,7 @@
   <table class="table compact">
     <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
     <tbody>
-    {% for a in access_log %}<tr><td class="nowrap">{{ a.created_at }}</td><td>{{ a.user_name }}</td><td>{{ a.action }}{% if a.detail %} <span class="muted">({{ a.detail }})</span>{% endif %}</td></tr>
+    {% for a in access_log %}<tr><td class="nowrap">{{ a.created_at|ist }}</td><td>{{ a.user_name }}</td><td>{{ a.action }}{% if a.detail %} <span class="muted">({{ a.detail }})</span>{% endif %}</td></tr>
     {% else %}<tr><td colspan="3" class="muted">No Super Admin access recorded.</td></tr>{% endfor %}
     </tbody>
   </table>

@@ -8,6 +8,7 @@ import json
 import re
 import unicodedata
 
+import cafe as _cafe
 from cafe import fmt_measure, pay_text, rupees
 
 ESC, GS = b"\x1b", b"\x1d"
@@ -108,7 +109,7 @@ def bill_receipt(r, st, name, bill, items, balance=None, order_types=None):
         r.text("*** CANCELLED ***", "center", bold=True)
     r.rule()
     d = bill["bill_date"]
-    r.pair(f"Bill: {st.get('bill_prefix') or ''}{bill['bill_no']}", f"{d[8:10]}-{d[5:7]}-{d[:4]} {bill['created_at'][11:16]}")
+    r.pair(f"Bill: {st.get('bill_prefix') or ''}{bill['bill_no']}", f"{d[8:10]}-{d[5:7]}-{d[:4]} {_cafe.H.ist_time(bill['created_at'], '%H:%M')}")
     kind = (order_types or {}).get(bill["order_type"], "") + (f": {bill['table_name']}" if bill["table_name"] else "")
     keys = bill.keys() if hasattr(bill, "keys") else []
     if "pay_cash" in keys and not bill["due"] and sum(1 for c in ("pay_cash", "pay_upi", "pay_card") if bill[c]) > 1:
@@ -173,7 +174,7 @@ def kot_receipt(r, kot, lines, order, order_types=None):
     else:
         place = (order_types or {}).get(order["order_type"], order["order_type"]).upper()
     r.text(place, "center", bold=True, big=True)
-    r.pair(f"Order #{order['order_no']}", kot["created_at"][11:16])
+    r.pair(f"Order #{order['order_no']}", _cafe.H.ist_time(kot["created_at"], "%H:%M"))
     if order["cust_name"]:
         r.text(order["cust_name"])
     r.rule()

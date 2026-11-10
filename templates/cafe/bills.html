@@ -31,7 +31,7 @@
   {% for b in rows %}
   <tr class="{{ 'inactive' if b.status == 'cancelled' }}">
     <td><a href="{{ url_for('cafe.bill_view', bid=b.id) }}"><b>{{ st.bill_prefix }}{{ b.bill_no }}</b></a>{% if b.status == 'cancelled' %} <span class="badge b-lost">Cancelled</span>{% endif %}</td>
-    <td class="nowrap small">{{ b.bill_date[8:10] }}/{{ b.bill_date[5:7] }} {{ b.created_at[11:16] }}</td>
+    <td class="nowrap small">{{ b.bill_date[8:10] }}/{{ b.bill_date[5:7] }} {{ b.created_at|ist('%H:%M') }}</td>
     <td class="small">{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</td>
     <td>{{ b.cust_name or '' }}{% if b.cust_phone %}<div class="small muted">{{ b.cust_phone }}</div>{% endif %}</td>
     <td class="wrap small">{{ b.summary }}</td>

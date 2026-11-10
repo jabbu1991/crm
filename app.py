@@ -153,6 +153,22 @@ def today():
     return datetime.now(IST).date().isoformat()
 
 
+def ist_time(ts, fmt="%d-%m-%Y %H:%M"):
+    """A stored timestamp ('YYYY-MM-DD HH:MM:SS', server time; Render runs in UTC) shown in India time.
+    Anything that is not a full timestamp (empty, a plain date) comes back as it is."""
+    if not ts or not isinstance(ts, str):
+        return ts or ""
+    try:
+        local = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ts
+    utc = local.astimezone(timezone.utc)          # naive = server-local time
+    return utc.astimezone(IST).strftime(fmt)
+
+
+app.jinja_env.filters["ist"] = ist_time
+
+
 def ist_day_bounds(day=None):
     """Start and end of an Indian day as server-local timestamps (how created_at is stored)."""
     start = datetime.combine(day or datetime.now(IST).date(), datetime.min.time(), IST)
@@ -686,7 +702,7 @@ def issue_password_link(user_id, purpose):
                " VALUES (?,?,?,?,?,?)", (user_id, _hash_token(raw), purpose,
                                          expires.strftime("%Y-%m-%d %H:%M:%S"), g.user["id"], now()))
     db.commit()
-    return url_for("reset_password", token=raw, _external=True), expires.strftime("%Y-%m-%d %H:%M")
+    return url_for("reset_password", token=raw, _external=True), ist_time(expires.strftime("%Y-%m-%d %H:%M:%S"))
 
 
 def set_password(user_id, password, must_change):
@@ -3319,7 +3335,7 @@ def admin_server():
                         reverse=True):
             fp = os.path.join(backups_dir(), f)
             backups.append({"name": f, "size": _size(fp),
-                            "when": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%m-%Y %H:%M")})
+                            "when": datetime.fromtimestamp(os.path.getmtime(fp), IST).strftime("%d-%m-%Y %H:%M")})
     mem = None
     try:
         with open("/proc/self/status") as f:

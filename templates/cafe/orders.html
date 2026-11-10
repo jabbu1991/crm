@@ -20,7 +20,7 @@
   <h2>🔔 Online orders waiting for confirmation ({{ pending|length }})</h2>
   {% for o in pending %}
   <div class="ord ord-pending">
-    <div class="ord-head"><b>#{{ o.order_no }}</b> {{ type_label(o) }} <span class="muted small">{{ o.created_at[11:16] }}</span> <b class="ord-amt">{{ o.amount|rs }}</b></div>
+    <div class="ord-head"><b>#{{ o.order_no }}</b> {{ type_label(o) }} <span class="muted small">{{ o.created_at|ist('%H:%M') }}</span> <b class="ord-amt">{{ o.amount|rs }}</b></div>
     <div><b>{{ o.cust_name }}</b> · <a class="wa-link" href="https://wa.me/{{ o.cust_phone|wa_number }}" target="_blank" rel="noopener">🟢 {{ o.cust_phone }}</a></div>
     <div class="ord-items">{{ o.summary }}</div>
     {% if o.address %}<div class="small">📍 {{ o.address }}</div>{% endif %}
@@ -47,7 +47,7 @@
       <b class="ord-amt">{{ o.amount|rs }}</b></div>
     {% if o.cust_name %}<div class="small">{{ o.cust_name }}{% if o.cust_phone %} · {{ o.cust_phone }}{% endif %}</div>{% endif %}
     <div class="ord-items">{{ o.summary or '—' }}</div>
-    <div class="small muted">{{ o.created_at[11:16] }}{% if o.created_name %} · {{ o.created_name }}{% endif %}</div>
+    <div class="small muted">{{ o.created_at|ist('%H:%M') }}{% if o.created_name %} · {{ o.created_name }}{% endif %}</div>
     {% if not viewing %}
     <div class="actions">
       <a class="btn btn-primary ord-bill" href="{{ url_for('cafe.pos', order=o.id) }}" title="Payment, discount, add or change items">🧾 Bill</a>

@@ -57,7 +57,7 @@
   <section class="mc-box">
     <h2>Points history</h2>
     <ul class="mc-list">
-      {% for h in history %}{% if loop.index == 9 %}</ul><details class="mc-more"><summary>Show more</summary><ul class="mc-list">{% endif %}<li><span><b>{{ h.label }}</b>{% if h.note %}<small>{{ h.note }}</small>{% endif %}<small>{{ h.created_at[8:10] }}-{{ h.created_at[5:7] }}-{{ h.created_at[:4] }}</small></span>
+      {% for h in history %}{% if loop.index == 9 %}</ul><details class="mc-more"><summary>Show more</summary><ul class="mc-list">{% endif %}<li><span><b>{{ h.label }}</b>{% if h.note %}<small>{{ h.note }}</small>{% endif %}<small>{{ h.created_at|ist('%d') }}-{{ h.created_at|ist('%m') }}-{{ h.created_at|ist('%Y') }}</small></span>
         <b class="{{ 'plus' if h.change > 0 else 'minus' }}">{{ '+' if h.change > 0 }}{{ h.change }}</b></li>{% endfor %}
     </ul>{% if history|length > 8 %}</details>{% endif %}
   </section>

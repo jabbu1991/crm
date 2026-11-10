@@ -1259,3 +1259,24 @@ def test_push_is_high_priority_and_settings_shows_phones(cw):
         cafe_push.sender = old
     assert r["ok"] and r["count"] == 1 and len(sent) == 1
     assert '"Urgency": "high"' in open(cafe_push.__file__).read()
+
+
+def test_bill_times_show_in_india_time(cw):
+    import app as H
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    add_item(b, "Tea", "15")
+    code, d = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
+                      "items": [{"item_id": item_id(w, "Tea"), "qty": 1}]})
+    db = w["db"]()
+    db.execute("UPDATE cafe_bills SET created_at = '2026-11-10 17:41:05' WHERE id = ?", (d["bill_id"],))
+    db.commit()
+    want = H.ist_time("2026-11-10 17:41:05", "%H:%M")   # 23:11 when the server runs in UTC
+    assert want in b.get(f"/cafe/bills/{d['bill_id']}/print").text
+    assert want in b.get(f"/cafe/bills/{d['bill_id']}").text
+    assert want in b.get("/cafe/bills").text
+    from datetime import datetime, timezone, timedelta
+    utc = datetime(2026, 11, 10, 17, 41, 5, tzinfo=timezone.utc)
+    local = utc.astimezone().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    assert H.ist_time(local, "%H:%M") == "23:11"

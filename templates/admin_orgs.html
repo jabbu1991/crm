@@ -13,7 +13,7 @@
       <td><span class="badge {{ o.status|badge }}">{{ o.status }}</span></td>
       <td class="small">{{ o.admins or '—' }}</td>
       <td class="num">{{ o.active_users }}/{{ o.users }}</td><td class="num">{{ o.projects }}</td><td class="num">{{ o.leads }}</td>
-      <td class="small">{{ o.created_at[:10] }}</td>
+      <td class="small">{{ o.created_at|ist('%Y-%m-%d') }}</td>
       <td class="nowrap">
         {% if o.kind != 'agency' %}<form method="post" action="{{ url_for('admin_view_enter', oid=o.id) }}" class="inline">{{ csrf() }}<button class="linkbtn dark"><b>Open workspace</b></button></form> ·{% endif %}
         <a href="{{ url_for('admin_org_users', oid=o.id) }}">Accounts</a> ·

@@ -10,7 +10,7 @@
   {% for u in users %}
     <tr class="{{ 'inactive' if not u.active }}">
       <td><b>{{ u.name }}</b></td><td>{{ u.username }}</td><td>{{ u.email or '' }}</td><td>{{ ROLE_LABELS[u.role] }}</td>
-      <td>{{ 'Active' if u.active else 'Deactivated' }}</td><td class="small">{{ u.last_login_at or 'never' }}</td>
+      <td>{{ 'Active' if u.active else 'Deactivated' }}</td><td class="small">{{ u.last_login_at|ist or 'never' }}</td>
       <td>{% if u.id != g.user.id %}
         <details class="pw-menu"><summary>Reset…</summary>
           <form method="post" action="{{ url_for('admin_user_password', oid=org.id, uid=u.id) }}">{{ csrf() }}<button class="btn btn-sm" name="action" value="reset">Create reset link</button></form>

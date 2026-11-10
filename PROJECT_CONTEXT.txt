@@ -199,6 +199,8 @@ Digital Catalogue (built 16 Oct 2026)
   Android app) and keeps the phone subscribed (once per session). App icon badge = pending count (setAppBadge in
   page + sw.js); order notifications are closed when nothing waits. Status-bar icon static/badge-96.png.
   POS tile photos use object-fit: contain (whole square photo shows).
+- Times: timestamps are stored in server time (Render = UTC). Show them with app.ist_time(ts, fmt) / the |ist(fmt)
+  Jinja filter (India time), never by slicing [11:16]. production.to_date() also takes the India-time day.
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).
 - Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).
 - Bulk menu (Menu > Excel upload / photos): download empty template or current menu (.xlsx, openpyxl), upload ->

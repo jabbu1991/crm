@@ -12,7 +12,7 @@
 {% for t in tables %}
   <a class="tbl {{ 'busy' if t.order_id else 'free' }}" href="{{ url_for('cafe.pos', order=t.order_id) if t.order_id else url_for('cafe.pos', table=t.id) }}">
     <b>{{ t.name }}</b>
-    {% if t.order_id %}<span class="tbl-amt">{{ t.amount|rs }}</span><span class="small">#{{ t.order_no }} · {{ t.since[11:16] }}{% if t.cust_name %} · {{ t.cust_name }}{% endif %}</span>
+    {% if t.order_id %}<span class="tbl-amt">{{ t.amount|rs }}</span><span class="small">#{{ t.order_no }} · {{ t.since|ist('%H:%M') }}{% if t.cust_name %} · {{ t.cust_name }}{% endif %}</span>
     {% else %}<span class="small">Free{% if t.seats %} · {{ t.seats }} seats{% endif %}</span>{% endif %}
   </a>
 {% else %}

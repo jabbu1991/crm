@@ -29,7 +29,7 @@ document.addEventListener("click", function (e) {
     <td class="num">{{ n.age if n.age is not none else '' }}</td>
     <td class="nowrap">{% if n.phone %}<a href="tel:{{ n.phone }}">{{ n.phone }}</a>{% endif %}
       {% if n.wa_to %}<a class="wa-btn fam-wa" href="https://wa.me/{{ n.wa_to }}?text={{ n.wa_text|urlencode }}" data-phone="{{ n.wa_to }}" data-text="{{ n.wa_text }}" target="_blank" rel="noopener" title="Send the approval message again">🟢</a>{% endif %}
-      {% if n.wa_sent_at %}<span class="small muted" title="WhatsApp opened {{ n.wa_sent_at }}">✔ sent</span>{% endif %}</td>
+      {% if n.wa_sent_at %}<span class="small muted" title="WhatsApp opened {{ n.wa_sent_at|ist }}">✔ sent</span>{% endif %}</td>
     <td>{{ {1: 'Yes', 0: 'No'}.get(n.attending, '') }}</td>
     <td class="nowrap">{{ fee_cell(n, rs, request.full_path) }}</td>
     <td class="nowrap">{% if fcan('edit') and not viewing %}<a class="edit-btn" href="{{ url_for('fam.member_edit', mid=n.id) }}" title="Edit">✏️</a>

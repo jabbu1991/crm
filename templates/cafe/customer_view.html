@@ -56,7 +56,7 @@
   <table class="table compact">
     <thead><tr><th>When</th><th>What</th><th class="num">Points</th></tr></thead>
     <tbody>{% for p in ledger %}<tr>
-      <td class="small nowrap">{{ p.created_at[:16] }}</td>
+      <td class="small nowrap">{{ p.created_at|ist('%Y-%m-%d %H:%M') }}</td>
       <td class="small">{{ KIND_LABELS.get(p.kind, p.kind) }}{% if p.note %} · {{ p.note }}{% endif %}{% if p.by_name %} <span class="muted">({{ p.by_name }})</span>{% endif %}{% if p.expires_at and p.change > 0 %}<div class="muted">{{ p.expires_at }} expiry</div>{% endif %}</td>
       <td class="num {{ 'num-pos' if p.change > 0 else 'num-neg' }}">{{ '+' if p.change > 0 }}{{ p.change }}</td></tr>
     {% else %}<tr><td colspan="3" class="muted">Nothing yet.</td></tr>{% endfor %}</tbody>

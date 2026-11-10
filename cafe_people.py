@@ -521,7 +521,7 @@ def export(name):
         return _csv("bills", ["Bill No", "Date", "Time", "Type", "Table", "Customer", "WhatsApp", "Subtotal", "Discount",
                               "Taxable", "CGST", "SGST", "Points used", "Points value", "Round off", "Total", "Payment",
                               "Cash", "UPI", "Card", "Not paid", "Points earned", "Status", "Cancel reason", "Billed by"],
-                    [(f"{st['bill_prefix']}{r['bill_no']}", r["bill_date"], r["created_at"][11:16],
+                    [(f"{st['bill_prefix']}{r['bill_no']}", r["bill_date"], H.ist_time(r["created_at"], "%H:%M"),
                       ORDER_TYPES.get(r["order_type"], r["order_type"]), r["table_name"] or "", r["cust_name"] or "",
                       r["cust_phone"] or "", _r(r["subtotal"]), _r(r["discount"]), _r(r["taxable"]), _r(r["cgst"]),
                       _r(r["sgst"]), r["points_redeemed"], _r(r["points_value"]), _r(r["round_off"]), _r(r["total"]),
@@ -554,5 +554,5 @@ def export(name):
         return _csv("customers", ["Name", "WhatsApp", "Birthday (MM-DD)", "Points", "Visits", "Total spent",
                                   "Last visit", "Referral code", "Joined"],
                     [(r["name"], r["whatsapp"], r["birthday"] or "", r["points"], r["visits"], _r(r["total_spent"]),
-                      r["last_visit"] or "", r["referral_code"], r["created_at"][:10]) for r in rows])
+                      r["last_visit"] or "", r["referral_code"], H.ist_time(r["created_at"], "%Y-%m-%d")) for r in rows])
     abort(404)

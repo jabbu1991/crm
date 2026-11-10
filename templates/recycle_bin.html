@@ -10,7 +10,7 @@
   {% for r in rows %}
     <tr>
       <td><b>{{ r.customer_name }}</b></td><td>{{ r.phone or '' }}</td><td>{{ r.project_name or '' }}</td>
-      <td>{{ r.deleted_by_name }}</td><td class="nowrap">{{ r.deleted_at }}</td>
+      <td>{{ r.deleted_by_name }}</td><td class="nowrap">{{ r.deleted_at|ist }}</td>
       <td class="nowrap">{% if not viewing %}
         <form method="post" action="{{ url_for('recycle_bin_action', did=r.id, action='restore') }}" class="inline-form">{{ csrf() }}<button class="btn btn-sm btn-primary">Restore</button></form>
         <form method="post" action="{{ url_for('recycle_bin_action', did=r.id, action='purge') }}" class="inline-form" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete {{ r.customer_name }} permanently? This cannot be undone.">{{ csrf() }}<button class="btn btn-sm btn-danger">Delete forever</button></form>

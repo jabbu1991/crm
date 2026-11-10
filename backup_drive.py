@@ -53,17 +53,11 @@ def init(host):
     app.add_url_rule("/admin/backups/download", "admin_backups_download", host.super_required(download))
     app.before_request(_ensure_loop)
     app.jinja_env.globals["backup_alert"] = alert
-    app.jinja_env.filters["ist"] = to_ist
 
 
 def to_ist(ts):
-    """A server-time timestamp 'YYYY-MM-DD HH:MM:SS' shown in India time (the server may run in UTC)."""
-    try:
-        local = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
-    except (TypeError, ValueError):
-        return ts or ""
-    offset = time.localtime().tm_gmtoff
-    return (local - timedelta(seconds=offset) + timedelta(hours=5, minutes=30)).strftime("%d-%m-%Y %H:%M")
+    """A server-time timestamp shown in India time (the server may run in UTC)."""
+    return H.ist_time(ts)
 
 
 # ---------------------------------------------------------------- storage of the Google connection (a file)

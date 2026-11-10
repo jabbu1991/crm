@@ -151,7 +151,7 @@
     {% if ledger %}
     <table class="pts">{% for p in ledger %}<tr><td class="{{ 'ok' if p.change > 0 else 'exp' }}">{{ '+' if p.change > 0 }}{{ p.change }}</td>
       <td>{% if p.kind == 'redeem' %}Redeemed · {{ p.amount|rs }} paid{% elif p.kind == 'referral' %}Referral{% elif p.kind == 'welcome' %}Welcome points{% elif p.kind == 'reversed' %}Taken back{% else %}Adjusted{% endif %}</td>
-      <td class="small muted">{{ (p.pay_date or p.created_at)[8:10] }}-{{ (p.pay_date or p.created_at)[5:7] }}-{{ (p.pay_date or p.created_at)[:4] }}</td></tr>{% endfor %}</table>
+      <td class="small muted">{{ ((p.pay_date or p.created_at)|ist('%Y-%m-%d'))[8:10] }}-{{ ((p.pay_date or p.created_at)|ist('%Y-%m-%d'))[5:7] }}-{{ ((p.pay_date or p.created_at)|ist('%Y-%m-%d'))[:4] }}</td></tr>{% endfor %}</table>
     {% endif %}
   </div>
   {% endif %}

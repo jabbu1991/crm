@@ -49,7 +49,7 @@
       <h2>Points history</h2>
       <ul class="timeline">
         {% for p in ledger %}<li><b class="{{ 'w-ok' if p.change > 0 else 'w-exp' }}">{{ '+' if p.change > 0 }}{{ p.change }}</b> {{ p.kind|title }}{% if p.kind == 'redeem' %} · paid {{ p.amount|rs }} {{ p.pay_mode or '' }} {{ dmy(p.pay_date) }}{% endif %}{% if p.note %} · {{ p.note }}{% endif %}
-          <small class="muted">{{ p.user_name or '' }} · {{ p.created_at[:16] }}</small></li>
+          <small class="muted">{{ p.user_name or '' }} · {{ p.created_at|ist('%Y-%m-%d %H:%M') }}</small></li>
         {% else %}<li class="muted">No points yet.</li>{% endfor %}
       </ul>
     </section>

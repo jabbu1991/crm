@@ -17,12 +17,12 @@
   </div>
   <p class="muted small">Link for the customer: <a href="{{ link }}" target="_blank" rel="noopener">{{ link }}</a></p>
   <dl class="details">
-    <dt>Date</dt><dd>{{ b.bill_date }} {{ b.created_at[11:16] }}</dd>
+    <dt>Date</dt><dd>{{ b.bill_date }} {{ b.created_at|ist('%H:%M') }}</dd>
     <dt>Type</dt><dd>{{ ORDER_TYPES.get(b.order_type, '') }}{% if b.table_name %} · {{ b.table_name }}{% endif %}</dd>
     <dt>Payment</dt><dd><b>{{ pay_text(b) }}</b></dd>
     <dt>Customer</dt><dd>{% if cust and can('customers_view') %}<a href="{{ url_for('cafe.customer_view', cid=cust.id) }}">{{ cust.name }}</a> · {{ cust.whatsapp }} · 🎁 {{ cust.points }} points{% else %}{{ b.cust_name or '—' }}{% endif %}</dd>
     <dt>Billed by</dt><dd>{{ b.created_name or '' }}</dd>
-    {% if b.status == 'cancelled' %}<dt>Cancelled</dt><dd class="overdue">{{ b.cancelled_at }} · {{ b.cancelled_name }} · {{ b.cancel_reason }}</dd>{% endif %}
+    {% if b.status == 'cancelled' %}<dt>Cancelled</dt><dd class="overdue">{{ b.cancelled_at|ist }} · {{ b.cancelled_name }} · {{ b.cancel_reason }}</dd>{% endif %}
   </dl>
   {% if card %}<p class="muted small">Customer's My Card (points &amp; bills): <a href="{{ card }}" target="_blank" rel="noopener">open</a></p>{% endif %}
   {% if can_pay and not viewing %}
@@ -43,7 +43,7 @@
       <span class="muted small">Total {{ b.total|rs }}. Items and total do not change.</span>
     </form>
   </details>{% endif %}
-  {% if pay_log %}<p class="small muted"><b>Payment changes:</b>{% for e in pay_log %}<br>{{ e.at[8:10] }}/{{ e.at[5:7] }} {{ e.at[11:16] }} · {{ e.by }}: {{ e.from }} → {{ e.to }}{% endfor %}</p>{% endif %}
+  {% if pay_log %}<p class="small muted"><b>Payment changes:</b>{% for e in pay_log %}<br>{{ e.at|ist('%d/%m %H:%M') }} · {{ e.by }}: {{ e.from }} → {{ e.to }}{% endfor %}</p>{% endif %}
   {% if kots %}<p class="small muted">KOT: {% for k in kots %}<a href="{{ url_for('cafe.kot_print', kid=k.id) }}">#{{ k.kot_no }}</a> {% endfor %}</p>{% endif %}
 </section>
 <section class="card">
