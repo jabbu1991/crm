@@ -6,15 +6,12 @@
   <div class="actions">{% if not viewing %}<a class="btn btn-primary" href="{{ url_for('cafe.pos') }}">🧾 New Bill</a>{% endif %}
     {% if can('settings_edit') %}<a class="btn" href="{{ url_for('cafe.settings') }}#menu">Online order: {{ 'ON ✅' if st.online_on else 'OFF' }}</a>{% endif %}</div>
 </div>
-{% if request.args.kot %}<div class="flash flash-success">The KOT is ready. <a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=request.args.kot, auto=1) }}">🖨 Print KOT</a></div>{% endif %}
+{% if request.args.kot %}<div class="flash flash-success" id="kot-flash" data-json="{{ url_for('cafe.kot_escpos', kid=request.args.kot|int) }}">🍳 KOT sent. <span id="kot-state"></span> <a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=request.args.kot|int, auto=1) }}">🖨 Print KOT</a></div>{% endif %}
 
 {% if can('orders_online') and not viewing %}
 <div class="order-tools">
   <button type="button" class="btn btn-sm" id="sound-btn">🔇 Tap to turn on the order bell</button>
   <button type="button" class="btn btn-sm" id="awake-btn" hidden>🔆 Keep screen on</button>
-  <button type="button" class="btn btn-sm" id="push-btn" hidden>📲 Phone notifications</button>
-  <button type="button" class="btn btn-sm" id="push-test" hidden>Send a test</button>
-  <span class="small muted" id="push-msg"></span>
 </div>
 {% endif %}
 <div id="orders-live">
@@ -52,8 +49,18 @@
     <div class="ord-items">{{ o.summary or '—' }}</div>
     <div class="small muted">{{ o.created_at[11:16] }}{% if o.created_name %} · {{ o.created_name }}{% endif %}</div>
     {% if not viewing %}
+    <div class="ord-finish" data-order="{{ o.id }}" data-phone="{{ o.cust_phone or '' }}">
+      <div class="pay-pick" role="radiogroup" aria-label="Paid by">
+        {% for m in ('Cash', 'UPI', 'Card') %}<label><input type="radio" name="pay{{ o.id }}" value="{{ m }}" {{ 'checked' if loop.first }}> {{ m }}</label>{% endfor %}
+      </div>
+      <div class="fin-btns">
+        <button type="button" class="btn btn-sm" data-after="pdf">💾 Save</button>
+        <button type="button" class="btn btn-sm btn-wa" data-after="wa">🟢 WhatsApp</button>
+        <button type="button" class="btn btn-sm btn-primary" data-after="print">🖨 Print</button>
+      </div>
+    </div>
     <div class="actions">
-      <a class="btn btn-primary btn-sm" href="{{ url_for('cafe.pos', order=o.id) }}">🧾 Bill / add items</a>
+      <a class="btn btn-sm" href="{{ url_for('cafe.pos', order=o.id) }}" title="Discount, split payment, points, add or change items">🧾 Bill / add items</a>
       {% if st.kot_on %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='kot') }}" class="inline">{{ csrf() }}<button class="btn btn-sm" title="Send new items to the kitchen">🍳 KOT</button></form>
       {% if o.last_kot %}<a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=o.last_kot) }}" title="Reprint the last KOT">🖨</a>{% endif %}{% endif %}
       {% if not o.ready_at %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='ready') }}" class="inline">{{ csrf() }}<button class="btn btn-sm">✓ Ready</button></form>{% endif %}
@@ -130,38 +137,63 @@
     ab.onclick = function () { window.cafeKeepAwake(!window.cafeKeepAwakeOn()); paintA(); };
     paintA();
   }
-  // Phone notifications (Web Push)
-  var pb = document.getElementById("push-btn"), pt = document.getElementById("push-test");
-  if (!pb || !("serviceWorker" in navigator) || !("PushManager" in window) || !window.Notification) {
-    if (msg && pb) msg.textContent = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone notifications: open this page in Safari → Share ⬆️ → Add to Home Screen, then open Real View from the Home Screen icon and turn them on here." : "";
-    return;
+})();
+
+// ---- KOT just made: print it in the background (Android app, or RawBT when Bluetooth auto print is on)
+(function () {
+  var f = document.getElementById("kot-flash"); if (!f) return;
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}   // a refresh does not print it again
+  fetch(f.dataset.json, {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
+    var st = document.getElementById("kot-state");
+    if (window.RVApp && window.RVApp.printEscpos) { window.RVApp.printEscpos(d.escpos); st.textContent = "Printing…"; return; }
+    if (d.rawbt) { st.textContent = "Printing…"; window.location.href = d.rawbt; }
+  }).catch(function () {});
+})();
+
+// ---- Running orders: bill in one tap (💾 Save → PDF, 🟢 WhatsApp, 🖨 Print)
+(function () {
+  var csrf = "{{ csrf_token() }}";
+  function toast(t) {
+    var m = document.getElementById("ord-toast");
+    if (!m) { m = document.createElement("div"); m.id = "ord-toast"; m.className = "pos-toast"; document.body.appendChild(m); }
+    m.textContent = t; m.hidden = false; clearTimeout(m._t); m._t = setTimeout(function () { m.hidden = true; }, 4000);
   }
-  function b64(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
-  function post(url, data) { var fd = new FormData(); fd.append("csrf_token", csrf); Object.keys(data).forEach(function (k) { fd.append(k, data[k]); }); return fetch(url, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }); }
-  pb.hidden = false;
-  navigator.serviceWorker.register("{{ url_for('cafe.service_worker') }}", {scope: "/"}).then(function (reg) {
-    function paintP(sub) {
-      var on = !!sub && Notification.permission === "granted";
-      pb.classList.toggle("on", on); pb.textContent = on ? "📲 Notifications on ✓" : "📲 Turn on phone notifications"; pt.hidden = !on;
-      if (Notification.permission === "denied") msg.textContent = "Notifications are blocked. Chrome ⋮ → Settings → Site settings → Notifications → allow this site.";
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest(".ord-finish [data-after]"); if (!btn) return;
+    var box = btn.closest(".ord-finish"), after = btn.dataset.after, phone = box.dataset.phone;
+    var pick = box.querySelector("input[type=radio]:checked"), mode = pick ? pick.value : "Cash";
+    if (after === "wa" && phone.replace(/\D/g, "").length < 10) {
+      phone = (window.prompt("Customer's WhatsApp number (10 digits):", "") || "").trim();
+      if (phone.replace(/\D/g, "").length < 10) { if (phone) alert("The WhatsApp number must have 10 digits."); return; }
     }
-    reg.pushManager.getSubscription().then(paintP);
-    pb.onclick = function () {
-      reg.pushManager.getSubscription().then(function (sub) {
-        if (sub && Notification.permission === "granted") {   // turn off
-          return post("{{ url_for('cafe.push_unsubscribe') }}", {endpoint: sub.endpoint}).then(function () { return sub.unsubscribe(); }).then(function () { paintP(null); msg.textContent = "Notifications off for this phone."; });
+    var waTab = after === "wa" && window.waWebTab && window.waWebTab() ? window.open("", "_blank") : null;
+    box.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+    var label = btn.innerHTML; btn.textContent = "Saving…";
+    var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payment_mode", mode); if (phone) fd.append("phone", phone);
+    fetch("{{ url_for('cafe.orders') }}/" + box.dataset.order + "/finish", {method: "POST", body: fd, credentials: "same-origin"})
+      .then(function (r) { return r.json(); }).then(function (d) {
+        box.querySelectorAll("button").forEach(function (b) { b.disabled = false; }); btn.innerHTML = label;
+        if (!d.ok) { if (waTab) waTab.close(); alert(d.error || "Could not save."); window.cafeOrdersRefresh && window.cafeOrdersRefresh(); return; }
+        if (window.cafeOrdersRefresh) window.cafeOrdersRefresh();
+        if (after === "pdf") {
+          var a = document.createElement("a"); a.href = d.pdf; a.download = ""; document.body.appendChild(a); a.click(); a.remove();
+          toast("✓ Bill saved · PDF downloading"); return;
         }
-        return fetch("{{ url_for('cafe.push_key') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (k) {
-          return reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64(k.key)});
-        }).then(function (s) {
-          return post("{{ url_for('cafe.push_subscribe') }}", {payload: JSON.stringify(s)}).then(function (d) {
-            paintP(d.ok ? s : null); msg.textContent = d.ok ? "Done. New orders will show on this phone even when the screen is off." : (d.error || "");
-          });
-        });
-      }).catch(function () { paintP(null); msg.textContent = Notification.permission === "denied" ? "Notifications are blocked for this site in Chrome settings." : "Could not turn on notifications on this browser."; });
-    };
-    pt.onclick = function () { post("{{ url_for('cafe.push_test') }}", {}).then(function (d) { msg.textContent = d.ok ? "Test sent. It should arrive in a few seconds." : (d.error || ""); }); };
-  }).catch(function () { pb.hidden = true; });
+        if (after === "wa") {
+          toast("✓ Bill saved · opening WhatsApp");
+          if (waTab) { waTab.location.href = "https://web.whatsapp.com/send?phone=" + d.wa_phone + "&text=" + encodeURIComponent(d.wa_text); return; }
+          if (window.famOpenWhatsApp) window.famOpenWhatsApp(d.wa_phone, d.wa_text);
+          else window.location.href = "https://wa.me/" + d.wa_phone + "?text=" + encodeURIComponent(d.wa_text);
+          return;
+        }
+        if (window.RVApp && window.RVApp.printEscpos) { window.RVApp.printEscpos(d.escpos); toast("✓ Bill saved · printing"); return; }
+        if (d.rawbt) { toast("✓ Bill saved · printing"); window.location.href = d.rawbt; return; }
+        window.location.href = d.print;   // the print window
+      }).catch(function () {
+        box.querySelectorAll("button").forEach(function (b) { b.disabled = false; }); btn.innerHTML = label;
+        if (waTab) waTab.close(); alert("Network problem. Please try again.");
+      });
+  });
 })();
 </script>
 {% endblock %}

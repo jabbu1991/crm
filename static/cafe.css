@@ -288,3 +288,13 @@ body.selmode .mi .switch, body.selmode .mi .edit-btn { display: none; }
 .items-panel section > h2 { justify-content: flex-start; gap: 8px; }
 .items-panel section > h2 > .btn, .items-panel section > h2 > small { margin-left: auto; }
 .cat-row .cat-pick { margin: 0; }
+
+/* Running orders: bill in one tap */
+.ord-finish { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.pay-pick { display: flex; gap: 6px; }
+.pay-pick label { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pay-pick label:has(input:checked) { background: #ecfdf5; border-color: #16a34a; color: #166534; }
+.pay-pick input { margin: 0; }
+.fin-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.fin-btns .btn { font-weight: 700; padding-left: 4px; padding-right: 4px; }

@@ -285,8 +285,52 @@
       busy = false;
       var changed = latest !== null && (d.latest !== latest || d.count !== count);
       count = d.count; latest = d.latest; paint();
+      appBadge(count);
       if (changed && onOrders && window.cafeOrdersRefresh) window.cafeOrdersRefresh();
     }).catch(function () { busy = false; });
+  }
+  // The number on the installed app's icon; when nothing is waiting, the old order notifications go away too
+  // (so the Android dot on the icon shows only while an order waits).
+  var lastBadge = -1;
+  function appBadge(n) {
+    if (n === lastBadge) return; lastBadge = n;
+    try {
+      if (navigator.setAppBadge) { (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function () {}); }
+      if (!n && navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        navigator.serviceWorker.getRegistration("/").then(function (reg) {
+          if (reg && reg.getNotifications) reg.getNotifications().then(function (list) {
+            list.forEach(function (x) { if ((x.tag || "").indexOf("order") === 0) x.close(); });
+          });
+        });
+      }
+    } catch (e) {}
+  }
+  // Phone notifications for new orders: no button. The phone asks once ("Allow notifications?") at the first
+  // tap; after that this phone is kept subscribed (to turn them off: the phone's own app notification switch).
+  var pushOk = "serviceWorker" in navigator && "PushManager" in window && window.Notification;
+  function pushB64(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
+  function pushOn() {
+    if (!pushOk || Notification.permission !== "granted") return;
+    try { if (sessionStorage.getItem("pushSynced") === "1") return; } catch (e) {}
+    navigator.serviceWorker.register("{{ url_for('cafe.service_worker') }}", {scope: "/"}).then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (sub) {
+        if (sub) return sub;
+        return fetch("{{ url_for('cafe.push_key') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); })
+          .then(function (k) { return reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: pushB64(k.key)}); });
+      });
+    }).then(function (sub) {
+      var fd = new FormData(); fd.append("csrf_token", "{{ csrf_token() }}"); fd.append("payload", JSON.stringify(sub));
+      return fetch("{{ url_for('cafe.push_subscribe') }}", {method: "POST", body: fd, credentials: "same-origin"});
+    }).then(function (r) { if (r && r.ok) { try { sessionStorage.setItem("pushSynced", "1"); } catch (e) {} } }).catch(function () {});
+  }
+  function pushAsk() {   // inside a tap
+    if (!pushOk || Notification.permission !== "default" || window.RVApp) return;
+    document.removeEventListener("click", pushAsk, true);
+    try { var pr = Notification.requestPermission(pushOn); if (pr && pr.then) pr.then(pushOn); } catch (e) {}
+  }
+  if (pushOk && !window.RVApp) {
+    if (Notification.permission === "granted") pushOn();
+    else if (Notification.permission === "default") document.addEventListener("click", pushAsk, true);
   }
   window.cafeOrdersPoll = poll;
   setInterval(function () { if (count) bell(); }, 3000);

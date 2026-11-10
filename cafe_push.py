@@ -102,6 +102,8 @@ def _order_message(org, order_id, waiting_min=0):
         "title": title,
         "body": f"{kind.get(o['order_type'], '')} · {o['cust_name'] or ''} · ₹{o['amount'] // 100} — tap to open".strip(" ·"),
         "url": "/cafe/orders", "tag": f"order-{org['id']}-{order_id}", "cafe": st["name"] or org["name"],
+        "count": H.query("SELECT COUNT(*) n FROM cafe_orders WHERE org_id = ? AND status = 'pending'", (org["id"],),
+                         one=True)["n"],
     }, ensure_ascii=False)
 
 

@@ -5,11 +5,14 @@ self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim(
 self.addEventListener("push", function (e) {
   var d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = {title: "New online order", body: e.data ? e.data.text() : ""}; }
-  e.waitUntil(self.registration.showNotification(d.title || "🔔 New online order", {
+  var jobs = [self.registration.showNotification(d.title || "🔔 New online order", {
     body: d.body || "", tag: d.tag || "order", renotify: true, requireInteraction: true,
-    vibrate: [400, 150, 400, 150, 400], icon: "/static/favicon.png", badge: "/static/favicon.png",
+    vibrate: [400, 150, 400, 150, 400], icon: "/static/icon-192.png", badge: "/static/badge-96.png",
     data: {url: d.url || "/cafe/orders"}
-  }));
+  })];
+  // the number on the app icon (iPhone, computers; Android shows a dot while the notification is there)
+  if (self.navigator && self.navigator.setAppBadge) jobs.push(self.navigator.setAppBadge(d.count || 1).catch(function () {}));
+  e.waitUntil(Promise.all(jobs));
 });
 
 self.addEventListener("notificationclick", function (e) {

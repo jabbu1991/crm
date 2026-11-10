@@ -538,6 +538,7 @@
           clearDraft();
           if (after && d.bill_id) { finish(after, d, waTab); return; }
           if (d.embed) { $("pos-print-frame").src = d.embed; $("pos-print").hidden = false; return; }
+          if (d.orders) { window.location.href = d.orders; return; }   // KOT: Running orders (prints the KOT there)
           if (d.print) { window.location.href = d.print; return; }
           window.location.href = state.type === "dine_in" ? "{{ url_for('cafe.tables') }}" : "{{ url_for('cafe.orders') }}";
         }).catch(function () {

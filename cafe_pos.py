@@ -457,6 +457,7 @@ def pos_save():
         out.update(_bill_send(bill_id, kot_id))
     elif kot_id:
         out["print"] = url_for("cafe.kot_print", kid=kot_id, auto=1)
+        out["orders"] = url_for("cafe.orders", kot=kot_id)   # the POS goes to Running orders; the KOT prints from there
     if key:
         _remember_save(key, out)
     return jsonify(out)
@@ -602,8 +603,53 @@ def order_action(order_id, action):
         if not kot:
             flash("No new items.", "warning")
             return redirect(url_for("cafe.orders"))
-        return redirect(url_for("cafe.kot_print", kid=kot, auto=1))
+        return redirect(url_for("cafe.orders", kot=kot))
     abort(404)
+
+
+@bp.route("/cafe/kot/<int:kid>/escpos.json")
+@cafe_view("bill_create")
+def kot_escpos(kid):
+    """The KOT as printer bytes: Running orders prints it in the background (Android app, or RawBT)."""
+    k = H.query("SELECT * FROM cafe_kots WHERE id = ? AND org_id = ?", (kid, _org()), one=True) or abort(404)
+    o = H.query("""SELECT o.*, t.name table_name FROM cafe_orders o LEFT JOIN cafe_tables t ON t.id = o.table_id
+                   WHERE o.id = ?""", (k["order_id"],), one=True)
+    st = get_settings()
+    raw = cafe_escpos.receipt_bytes(st, cafe_name(st), st["paper"], kots=[(k, json.loads(k["lines"]), o)],
+                                    order_types=ORDER_TYPES)
+    return jsonify(ok=True, escpos=base64.b64encode(raw).decode("ascii"),
+                   rawbt=cafe_escpos.rawbt_link(raw) if st["bt_print"] and st["bt_auto"] else None,
+                   print=url_for("cafe.kot_print", kid=kid, auto=1))
+
+
+@bp.route("/cafe/orders/<int:order_id>/finish", methods=["POST"])
+@cafe_view("bill_create")
+def order_finish(order_id):
+    """Running orders: bill a running order in one tap (Save / WhatsApp / Print), with Cash, UPI or Card."""
+    if g.get("viewing"):
+        abort(403)
+    db = H.get_db()
+    o = get_order(order_id)
+    if o["status"] != "open":
+        return jsonify(ok=False, error="This order was already billed or cancelled."), 409
+    mode = request.form.get("payment_mode")
+    if mode not in PAYMENT_MODES:
+        return jsonify(ok=False, error="Choose Cash, UPI or Card."), 400
+    payload = {"payment_mode": mode}
+    phone = (request.form.get("phone") or "").strip()
+    if phone:
+        payload["customer"] = {"phone": phone}
+    try:
+        bill_id, kot_id = settle(db, o, payload)
+        db.commit()
+    except BillError as e:
+        db.rollback()
+        return jsonify(ok=False, error=str(e)), 400
+    out = {"ok": True, "order_id": o["id"],
+           "print": url_for("cafe.bill_print", bid=bill_id, kot=kot_id or None, auto=1),
+           "view": url_for("cafe.bill_view", bid=bill_id)}
+    out.update(_bill_send(bill_id, kot_id))
+    return jsonify(out)
 
 
 @bp.route("/cafe/kot/<int:kid>/print")
