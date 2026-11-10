@@ -1221,7 +1221,7 @@ def test_pos_save_gives_pdf_whatsapp_and_print_data(cw):
     assert w["cafe2"].get(d["pdf"]).status_code == 404
 
 
-def test_kot_goes_to_running_orders_and_one_tap_bill(cw):
+def test_kot_goes_to_running_orders_with_one_bill_button(cw):
     import base64 as b64
     w = cw
     b = w["cafe"]
@@ -1234,23 +1234,28 @@ def test_kot_goes_to_running_orders_and_one_tap_bill(cw):
     assert d["ok"] and d["orders"].startswith("/cafe/orders?kot=")
     kid = int(d["orders"].split("=")[1])
     page = b.get(d["orders"]).text
-    assert "KOT sent" in page and 'data-after="print"' in page and 'value="UPI"' in page
+    assert "KOT sent" in page and f'/cafe/pos?order={d["order_id"]}' in page and "ord-bill" in page
+    assert 'data-after="print"' not in page and 'value="UPI"' not in page   # payment is done on the billing screen
     j = b.get(f"/cafe/kot/{kid}/escpos.json").get_json()
     assert b"KOT" in b64.b64decode(j["escpos"]) and j["rawbt"] is None
     assert w["cafe2"].get(f"/cafe/kot/{kid}/escpos.json").status_code == 404
-    # KOT button on the card also comes back to Running orders
-    oid_ = d["order_id"]
-    # bill it in one tap with UPI; WhatsApp needs a number, so give one
-    r = b.post(f"/cafe/orders/{oid_}/finish", {"payment_mode": "UPI", "phone": "9876543210"}).get_json()
-    assert r["ok"] and r["wa_phone"] == "919876543210" and r["pdf"].endswith("/pdf") and r["escpos"]
-    bill = w["db"]().execute("SELECT payment_mode, total, status FROM cafe_bills WHERE id = ?", (r["bill_id"],)).fetchone()
-    assert bill["payment_mode"] == "UPI" and bill["total"] == 3000
-    assert w["db"]().execute("SELECT status FROM cafe_orders WHERE id = ?", (oid_,)).fetchone()[0] == "billed"
-    # twice: refused, no second bill
-    r2 = b.post(f"/cafe/orders/{oid_}/finish", {"payment_mode": "Cash"})
-    assert r2.status_code == 409 and w["db"]().execute("SELECT COUNT(*) FROM cafe_bills").fetchone()[0] == 1
-    # only Cash / UPI / Card
-    code, d = pos(b, {"action": "kot", "order_type": "takeaway", "items": [{"item_id": tea, "qty": 1}]})
-    assert b.post(f"/cafe/orders/{d['order_id']}/finish", {"payment_mode": "Later"}).status_code == 400
-    # another cafe cannot bill it
-    assert w["cafe2"].post(f"/cafe/orders/{d['order_id']}/finish", {"payment_mode": "Cash"}).status_code == 404
+
+
+def test_push_is_high_priority_and_settings_shows_phones(cw):
+    import cafe_push
+    b = cw["cafe"]
+    settings(b, online_on="1")
+    assert "Order notifications reach 0 phones" in b.get("/cafe/settings").text
+    assert not b.post("/cafe/push/test-all", {}).get_json()["ok"]
+    b.post("/cafe/push/subscribe", {"payload": json.dumps({"endpoint": "https://fcm.googleapis.com/fcm/send/x1",
+                                                           "keys": {"p256dh": "k", "auth": "a"}})})
+    assert "Order notifications reach 1 phone" in b.get("/cafe/settings").text
+    sent = []
+    old = cafe_push.sender
+    cafe_push.sender = lambda s, data, key: sent.append(data)
+    try:
+        r = b.post("/cafe/push/test-all", {}).get_json()
+    finally:
+        cafe_push.sender = old
+    assert r["ok"] and r["count"] == 1 and len(sent) == 1
+    assert '"Urgency": "high"' in open(cafe_push.__file__).read()

@@ -192,7 +192,9 @@ Digital Catalogue (built 16 Oct 2026)
   print.html uses RVApp too (Print buttons + auto print); cafe settings shows "Choose printer" inside the app.
   KOT (POS or the card's KOT button) -> /cafe/orders?kot=<id>; that page prints the KOT in the background via
   /cafe/kot/<id>/escpos.json (RVApp, or RawBT when bt_print+bt_auto), else shows a "Print KOT" button.
-  Running order cards: Cash/UPI/Card + Save/WhatsApp/Print -> POST /cafe/orders/<id>/finish (settle(); split etc via POS).
+  Running order cards: one '🧾 Bill' button -> POS with ?order=<id> (payment + Save/WhatsApp/Print there).
+  Push is sent with Urgency: high (wakes a sleeping Android). Cafe Settings shows how many phones get order
+  notifications + 'Send a test' (POST /cafe/push/test-all, settings_edit).
   Push: no in-app button; base.html asks Notification permission at the first tap (orders_online users, not in the
   Android app) and keeps the phone subscribed (once per session). App icon badge = pending count (setAppBadge in
   page + sw.js); order notifications are closed when nothing waits. Status-bar icon static/badge-96.png.

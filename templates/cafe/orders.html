@@ -49,18 +49,8 @@
     <div class="ord-items">{{ o.summary or '—' }}</div>
     <div class="small muted">{{ o.created_at[11:16] }}{% if o.created_name %} · {{ o.created_name }}{% endif %}</div>
     {% if not viewing %}
-    <div class="ord-finish" data-order="{{ o.id }}" data-phone="{{ o.cust_phone or '' }}">
-      <div class="pay-pick" role="radiogroup" aria-label="Paid by">
-        {% for m in ('Cash', 'UPI', 'Card') %}<label><input type="radio" name="pay{{ o.id }}" value="{{ m }}" {{ 'checked' if loop.first }}> {{ m }}</label>{% endfor %}
-      </div>
-      <div class="fin-btns">
-        <button type="button" class="btn btn-sm" data-after="pdf">💾 Save</button>
-        <button type="button" class="btn btn-sm btn-wa" data-after="wa">🟢 WhatsApp</button>
-        <button type="button" class="btn btn-sm btn-primary" data-after="print">🖨 Print</button>
-      </div>
-    </div>
     <div class="actions">
-      <a class="btn btn-sm" href="{{ url_for('cafe.pos', order=o.id) }}" title="Discount, split payment, points, add or change items">🧾 Bill / add items</a>
+      <a class="btn btn-primary ord-bill" href="{{ url_for('cafe.pos', order=o.id) }}" title="Payment, discount, add or change items">🧾 Bill</a>
       {% if st.kot_on %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='kot') }}" class="inline">{{ csrf() }}<button class="btn btn-sm" title="Send new items to the kitchen">🍳 KOT</button></form>
       {% if o.last_kot %}<a class="btn btn-sm" href="{{ url_for('cafe.kot_print', kid=o.last_kot) }}" title="Reprint the last KOT">🖨</a>{% endif %}{% endif %}
       {% if not o.ready_at %}<form method="post" action="{{ url_for('cafe.order_action', order_id=o.id, action='ready') }}" class="inline">{{ csrf() }}<button class="btn btn-sm">✓ Ready</button></form>{% endif %}
@@ -150,50 +140,5 @@
   }).catch(function () {});
 })();
 
-// ---- Running orders: bill in one tap (💾 Save → PDF, 🟢 WhatsApp, 🖨 Print)
-(function () {
-  var csrf = "{{ csrf_token() }}";
-  function toast(t) {
-    var m = document.getElementById("ord-toast");
-    if (!m) { m = document.createElement("div"); m.id = "ord-toast"; m.className = "pos-toast"; document.body.appendChild(m); }
-    m.textContent = t; m.hidden = false; clearTimeout(m._t); m._t = setTimeout(function () { m.hidden = true; }, 4000);
-  }
-  document.addEventListener("click", function (e) {
-    var btn = e.target.closest && e.target.closest(".ord-finish [data-after]"); if (!btn) return;
-    var box = btn.closest(".ord-finish"), after = btn.dataset.after, phone = box.dataset.phone;
-    var pick = box.querySelector("input[type=radio]:checked"), mode = pick ? pick.value : "Cash";
-    if (after === "wa" && phone.replace(/\D/g, "").length < 10) {
-      phone = (window.prompt("Customer's WhatsApp number (10 digits):", "") || "").trim();
-      if (phone.replace(/\D/g, "").length < 10) { if (phone) alert("The WhatsApp number must have 10 digits."); return; }
-    }
-    var waTab = after === "wa" && window.waWebTab && window.waWebTab() ? window.open("", "_blank") : null;
-    box.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
-    var label = btn.innerHTML; btn.textContent = "Saving…";
-    var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("payment_mode", mode); if (phone) fd.append("phone", phone);
-    fetch("{{ url_for('cafe.orders') }}/" + box.dataset.order + "/finish", {method: "POST", body: fd, credentials: "same-origin"})
-      .then(function (r) { return r.json(); }).then(function (d) {
-        box.querySelectorAll("button").forEach(function (b) { b.disabled = false; }); btn.innerHTML = label;
-        if (!d.ok) { if (waTab) waTab.close(); alert(d.error || "Could not save."); window.cafeOrdersRefresh && window.cafeOrdersRefresh(); return; }
-        if (window.cafeOrdersRefresh) window.cafeOrdersRefresh();
-        if (after === "pdf") {
-          var a = document.createElement("a"); a.href = d.pdf; a.download = ""; document.body.appendChild(a); a.click(); a.remove();
-          toast("✓ Bill saved · PDF downloading"); return;
-        }
-        if (after === "wa") {
-          toast("✓ Bill saved · opening WhatsApp");
-          if (waTab) { waTab.location.href = "https://web.whatsapp.com/send?phone=" + d.wa_phone + "&text=" + encodeURIComponent(d.wa_text); return; }
-          if (window.famOpenWhatsApp) window.famOpenWhatsApp(d.wa_phone, d.wa_text);
-          else window.location.href = "https://wa.me/" + d.wa_phone + "?text=" + encodeURIComponent(d.wa_text);
-          return;
-        }
-        if (window.RVApp && window.RVApp.printEscpos) { window.RVApp.printEscpos(d.escpos); toast("✓ Bill saved · printing"); return; }
-        if (d.rawbt) { toast("✓ Bill saved · printing"); window.location.href = d.rawbt; return; }
-        window.location.href = d.print;   // the print window
-      }).catch(function () {
-        box.querySelectorAll("button").forEach(function (b) { b.disabled = false; }); btn.innerHTML = label;
-        if (waTab) waTab.close(); alert("Network problem. Please try again.");
-      });
-  });
-})();
 </script>
 {% endblock %}

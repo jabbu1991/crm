@@ -103,6 +103,20 @@
     </div>
     <label>Delivery note <small>(e.g. Within 3 km only, delivery charge ₹30)</small><input name="delivery_note" value="{{ st.delivery_note }}" maxlength="200"></label>
     <p class="muted small">Online orders arrive as Pending on the Orders page (with a sound). Only confirmed orders go to billing.</p>
+    <div class="help-box">
+      📲 <b>Order notifications reach {{ phones.count }} phone{{ '' if phones.count == 1 else 's' }}</b>{% if phones.people %}:
+      {% for n, c in phones.people %}{{ n }}{{ ' (' ~ c ~ ')' if c > 1 }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}.
+      <button type="button" class="btn btn-sm" id="push-test-all">Send a test</button> <span class="small" id="push-test-msg"></span>
+      <div class="muted small">A phone is added when someone opens the installed app on it and taps "Allow". If a phone gets them late: phone Settings → Apps → Chrome → Battery → Unrestricted.</div>
+    </div>
+    <script>
+    document.getElementById("push-test-all").onclick = function () {
+      var fd = new FormData(), m = document.getElementById("push-test-msg"); fd.append("csrf_token", "{{ csrf_token() }}");
+      fetch("{{ url_for('cafe.push_test_all') }}", {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); })
+        .then(function (d) { m.textContent = d.ok ? "Sent to " + d.count + " phone(s). Turn a phone's screen off to check." : d.error; })
+        .catch(function () { m.textContent = "Network problem."; });
+    };
+    </script>
     <h2 style="margin-top:16px">Item order</h2>
     <div class="row-2">
       <label>Billing screen

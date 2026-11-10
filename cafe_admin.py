@@ -71,8 +71,9 @@ def settings():
         save_settings(st)
         flash("Settings saved.", "success")
         return redirect(url_for("cafe.settings") + (("#" + f.get("section")) if f.get("section") else ""))
+    import cafe_push
     return render_template("cafe/settings.html", st=st, PAPER_SIZES=PAPER_SIZES, GST_RATES=GST_RATES,
-                           menu_link=menu_url(), paise_str=paise_str)
+                           menu_link=menu_url(), paise_str=paise_str, phones=cafe_push.phones_summary(H.org_id()))
 
 
 # ---------------------------------------------------------------- menu design

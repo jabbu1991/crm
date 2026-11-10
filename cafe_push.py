@@ -52,7 +52,8 @@ def _webpush(sub, data, key_path):
     from pywebpush import webpush
     webpush(subscription_info={"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
             data=data, vapid_private_key=key_path, vapid_claims={"sub": "mailto:support@realviewcreativestudio.in"},
-            ttl=600, timeout=10)
+            ttl=600, timeout=10,
+            headers={"Urgency": "high"})   # wake a sleeping phone (screen off) at once instead of waiting
 
 
 def _send_all(subs, data, key_path, db_path):
@@ -88,6 +89,30 @@ def _subs_for(org_id):
     rows = H.query("""SELECT s.*, u.role, u.cafe_role, u.cafe_perms FROM push_subscriptions s
                       JOIN users u ON u.id = s.user_id WHERE s.org_id = ? AND u.active = 1""", (org_id,))
     return [dict(r) for r in rows if "orders_online" in user_perms(r)]
+
+
+def phones_summary(org_id):
+    """For Settings: which staff phones get order notifications (names, phone count)."""
+    subs = _subs_for(org_id)
+    names = {}
+    for s in subs:
+        u = H.query("SELECT name FROM users WHERE id = ?", (s["user_id"],), one=True)
+        names[u["name"] if u else "?"] = names.get(u["name"] if u else "?", 0) + 1
+    return {"count": len(subs), "people": sorted(names.items())}
+
+
+@bp.route("/cafe/push/test-all", methods=["POST"])
+@cafe_view("settings_edit")
+def push_test_all():
+    """Settings → 'Send a test': to every phone of this cafe that gets order notifications."""
+    subs = _subs_for(g.org["id"])
+    if not subs:
+        return jsonify(ok=False, error="No phone gets order notifications yet. Open the installed app on the phone "
+                                        "and tap 'Allow' when it asks.")
+    data = json.dumps({"title": "🔔 Test from " + cafe_name(), "body": "Order notifications work on this phone.",
+                       "url": url_for("cafe.orders"), "tag": "test"}, ensure_ascii=False)
+    _dispatch(subs, data)
+    return jsonify(ok=True, count=len(subs))
 
 
 def _order_message(org, order_id, waiting_min=0):
