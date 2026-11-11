@@ -36,6 +36,8 @@
   </div>
   {% endif %}
   <button class="menu-btn" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">☰</button>
+  {% if not g.user.must_change_password %}{% set wn = whats_new() %}
+  <a class="wn-bell {{ 'has' if wn[0] }}" href="{{ url_for('whats_new') }}" title="What's new">🆕{% if wn[0] %}<span class="wn-count">{{ wn[0] }}</span>{% endif %}</a>{% endif %}
   <div class="userbox">
     <a href="{{ url_for('account') }}" title="My account">{{ g.user.name }} <small>({{ ROLE_LABELS[g.user.role] }})</small></a>
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linkbtn">Log out</button></form>
@@ -56,7 +58,7 @@
   {% if pcan('import') or pcan('export') %}<a href="{{ url_for('prod.data') }}" class="{{ 'active' if ep.startswith('prod.import') or ep == 'prod.data' }}">⬆⬇ Import / Export</a>{% endif %}
   {% if pcan('settings') %}<a href="{{ url_for('prod.settings') }}" class="{{ 'active' if ep in ('prod.settings', 'prod.stage_set') }}">⚙️ Settings</a>{% endif %}
   {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password and cur_module == 'fam' %}
 <nav class="mainnav fam-nav">
@@ -71,7 +73,7 @@
   <a href="{{ url_for('fam.public_tree', code=g.org.code|lower) }}" target="_blank" rel="noopener">🌳 Family tree ↗</a>
   {% if fcan('settings') %}<a href="{{ url_for('fam.settings') }}" class="{{ 'active' if ep == 'fam.settings' }}">⚙️ Settings</a>{% endif %}
   {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password and cafe_mode %}
 <nav class="mainnav cafe-nav">
@@ -91,7 +93,7 @@
   {% if can('settings_edit') %}<a href="{{ url_for('cafe.settings') }}" class="{{ 'active' if ep == 'cafe.settings' }}">Settings</a>
   <a href="{{ url_for('cafe.design') }}" class="{{ 'active' if ep == 'cafe.design' }}">🎨 Menu Design</a>{% endif %}
   {% if is_admin() or can('staff_manage') %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password %}
 <nav class="mainnav">
@@ -104,18 +106,20 @@
   <a href="{{ url_for('states') }}" class="{{ 'active' if ep in ('states', 'state_view') }}">State-wise Leads</a>
   <a href="{{ url_for('product_leads') }}" class="{{ 'active' if ep in ('product_leads', 'product_lead_list') }}">Product-wise Leads</a>
   <a href="{{ url_for('followups') }}" class="{{ 'active' if ep == 'followups' }}">Follow-ups</a>
+  {% if perf_on() and not is_admin() %}<a href="{{ url_for('my_performance') }}" class="{{ 'active' if ep == 'performance_person' }}">📊 My performance</a>{% endif %}
   {% if has_prod and not is_admin() and 'prod' not in my_modules %}<a href="{{ url_for('prod.taker_page', uid=g.user.id) }}" class="{{ 'active' if ep == 'prod.taker_page' }}">📦 My orders</a>{% endif %}
   <a href="{{ url_for('export_page') }}" class="{{ 'active' if ep.startswith('export') }}">Export</a>
   <a href="{{ url_for('wa_templates') }}" class="{{ 'active' if ep.startswith('wa_template') }}">WhatsApp Templates</a>
   {% if is_admin() %}
   <a href="{{ url_for('reports') }}" class="{{ 'active' if ep == 'reports' }}">Reports</a>
+  {% if perf_on() %}<a href="{{ url_for('performance') }}" class="{{ 'active' if ep in ('performance', 'performance_person') }}">📊 Staff performance</a>{% endif %}
   <a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>
   <a href="{{ url_for('organization_settings') }}" class="{{ 'active' if ep == 'organization_settings' }}">Organization Settings</a>
   <a href="{{ url_for('recycle_bin') }}" class="{{ 'active' if ep == 'recycle_bin' }}">🗑 Recycle Bin</a>
   {% endif %}
   {% if is_super() %}
-  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep != 'admin_server' and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>
-  <a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>
+  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>
+  {% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>
   {% endif %}
 </nav>
 {% endif %}
@@ -128,6 +132,11 @@
 {% endif %}
 <main class="container">
   {% if is_super() and not viewing %}{% set ba = backup_alert() %}{% if ba and ep not in ('admin_backups',) %}<div class="flash flash-error">🗄 {{ ba }} <a href="{{ url_for('admin_backups') }}">Open Backups</a></div>{% endif %}{% endif %}
+  {% if not g.user.must_change_password and ep not in ('whats_new',) %}{% set wn = whats_new() %}{% if wn[1] %}
+  <div class="wn-strip"><span>🆕 <b>{{ wn[1].title }}</b>{% if wn[0] > 1 %} <span class="muted small">+{{ wn[0] - 1 }} more</span>{% endif %}</span>
+    <span class="wn-strip-act"><a class="btn btn-sm" href="{{ url_for('whats_new') }}">See what's new</a>
+    <form method="post" action="{{ url_for('whats_new_seen', uid_=wn[1].id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path if request.method == 'GET' else '' }}"><button class="linkbtn" title="Hide">✕</button></form></span></div>
+  {% endif %}{% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
   {% endwith %}
@@ -485,5 +494,30 @@
   });
 })();
 </script>
+{% if g.user and perf_on() and not is_super() and not viewing %}
+<script>
+// Staff performance: time actively using the app (visible and used in the last 5 minutes) and Call / WhatsApp taps.
+(function () {
+  var csrf = "{{ csrf_token() }}", last = Date.now();
+  function beacon(url, data) {
+    var fd = new FormData(); fd.append("csrf_token", csrf); for (var k in data) fd.append(k, data[k]);
+    if (navigator.sendBeacon && navigator.sendBeacon(url, fd)) return;
+    fetch(url, {method: "POST", body: fd, credentials: "same-origin", keepalive: true}).catch(function () {});
+  }
+  ["click", "keydown", "touchstart", "scroll", "input"].forEach(function (ev) {
+    window.addEventListener(ev, function () { last = Date.now(); }, {passive: true, capture: true});
+  });
+  setInterval(function () {
+    if (document.visibilityState === "visible" && Date.now() - last < 5 * 60 * 1000) beacon("{{ url_for('perf_ping') }}", {});
+  }, 60000);
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="tel:"], a[data-wa], a[href*="wa.me/"]');
+    if (!a) return;
+    var lid = a.dataset.lid || (document.body.dataset.lead || "");
+    beacon("{{ url_for('perf_tap') }}", {kind: a.getAttribute("href").indexOf("tel:") === 0 ? "call" : "wa", lead: lid});
+  }, true);
+})();
+</script>
+{% endif %}
 </body>
 </html>

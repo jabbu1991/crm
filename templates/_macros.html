@@ -88,7 +88,7 @@
   <div class="lc-notes">{{ notes_edit(l) }}</div>
   <div class="lc-quals">{{ fu_edit(l) }}</div>
   <div class="lc-actions">
-    {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}">📞 Call</a>{% endif %}
+    {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}" data-lid="{{ l.id }}">📞 Call</a>{% endif %}
     {% if l.whatsapp %}{{ wa_link(l, '🟢 WhatsApp', 'btn btn-sm') }}{% endif %}
     {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('lead_edit', lid=l.id) }}">✏️ Edit</a>{% endif %}
   </div>
@@ -101,7 +101,7 @@
 
 {# One cell of a lead list, by column key (see LIST_COLUMNS in app.py). #}
 {% macro col_cell(l, key, fid) -%}
-{% if key == 'phone' %}{% if l.phone %}<a href="tel:{{ l.phone }}">{{ l.phone }}</a>{% endif %}
+{% if key == 'phone' %}{% if l.phone %}<a href="tel:{{ l.phone }}" data-lid="{{ l.id }}">{{ l.phone }}</a>{% endif %}
 {% elif key == 'whatsapp' %}{% if l.whatsapp %}{{ wa_link(l) }}{% endif %}
 {% elif key == 'email' %}{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
 {% elif key == 'company' %}{{ l.company_name or '' }}
@@ -192,7 +192,7 @@
     <div class="lc-notes">{{ notes_edit(l) }}</div>
     <div class="lc-quals">{{ fu_edit(l) }}</div>
     <div class="lc-actions">
-      {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}">📞 Call</a>{% endif %}
+      {% if l.phone or l.whatsapp %}<a class="btn btn-sm" href="tel:{{ l.phone or l.whatsapp }}" data-lid="{{ l.id }}">📞 Call</a>{% endif %}
       {% if l.whatsapp %}{{ wa_link(l, '🟢 WhatsApp', 'btn btn-sm') }}{% endif %}
       {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('lead_edit', lid=l.id) }}">✏️ Edit</a>
       <button class="btn btn-sm" type="submit" form="d{{ l.id }}" title="Move to Recycle Bin">🗑</button>{% endif %}

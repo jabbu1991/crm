@@ -1,0 +1,43 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Updates & requests{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📢 Updates &amp; requests</h1></div>
+
+<section class="card">
+  <h2>🙋 Feature requests ({{ reqs|length }})</h2>
+  {% for r in reqs %}
+  <div class="req-row">
+    <div><b>{{ r.org_name }}</b> wants <b>{{ FEATURES[r.feature].label if r.feature in FEATURES else r.feature }}</b>
+      <div class="small muted">{{ r.user_name or '' }} · {{ r.created_at|ist }}</div></div>
+    <div class="actions">
+      <form method="post" action="{{ url_for('admin_request_action', rid=r.id, action='on') }}">{{ csrf() }}<button class="btn btn-sm btn-primary">✅ Switch on</button></form>
+      <form method="post" action="{{ url_for('admin_request_action', rid=r.id, action='decline') }}" onsubmit="return confirm('Close this request without switching it on?')">{{ csrf() }}<button class="btn btn-sm">Close</button></form>
+    </div>
+  </div>
+  {% else %}<p class="muted">No open requests.</p>{% endfor %}
+</section>
+
+<section class="card">
+  <h2>Post a note</h2>
+  <form method="post" class="form">
+    {{ csrf() }}
+    <label>Title<input name="title" maxlength="120" required placeholder="e.g. ☕ New: table QR codes"></label>
+    <label>Text<textarea name="body" rows="3" maxlength="2000"></textarea></label>
+    <div class="row-2">
+      <label>Module<select name="module">{% for k, v in MODULE_LABELS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+      <label>Who<select name="audience"><option value="all">Everyone</option><option value="admins">Admins only</option></select></label>
+    </div>
+    <label>Company<select name="org_id"><option value="">All companies</option>{% for o in orgs %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}</select></label>
+    <button class="btn btn-primary">📢 Post</button>
+  </form>
+  <p class="small muted">Notes about software changes are added with each update automatically.</p>
+</section>
+
+<section class="card">
+  <h2>Recent notes</h2>
+  <table class="table"><thead><tr><th>Date</th><th>Title</th><th>For</th><th>Seen by</th></tr></thead><tbody>
+  {% for r in rows %}<tr><td class="nowrap small">{{ r.created_at|ist('%d-%m-%Y') }}</td><td>{{ r.title }}</td>
+    <td class="small">{{ MODULE_LABELS.get(r.module, r.module) }}{{ ' · admins' if r.audience == 'admins' }}{{ ' · ' ~ r.org_name if r.org_name }}</td><td>{{ r.reads }}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

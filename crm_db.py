@@ -16,7 +16,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1389,9 +1389,67 @@ def _migrate_v25(conn):
     add("cafe_bills", "packing", "INTEGER NOT NULL DEFAULT 0")     # paise on this bill (before GST)
 
 
+def _migrate_v26(conn):
+    """What's new notices, feature requests, and Staff performance (per-company switch, app time, call/WA taps).
+    Adds only."""
+    if "perf_allowed" not in {r[1] for r in conn.execute("PRAGMA table_info(organizations)")}:
+        conn.execute("ALTER TABLE organizations ADD COLUMN perf_allowed INTEGER NOT NULL DEFAULT 0")
+    for stmt in _split(V26_TABLES):   # one by one: executescript() would commit mid-transaction
+        conn.execute(stmt)
+
+
+V26_TABLES = """
+    CREATE TABLE IF NOT EXISTS app_updates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code_key TEXT UNIQUE,                 -- notes shipped with the software (updates_list.py), NULL when typed in
+        org_id INTEGER,                       -- NULL = every company, else only this company
+        module TEXT NOT NULL DEFAULT 'all',   -- all | crm | cafe | prod | fam
+        audience TEXT NOT NULL DEFAULT 'all', -- all | admins
+        title TEXT NOT NULL,
+        body TEXT,
+        feature TEXT,                         -- e.g. 'perf': shows a Request button to companies without it
+        created_by INTEGER,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_app_updates_created ON app_updates(created_at);
+    CREATE TABLE IF NOT EXISTS app_update_reads (
+        user_id INTEGER NOT NULL,
+        update_id INTEGER NOT NULL,
+        read_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, update_id)
+    );
+    CREATE TABLE IF NOT EXISTS feature_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL,
+        feature TEXT NOT NULL,
+        requested_by INTEGER,
+        status TEXT NOT NULL DEFAULT 'open',  -- open | done | declined
+        created_at TEXT NOT NULL,
+        handled_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_feature_requests_org ON feature_requests(org_id, feature, status);
+    CREATE TABLE IF NOT EXISTS staff_time (
+        org_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        day TEXT NOT NULL,                    -- India date
+        seconds INTEGER NOT NULL DEFAULT 0,   -- active time in the app (screen on, used in the last 5 minutes)
+        PRIMARY KEY (user_id, day)
+    );
+    CREATE TABLE IF NOT EXISTS staff_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        lead_id INTEGER,
+        kind TEXT NOT NULL,                   -- open | call | wa
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_staff_events_user ON staff_events(org_id, user_id, created_at);
+    """
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21), (22, _migrate_v22), (23, _migrate_v23), (24, _migrate_v24), (25, _migrate_v25)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21), (22, _migrate_v22), (23, _migrate_v23), (24, _migrate_v24), (25, _migrate_v25), (26, _migrate_v26)]
 
 
 def migrate(db_path):

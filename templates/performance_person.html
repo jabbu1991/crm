@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'My performance' if own else o.user.name ~ ' — performance' }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📊 {{ 'My performance' if own else o.user.name }}</h1>
+  {% if is_admin() %}<nav class="actions small"><a href="{{ url_for('performance', **request.args) }}">← All staff</a></nav>{% endif %}</div>
+{% include '_perf_period.html' %}
+<div class="perf-hero card">
+  <div class="perf-big s{{ (o.score // 25)|int }}">{{ o.score }}<small>/100</small></div>
+  <div>
+    <div class="muted small">{{ label }}{% if prev and not prev.no_work %} · before: {{ prev.score }}{% endif %}</div>
+    <div class="perf-parts">
+      {% for k, lab in (('followups', 'Follow-ups on time'), ('work', 'Work on leads'), ('notes', 'Proper notes'), ('won', 'Leads won'), ('time', 'Time in the app'), ('pending', 'Nothing waiting')) %}
+      <div class="pp"><span>{{ lab }}</span><span class="pp-bar"><i style="width: {{ (100 * o.parts[k] / WEIGHTS[k])|round|int }}%"></i></span><b>{{ o.parts[k] }}/{{ WEIGHTS[k] }}</b></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<section class="card perf-tips">
+  <h2>💡 Suggestions</h2>
+  {% for t in tips %}<p>{{ t }}</p>{% endfor %}
+</section>
+
+<div class="perf-cards">
+  {% for lab, val, sub in (
+      ('Leads added', o.added, ''),
+      ('Follow-ups done', o.fu_done, (o.ontime_pct ~ '% on time') if o.ontime_pct is not none else ''),
+      ('Past the date', o.fu_overdue, 'follow-ups waiting'),
+      ('Not touched 7 days', o.untouched, 'open leads'),
+      ('📞 Calls', o.calls, ''), ('🟢 WhatsApp', o.wa, ''),
+      ('Lead updates', o.updates, (o.opens ~ ' leads opened')),
+      ('Won', o.won, (o.conv_pct ~ '% of decided') if o.conv_pct is not none else ''),
+      ('Lost', o.lost, ''), ('🔥 Hot leads in hand', o.hot, (o.open_leads ~ ' open leads')),
+      ('Proper notes', (o.notes_pct ~ '%') if o.notes_pct is not none else '—', (o.notes_good ~ ' of ' ~ o.fu_done)),
+      ('Hours in the app', o.hours, (o.days_active ~ ' active days')),
+      ('First contact', (o.resp_hours|round(1) ~ ' h') if o.resp_hours is not none else '—', 'new leads, average')) %}
+  <div class="pc"><span class="muted small">{{ lab }}</span><b>{{ val }}</b>{% if sub %}<small class="muted">{{ sub }}</small>{% endif %}</div>
+  {% endfor %}
+</div>
+
+<section class="card">
+  <h2>⏱ Time in the app (minutes a day)</h2>
+  <div class="perf-chart">{% for c in chart %}<div class="pcb" title="{{ c.d.strftime('%d %b') }}: {{ c.min }} min"><i style="height: {{ (100 * c.min / top)|round|int }}%"></i><span>{{ c.d.day }}</span></div>{% endfor %}</div>
+</section>
+
+{% if overdue %}
+<section class="card">
+  <h2>📅 Follow-ups past the date</h2>
+  {% for f in overdue %}<div class="perf-od"><a href="{{ url_for('lead_view', lid=f.id) }}">{{ f.customer_name }}</a> <span class="muted small">due {{ f.due_date }}{% if f.lead_quality %} · {{ f.lead_quality }}{% endif %}</span></div>{% endfor %}
+</section>
+{% endif %}
+<p class="small muted">Time in the app counts only while the app is open and used. Calls and WhatsApp count taps on the app's buttons. A "proper note" has at least 20 letters and is not repeated or copied.</p>
+{% endblock %}

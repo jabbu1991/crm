@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}Staff performance{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📊 Staff performance</h1>
+  <nav class="actions small"><a class="btn btn-sm" href="{{ url_for('performance_csv', **request.args) }}">⬇️ Excel (CSV)</a></nav></div>
+{% include '_perf_period.html' %}
+<p class="muted small">{{ label }} · Score out of 100: follow-ups on time {{ WEIGHTS.followups }} · work on leads {{ WEIGHTS.work }} · proper notes {{ WEIGHTS.notes }} · leads won {{ WEIGHTS.won }} · time in the app {{ WEIGHTS.time }} · nothing waiting {{ WEIGHTS.pending }}.</p>
+{% if warn %}<section class="card perf-warn">{% for w in warn %}<div>{{ w }}</div>{% endfor %}</section>{% endif %}
+<section class="card table-wrap">
+<table class="table perf-table" id="perf-table">
+  <thead><tr><th data-k="name">Name</th><th data-k="score">Score</th><th data-k="added">Leads added</th><th data-k="fu">Follow-ups done</th>
+    <th data-k="ontime">On time</th><th data-k="overdue">Past date</th><th data-k="untouched">Not touched 7d</th>
+    <th data-k="calls">📞 / 🟢</th><th data-k="updates">Updates</th><th data-k="won">Won / Lost</th><th data-k="notes">Proper notes</th><th data-k="hours">Hours in app</th></tr></thead>
+  <tbody>
+  {% for o in rows %}
+  <tr>
+    <td data-v="{{ o.user.name }}"><a href="{{ url_for('performance_person', uid=o.user.id, **request.args) }}"><b>{{ o.user.name }}</b></a>{% if o.user.designation %}<div class="small muted">{{ o.user.designation }}</div>{% endif %}</td>
+    <td data-v="{{ o.score }}">{% if o.no_work %}<span class="muted small nowrap">no work yet</span>{% else %}<span class="perf-score s{{ (o.score // 25)|int }}">{{ o.score }}</span>{% endif %}
+      {% if o.prev_score is not none %}<small class="{{ 'up' if o.score > o.prev_score else ('down' if o.score < o.prev_score else 'muted') }}">{{ '▲' if o.score > o.prev_score else ('▼' if o.score < o.prev_score else '') }}{{ (o.score - o.prev_score)|abs if o.score != o.prev_score }}</small>{% endif %}</td>
+    <td data-v="{{ o.added }}">{{ o.added }}</td>
+    <td data-v="{{ o.fu_done }}">{{ o.fu_done }}</td>
+    <td data-v="{{ o.ontime_pct if o.ontime_pct is not none else -1 }}">{{ (o.ontime_pct ~ '%') if o.ontime_pct is not none else '—' }}</td>
+    <td data-v="{{ o.fu_overdue }}" class="{{ 'bad' if o.fu_overdue }}">{{ o.fu_overdue }}</td>
+    <td data-v="{{ o.untouched }}" class="{{ 'bad' if o.untouched }}">{{ o.untouched }}</td>
+    <td data-v="{{ o.calls + o.wa }}">{{ o.calls }} / {{ o.wa }}</td>
+    <td data-v="{{ o.updates }}">{{ o.updates }}</td>
+    <td data-v="{{ o.won }}">{{ o.won }} / {{ o.lost }}{% if o.conv_pct is not none %} <small class="muted">({{ o.conv_pct }}%)</small>{% endif %}</td>
+    <td data-v="{{ o.notes_pct if o.notes_pct is not none else -1 }}">{{ (o.notes_pct ~ '%') if o.notes_pct is not none else '—' }}</td>
+    <td data-v="{{ o.seconds }}">{{ o.hours }}</td>
+  </tr>
+  {% else %}<tr><td colspan="12" class="muted">No staff yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</section>
+<p class="small muted">Tap a column title to sort. Time in the app counts only while the app is open and used (not after 5 minutes without a tap). Calls / WhatsApp count taps on the app's buttons.</p>
+<script>
+(function () {
+  var t = document.getElementById("perf-table"), dir = {};
+  t.querySelectorAll("th").forEach(function (th, i) {
+    th.style.cursor = "pointer";
+    th.onclick = function () {
+      var rows = Array.prototype.slice.call(t.tBodies[0].rows), d = dir[i] = !dir[i];
+      rows.sort(function (x, y) {
+        var a = x.cells[i].dataset.v, b = y.cells[i].dataset.v, na = parseFloat(a), nb = parseFloat(b);
+        var r = (!isNaN(na) && !isNaN(nb)) ? na - nb : String(a).localeCompare(String(b));
+        return d ? -r : r;
+      });
+      rows.forEach(function (r) { t.tBodies[0].appendChild(r); });
+    };
+  });
+})();
+</script>
+{% endblock %}

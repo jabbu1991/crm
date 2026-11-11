@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from flask import abort, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
 
-from cafe import (ORDER_TYPES, PAYMENT_MODES, BILL_PAY_MODES, PAY_COLS, parse_payment, pay_text, card_url, qr_svg, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals, packing_charge, packing_applies,
+from cafe import (ORDER_TYPES, PAYMENT_MODES, BILL_PAY_MODES, PAY_COLS, parse_payment, pay_text, card_url, qr_svg, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals, packing_charge, packing_applies, top_billed,
                   customer_by_phone, customer_choice, expire_points, get_settings, has_cafe, host as H, live_banners, max_redeemable,
                   menu_data, menu_url, offer_active, effective_price, phone10, point_value, points_for_amount,
                   round_rupee, rupees, take_points, theme_css, to_int, to_paise, to_float, today, today_date, token,
@@ -342,6 +342,7 @@ def pos():
         "start_table": request.args.get("table", type=int),
         "gst_on": st["gst_on"], "gst_inclusive": st["gst_inclusive"], "kot_on": st["kot_on"],
         "packing": {k: packing_applies(st, k) for k in ("takeaway", "delivery")},
+        "top": top_billed(oid, items, 20),
         "loyalty": st["loyalty"]["on"], "point_value": point_value(st), "birthday_on": st["birthday_on"],
         "referral_on": st["referral"]["on"], "modes": PAYMENT_MODES, "org": g.org["code"].lower(),
         "perms": {p: can(p) for p in ("bill_discount", "points_redeem", "customers_view", "price_edit")},

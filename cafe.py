@@ -430,6 +430,14 @@ def popularity(oid, days=30):
     return {r["item_id"]: r["n"] for r in rows}
 
 
+def top_billed(oid, items, count=20):
+    """Billing screen '⭐ Most sold': ids of the items billed most in the last 30 days (on the menu), best first."""
+    pop = popularity(oid)
+    ok = [i for i in items if pop.get(i["id"], 0) > 0]
+    ok.sort(key=lambda i: -pop[i["id"]])
+    return [i["id"] for i in ok[:count]]
+
+
 def customer_choice(oid, items, count=10):
     """Ids of the most sold items of the last 30 days, best first (only items on the menu and available)."""
     pop = popularity(oid)

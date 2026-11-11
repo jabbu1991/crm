@@ -209,6 +209,16 @@ Digital Catalogue (built 16 Oct 2026)
   (payload no_packing). Shown on POS, customer order sheet, running orders, print/PDF/printer/WhatsApp, exports.
 - Android app OrderWatch service (APK): polls /cafe/orders/pending.json every 15 s with the WebView cookies,
   lock-screen notification + rings every 20 s while orders wait; started by base.html via RVApp.watchOrders(true).
+- Schema v26: organizations.perf_allowed; app_updates, app_update_reads, feature_requests, staff_time, staff_events.
+- What's new (updates.py + updates_list.py): ADD A NOTE TO updates_list.SHIPPED (top) WITH EVERY USER-VISIBLE CHANGE.
+  Header 🆕 bell + strip; /whats-new marks read; notes filtered by module, audience (admins), org, and account age.
+  feature='perf' notes give admins a 🙋 Request button -> feature_requests; Super Admin: 📢 Updates (/admin/updates)
+  lists requests (Switch on / Close) and posts typed notes; enable_feature() sets the org column + tells the company.
+- Staff performance (perf.py), only when organizations.perf_allowed (Super Admin org edit or request): /performance
+  (admin team table, CSV), /performance/<uid> (admin or self), /my-performance (staff nav). Tracking JS in base.html:
+  /perf/ping each minute while visible and used in 5 min (staff_time), /perf/tap for tel:/WhatsApp links with data-lid
+  (staff_events), lead page opens counted server-side. Score weights perf.WEIGHTS; no work in period = no score.
+- Cafe billing screen: '⭐ Most sold' tab first (cafe.top_billed, 20 items, 30 days).
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).
 - Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).
 - Bulk menu (Menu > Excel upload / photos): download empty template or current menu (.xlsx, openpyxl), upload ->

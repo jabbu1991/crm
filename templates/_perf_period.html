@@ -1,0 +1,6 @@
+<form method="get" class="perf-period">
+  {% for k, v in (('today', 'Today'), ('week', 'This week'), ('month', 'This month'), ('last_month', 'Last month')) %}
+  <a class="chip {{ 'on' if p == k }}" href="?p={{ k }}">{{ v }}</a>{% endfor %}
+  <details class="perf-custom" {{ 'open' if p == 'custom' }}><summary class="chip {{ 'on' if p == 'custom' }}">📅 Dates</summary>
+    <input type="hidden" name="p" value="custom"><input type="date" name="from" value="{{ a.isoformat() }}"> – <input type="date" name="to" value="{{ b.isoformat() }}"> <button class="btn btn-sm">Show</button></details>
+</form>

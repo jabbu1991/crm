@@ -305,3 +305,4 @@ body.selmode .mi .switch, body.selmode .mi .edit-btn { display: none; }
 .pk-amt input { width: 78px; padding: 6px 8px; }
 .pk-amt input:disabled { opacity: .45; }
 .pt-pack .pk-toggle { border: 0; background: none; color: #2563eb; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0 2px; }
+.pos-cats .chip-top { font-weight: 700; }

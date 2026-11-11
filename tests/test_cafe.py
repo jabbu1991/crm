@@ -1327,3 +1327,18 @@ def test_packing_charge_with_gst():
     assert t["packing"] == 1000 and t["taxable"] == 11000 and t["cgst"] + t["sgst"] == 550 and t["gross"] == 11550
     t = cafe.compute_totals(lines, True, True, 2000, packing=1000)   # GST included; discount not on packing
     assert t["gross"] == 10000 - 2000 + 1000
+
+
+def test_billing_screen_most_sold_tab(cw):
+    import json as _j
+    w = cw
+    b = w["cafe"]
+    settings(b)
+    for n in ("Aaa", "Bbb", "Ccc"):
+        add_item(b, n, "10")
+    ids = {n: item_id(w, n) for n in ("Aaa", "Bbb", "Ccc")}
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash",
+            "items": [{"item_id": ids["Ccc"], "qty": 5}, {"item_id": ids["Aaa"], "qty": 2}]})
+    page = b.get("/cafe/pos").text
+    m = re.search(r'"top": \[([^\]]*)\]', page)
+    assert [int(x) for x in m.group(1).split(",")] == [ids["Ccc"], ids["Aaa"]]

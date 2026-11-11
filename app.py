@@ -3553,6 +3553,10 @@ def admin_org_edit(oid):
             execute("UPDATE organizations SET wa_templates_allowed = ?, catalog_allowed = ? WHERE id = ?",
                     (1 if request.form.get("wa_templates_allowed") else 0,
                      1 if request.form.get("catalog_allowed") else 0, oid))
+            if request.form.get("perf_allowed") and not org["perf_allowed"]:
+                updates.enable_feature(oid, "perf")          # closes requests and tells the company
+            elif not request.form.get("perf_allowed") and org["perf_allowed"]:
+                execute("UPDATE organizations SET perf_allowed = 0 WHERE id = ?", (oid,))
             save_org_modules(oid, mods)
             if org["kind"] != "agency":
                 save_branding(oid, org)
@@ -3788,12 +3792,16 @@ import cafe  # noqa: E402
 import instagram_stories  # noqa: E402
 import family  # noqa: E402
 import production  # noqa: E402
+import updates  # noqa: E402
+import perf  # noqa: E402
 
 cafe.init(sys.modules[__name__])
 production.init(sys.modules[__name__])
 family.init(sys.modules[__name__])
 backup_drive.init(sys.modules[__name__])
 instagram_stories.init(sys.modules[__name__])
+updates.init(sys.modules[__name__])
+perf.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

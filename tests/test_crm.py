@@ -1226,3 +1226,77 @@ def test_catalogue_layouts_price_and_filters(world, tmp_path, monkeypatch):
     assert "layout-grid" in Browser().get("/c/orga").get_data(as_text=True)
     assert "How products are shown" in admin.get("/organization").get_data(as_text=True)
     assert crm.price_text("1234567") == "₹12,34,567"
+
+
+def test_whats_new_and_feature_request(world):
+    w = world
+    staff, admin, sup = w["a_s1"], w["a_admin"], w["sup"]
+    # a CRM company: the CRM notes for everyone, admin-only notes only for the admin, no cafe notes
+    page = staff.get("/whats-new").get_data(as_text=True)
+    assert "India time" in page and "Staff performance" not in page and "Most sold" not in page
+    apage = admin.get("/").get_data(as_text=True)
+    assert "wn-strip" in apage and 'class="wn-count"' in apage
+    page = admin.get("/whats-new").get_data(as_text=True)
+    assert "📊 New: Staff performance" in page and "🙋 Request" in page and "Most sold" not in page
+    assert 'class="wn-count"' not in admin.get("/").get_data(as_text=True)      # seen
+    # staff cannot request; the admin can, once
+    assert staff.post("/whats-new/request/perf").status_code == 403
+    admin.post("/whats-new/request/perf")
+    admin.post("/whats-new/request/perf")
+    with w["db"]() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM feature_requests WHERE status = 'open'").fetchone()[0] == 1
+    assert "Requested" in admin.get("/whats-new").get_data(as_text=True)
+    assert "/performance" not in staff.get("/").get_data(as_text=True)
+    # the Super Admin sees it and switches it on: the company is told
+    spage = sup.get("/admin/updates").get_data(as_text=True)
+    assert "Org A" in spage and "wants" in spage
+    rid = w["ids"]("SELECT id FROM feature_requests")[0]
+    sup.post(f"/admin/requests/{rid}/on")
+    with w["db"]() as conn:
+        assert conn.execute("SELECT perf_allowed FROM organizations WHERE id = ?", (w["org_a"],)).fetchone()[0] == 1
+        assert conn.execute("SELECT status FROM feature_requests").fetchone()[0] == "done"
+    assert "Staff performance is on" in staff.get("/whats-new").get_data(as_text=True)
+    assert "Staff performance is on" not in w["b_admin"].get("/whats-new").get_data(as_text=True)
+    # a typed note for one company only
+    sup.post("/admin/updates", {"title": "Hello Org B", "module": "all", "audience": "all", "org_id": str(w["org_b"])})
+    assert "Hello Org B" in w["b_s1"].get("/whats-new").get_data(as_text=True)
+    assert "Hello Org B" not in staff.get("/whats-new").get_data(as_text=True)
+
+
+def test_staff_performance(world):
+    w = world
+    staff, staff2, admin, sup = w["a_s1"], w["a_s2"], w["a_admin"], w["sup"]
+    assert admin.get("/performance").status_code == 404           # not in this company's plan yet
+    sup.post(f"/admin/organizations/{w['org_a']}/edit", {"name": "Org A", "code": "ORGA", "mod_crm": "1",
+                                                          "perf_allowed": "1"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT perf_allowed FROM organizations WHERE id = ?", (w["org_a"],)).fetchone()[0] == 1
+    lid = add_lead(staff, w["proj_a"], "Perf Lead", "3000000077", extra={"next_follow_up": "2020-01-01"})
+    fid = w["ids"]("SELECT id FROM follow_ups WHERE lead_id = ?", (lid,))[0]
+    staff.post(f"/followups/{fid}/complete", {"action": "done",
+                                              "outcome": "Customer wants price for 2 units, call on Friday"})
+    staff.get(f"/leads/{lid}")                                        # counted as opened
+    staff.post("/perf/tap", {"kind": "call", "lead": str(lid)})
+    staff.post("/perf/tap", {"kind": "wa", "lead": str(lid)})
+    staff.post("/perf/ping", {})
+    staff.post("/perf/ping", {})                                      # within 40 s: counted once
+    with w["db"]() as conn:
+        assert conn.execute("SELECT SUM(seconds) FROM staff_time").fetchone()[0] == 60
+        kinds = sorted(r[0] for r in conn.execute("SELECT kind FROM staff_events"))
+    assert kinds == ["call", "open", "wa"]
+    page = admin.get("/performance").get_data(as_text=True)
+    assert "Anu Staff1" in page and "Ben Staff2" in page and "perf-score" in page
+    me = staff.get("/my-performance", follow_redirects=True).get_data(as_text=True)
+    assert "My performance" in me and "Suggestions" in me and "Proper notes" in me
+    uid1, uid2 = w["uid"]("a_staff1"), w["uid"]("a_staff2")
+    assert staff.get(f"/performance/{uid2}").status_code == 403       # not someone else's
+    assert staff.get("/performance").status_code == 403               # not the team list
+    assert admin.get(f"/performance/{uid1}").status_code == 200
+    csv_text = admin.get("/performance.csv").get_data(as_text=True)
+    assert "Anu Staff1" in csv_text and "Score" in csv_text
+    assert w["b_admin"].get(f"/performance/{uid1}").status_code == 404   # other company: feature off
+    import perf
+    o = perf.score({"fu_done": 2, "fu_ontime": 2, "fu_overdue": 0, "calls": 10, "wa": 10, "updates": 0,
+                    "notes_good": 2, "won": 1, "lost": 0, "seconds": 7200, "untouched": 0}, 1)
+    assert o["score"] == 100
+    assert not perf._note_ok("ok ok ok ok ok ok ok ok ok", set()) and perf._note_ok("Wants a quote for 2 units", set())

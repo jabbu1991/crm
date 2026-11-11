@@ -16,7 +16,7 @@
     <h2>{{ fl('sec_customer', 'Customer') }}</h2>
     <dl class="details">
       {% if not fhidden('company') or lead.company_name %}<dt>{{ fl('company', 'Company') }}</dt><dd>{{ lead.company_name or '—' }}</dd>{% endif %}
-      <dt>{{ fl('phone', 'Phone') }}</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% else %}—{% endif %}</dd>
+      <dt>{{ fl('phone', 'Phone') }}</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone }}" data-lid="{{ lead.id }}">{{ lead.phone }}</a>{% else %}—{% endif %}</dd>
       {% if not fhidden('whatsapp') or lead.whatsapp %}<dt>{{ fl('whatsapp', 'WhatsApp') }}</dt><dd>{% if lead.whatsapp %}{{ wa_link(lead) }}{% else %}—{% endif %}</dd>{% endif %}
       {% if not fhidden('email') or lead.email %}<dt>{{ fl('email', 'Email') }}</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}—{% endif %}</dd>{% endif %}
       {% if not fhidden('place') or lead.place %}<dt>{{ fl('place', 'Place') }}</dt><dd>{{ lead.place or '—' }}</dd>{% endif %}

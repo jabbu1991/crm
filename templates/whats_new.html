@@ -1,0 +1,18 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}What's new{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🆕 What's new</h1></div>
+{% for r in rows %}
+<section class="card wn-item {{ 'wn-unread' if not r.read_at }}">
+  <div class="wn-meta small muted">{{ r.created_at|ist('%d %b %Y') }} · {{ MODULE_LABELS.get(r.module, r.module) }}{% if r.audience == 'admins' %} · for admins{% endif %}{% if not r.read_at %} · <b class="wn-new">NEW</b>{% endif %}</div>
+  <h2>{{ r.title }}</h2>
+  {% if r.body %}<p class="wn-body">{{ r.body }}</p>{% endif %}
+  {% if r.feature and r.feature in FEATURES and is_admin() %}
+    {% set stt = states.get(r.feature) %}
+    {% if stt == 'on' %}<p class="wn-state ok">✅ On for your company</p>
+    {% elif stt == 'requested' %}<p class="wn-state">🙋 Requested — we will switch it on and tell you here.</p>
+    {% elif not viewing %}<form method="post" action="{{ url_for('feature_request', feature=r.feature) }}">{{ csrf() }}<button class="btn btn-primary">🙋 Request {{ FEATURES[r.feature].label }}</button></form>{% endif %}
+  {% endif %}
+</section>
+{% else %}<p class="muted">Nothing new yet.</p>{% endfor %}
+{% endblock %}

@@ -105,7 +105,7 @@
     order: cfg.order ? cfg.order.id : null,
     type: cfg.order ? cfg.order.type : (cfg.start_type || "takeaway"),
     table: cfg.order ? cfg.order.table : (cfg.start_table || null),
-    lines: [], cat: null, q: "", pay: cfg.modes[0], dmode: "amt", cust: null, busy: false
+    lines: [], cat: (cfg.top && cfg.top.length) ? "top" : null, q: "", pay: cfg.modes[0], dmode: "amt", cust: null, busy: false
   };
   if (cfg.order) {
     cfg.order.items.forEach(function (l) {
@@ -137,6 +137,10 @@
   // ---- menu
   function renderCats() {
     var box = $("pos-cats"); box.innerHTML = "";
+    if (cfg.top && cfg.top.length) {   // ⭐ the items billed most in the last 30 days, best first
+      var tb = el("button", "chip chip-top" + (state.cat === "top" ? " on" : ""), "⭐ Most sold"); tb.type = "button";
+      tb.onclick = function () { state.cat = "top"; renderCats(); renderItems(); }; box.appendChild(tb);
+    }
     var all = el("button", "chip" + (state.cat === null ? " on" : ""), "All"); all.type = "button";
     all.onclick = function () { state.cat = null; renderCats(); renderItems(); }; box.appendChild(all);
     cfg.cats.forEach(function (c) {
@@ -147,8 +151,9 @@
   function renderItems() {
     var box = $("pos-items"); box.innerHTML = "";
     var q = state.q.toLowerCase(), isNum = /^\d+$/.test(q);
-    var list = cfg.items.filter(function (i) {
-      return (state.cat === null || i.cat === state.cat || q) &&
+    var topOnly = state.cat === "top" && !q;
+    var list = topOnly ? cfg.top.map(function (id) { return byId[id]; }).filter(Boolean) : cfg.items.filter(function (i) {
+      return (state.cat === null || state.cat === "top" || i.cat === state.cat || q) &&
         (!q || i.name.toLowerCase().indexOf(q) >= 0 || (isNum && (String(i.sno) === q || i.barcode === q)));
     });
     if (isNum) list.sort(function (a, b) { return ((String(b.sno) === q || b.barcode === q) ? 1 : 0) - ((String(a.sno) === q || a.barcode === q) ? 1 : 0); });
