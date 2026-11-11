@@ -494,7 +494,7 @@
   window.addEventListener("message", function (e) { if (e.origin === location.origin && e.data === "pos-new") newBill(); });
 
   // ---- events
-  document.querySelectorAll("#pc-types button").forEach(function (b) { b.onclick = function () { state.type = b.dataset.type; renderType(); }; });
+  document.querySelectorAll("#pc-types button").forEach(function (b) { b.onclick = function () { state.type = b.dataset.type; renderType(); renderTotals(); }; });
   $("pc-table").onchange = function () { state.table = parseInt(this.value, 10) || null; };
   document.querySelectorAll("#pc-pay button").forEach(function (b) { b.onclick = function () { state.pay = b.dataset.mode; document.querySelectorAll("#pc-pay button").forEach(function (x) { x.classList.toggle("on", x === b); }); spShow(); if (state.pay === "Split") $("sp-cash").focus(); }; });
   document.querySelectorAll("#pc-dmode button").forEach(function (b) { b.onclick = function () { state.dmode = b.dataset.m; document.querySelectorAll("#pc-dmode button").forEach(function (x) { x.classList.toggle("on", x === b); }); renderTotals(); }; });
