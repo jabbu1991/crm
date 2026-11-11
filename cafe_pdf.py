@@ -111,6 +111,8 @@ def _draw(pdf, st, name, bill, items, balance, order_types):
     pdf.pair("Subtotal", _money(bill["subtotal"]))
     if bill["discount"]:
         pdf.pair("Discount", "-" + _money(bill["discount"]))
+    if "packing" in bill.keys() and bill["packing"]:
+        pdf.pair("Packing charge", _money(bill["packing"]))
     if bill["gst_on"]:
         pdf.pair("Taxable value", _money(bill["taxable"]))
         pdf.pair("CGST", _money(bill["cgst"]))

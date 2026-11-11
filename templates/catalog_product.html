@@ -6,7 +6,7 @@
   {% if images %}<div class="cat-photos">{% for i in images %}<img src="{{ url_for('media', name=i.filename) }}" alt="{{ p.name }}">{% endfor %}</div>{% endif %}
   {% if p.category %}<span class="cat-cat">{{ p.category }}</span>{% endif %}
   <h1>{{ p.name }}</h1>
-  {% if p.price %}<p class="cat-price big">{{ p.price }}</p>{% endif %}
+  {% if p.price %}<p class="cat-price big">{{ p.price|price_text }}</p>{% endif %}
   {% if p.description %}<p class="cat-text">{{ p.description }}</p>{% endif %}
   <div class="cat-links">
     {% if p.video_url %}<a class="cat-btn" href="{{ p.video_url }}" target="_blank" rel="noopener">▶ Watch video</a>{% endif %}

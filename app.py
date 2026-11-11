@@ -435,7 +435,7 @@ def inject_globals():
         PRODUCT_STAGES=PRODUCT_STAGES, with_current=crm_options.with_current,
         TOP_POSSIBILITY=top_possibility() if g.get("org") else "High",
         PROJECT_STATUSES=PROJECT_STATUSES, CAMPAIGN_TYPES=CAMPAIGN_TYPES, INDIAN_STATES=INDIAN_STATES,
-        COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link,
+        COUNTRIES=COUNTRIES, GROUPABLE=GROUPABLE, today=today(), wa_config=wa_config, catalog_link=catalog_link, CATALOG_LAYOUTS=CATALOG_LAYOUTS,
         list_settings=list_settings, LIST_COLUMNS=LIST_COLUMNS, quick_dates=quick_dates(),
         fl=fl, fhidden=fhidden,
         client_brand=g.get("login_brand") or (org_brand() if g.get("user") else None),
@@ -466,6 +466,36 @@ def lead_from_token(token, oid):
     if not lid.isdigit() or not hmac.compare_digest(lead_token(int(lid)), token):
         return None
     return query("SELECT * FROM leads WHERE id = ? AND org_id = ?", (int(lid), oid), one=True)
+
+
+CATALOG_LAYOUTS = {"grid": "Grid — 2 in a row on phones (small photos)",
+                   "list": "List — one per row, photo on the left",
+                   "large": "Large cards — one big photo per product"}
+
+
+def price_text(v):
+    """Catalogue price: '255000' -> '₹2,55,000'; other text (e.g. 'From 2 lakh') stays as typed."""
+    s = str(v or "").strip()
+    digits = s.replace(",", "").replace("₹", "").replace("Rs.", "").replace("Rs", "").strip()
+    try:
+        n = float(digits)
+    except ValueError:
+        return s
+    whole, paise = int(n), round((n - int(n)) * 100)
+    t = str(whole)
+    if len(t) > 3:
+        head, tail = t[:-3], t[-3:]
+        parts = []
+        while len(head) > 2:
+            parts.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            parts.insert(0, head)
+        t = ",".join(parts) + "," + tail
+    return "₹" + t + (f".{paise:02d}" if paise else "")
+
+
+app.jinja_env.filters["price_text"] = price_text
 
 
 def catalog_published(org):
@@ -3085,9 +3115,10 @@ def organization_settings():
                 execute("UPDATE organizations SET wa_templates_on = ? WHERE id = ?",
                         (1 if request.form.get("wa_templates_on") else 0, org_id()))
             if org["catalog_allowed"]:
-                execute("UPDATE organizations SET catalog_on = ?, catalog_about = ? WHERE id = ?",
+                layout = request.form.get("catalog_layout")
+                execute("UPDATE organizations SET catalog_on = ?, catalog_about = ?, catalog_layout = ? WHERE id = ?",
                         (1 if request.form.get("catalog_on") else 0, clean(request.form.get("catalog_about"))[:600],
-                         org_id()))
+                         layout if layout in CATALOG_LAYOUTS else "grid", org_id()))
                 logo = request.files.get("catalog_logo")
                 if logo and logo.filename:
                     name = save_image(logo, box=(400, 400))
@@ -3231,7 +3262,13 @@ def catalog_page(code):
     org = catalog_org(code)
     token = request.args.get("l", "")
     record_catalog_view(org, token)
-    return render_template("catalog.html", org=org, products=catalog_products(org["id"]), token=token,
+    products = catalog_products(org["id"])
+    cats = []
+    for p in products:
+        if p["category"] and p["category"] not in cats:
+            cats.append(p["category"])
+    layout = org["catalog_layout"] if "catalog_layout" in org.keys() and org["catalog_layout"] in CATALOG_LAYOUTS else "grid"
+    return render_template("catalog.html", org=org, products=products, token=token, cats=cats, layout=layout,
                            wa=wa_number(org["phone"]))
 
 

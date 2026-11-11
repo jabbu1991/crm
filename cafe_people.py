@@ -519,11 +519,11 @@ def export(name):
         rows = H.query("""SELECT b.*, u.name by_name FROM cafe_bills b LEFT JOIN users u ON u.id = b.created_by
                           WHERE b.org_id = ? AND b.bill_date BETWEEN ? AND ? ORDER BY b.id""", (oid, A, B))
         return _csv("bills", ["Bill No", "Date", "Time", "Type", "Table", "Customer", "WhatsApp", "Subtotal", "Discount",
-                              "Taxable", "CGST", "SGST", "Points used", "Points value", "Round off", "Total", "Payment",
+                              "Packing charge", "Taxable", "CGST", "SGST", "Points used", "Points value", "Round off", "Total", "Payment",
                               "Cash", "UPI", "Card", "Not paid", "Points earned", "Status", "Cancel reason", "Billed by"],
                     [(f"{st['bill_prefix']}{r['bill_no']}", r["bill_date"], H.ist_time(r["created_at"], "%H:%M"),
                       ORDER_TYPES.get(r["order_type"], r["order_type"]), r["table_name"] or "", r["cust_name"] or "",
-                      r["cust_phone"] or "", _r(r["subtotal"]), _r(r["discount"]), _r(r["taxable"]), _r(r["cgst"]),
+                      r["cust_phone"] or "", _r(r["subtotal"]), _r(r["discount"]), _r(r["packing"]), _r(r["taxable"]), _r(r["cgst"]),
                       _r(r["sgst"]), r["points_redeemed"], _r(r["points_value"]), _r(r["round_off"]), _r(r["total"]),
                       PAY_LABELS.get(r["payment_mode"], r["payment_mode"]), _r(r["pay_cash"]), _r(r["pay_upi"]),
                       _r(r["pay_card"]), _r(r["due"]), r["points_earned"], r["status"], r["cancel_reason"] or "", r["by_name"] or "")

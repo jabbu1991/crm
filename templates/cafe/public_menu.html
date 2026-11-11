@@ -49,6 +49,7 @@
     <button class="sheet-x" type="button" data-close>✕</button>
     <h2>Your order</h2>
     <div id="order-lines" class="order-lines"></div>
+    <div class="order-total order-pack" id="order-pack" hidden><span>Packing charge</span><span id="order-pack-amt">₹0</span></div>
     <div class="order-total"><span>Total</span><b id="order-total">₹0</b></div>
     <p class="fine">Pay at the counter. Final bill may include taxes as per the cafe.</p>
     <div class="seg" id="otype"></div>
@@ -238,13 +239,24 @@
       var st = stepper(i, x.m); st.classList.add("small"); r.appendChild(st);
       r.appendChild(el("b", "", rs(lineP(k) * cart[k]))); box.appendChild(r);
     });
-    $("order-total").textContent = rs(totals().t);
+    showTotal();
     if (!totals().n) closeSheets();
+  }
+  function packing() {   // takeaway / delivery: each ticked item's packing charge × qty
+    if (!otype || !cfg.packing || !cfg.packing[otype]) return 0;
+    var p = 0; Object.keys(cart).forEach(function (k) { var i = byId[pk(k).id]; p += ((i && i.pk) || 0) * cart[k]; });
+    return p;
+  }
+  function showTotal() {
+    var p = packing();
+    $("order-pack").hidden = !p; $("order-pack-amt").textContent = rs(p);
+    $("order-total").textContent = rs(totals().t + p);
   }
   function setType(t) {
     otype = t;
     document.querySelectorAll("#otype button").forEach(function (b) { b.classList.toggle("on", b.dataset.t === t); });
     $("table-field").hidden = t !== "dine_in"; $("addr-field").hidden = t !== "delivery";
+    showTotal();
   }
   function buildTypes() {
     var seg = $("otype"); seg.innerHTML = "";

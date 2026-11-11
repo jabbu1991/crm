@@ -201,6 +201,14 @@ Digital Catalogue (built 16 Oct 2026)
   POS tile photos use object-fit: contain (whole square photo shows).
 - Times: timestamps are stored in server time (Render = UTC). Show them with app.ist_time(ts, fmt) / the |ist(fmt)
   Jinja filter (India time), never by slicing [11:16]. production.to_date() also takes the India-time day.
+- Schema v25: organizations.catalog_layout (grid|list|large, default grid), menu_items.packing, cafe_bills.packing (paise).
+- Catalogue: layouts + category chips + search (catalog.html); price_text filter formats numeric prices as ₹2,55,000.
+- Packing charge: Settings → 📦 Packing charge (/cafe/settings/packing): packing_on, packing_takeaway/_delivery,
+  packing_default; per item menu_items.packing (0 = none). Bill: packing = Σ item packing × qty (takeaway/delivery),
+  not discounted, GST at the highest item rate (compute_totals(..., packing)); POS can take it off one bill
+  (payload no_packing). Shown on POS, customer order sheet, running orders, print/PDF/printer/WhatsApp, exports.
+- Android app OrderWatch service (APK): polls /cafe/orders/pending.json every 15 s with the WebView cookies,
+  lock-screen notification + rings every 20 s while orders wait; started by base.html via RVApp.watchOrders(true).
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).
 - Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).
 - Bulk menu (Menu > Excel upload / photos): download empty template or current menu (.xlsx, openpyxl), upload ->

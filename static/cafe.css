@@ -291,3 +291,17 @@ body.selmode .mi .switch, body.selmode .mi .edit-btn { display: none; }
 
 /* Running orders: the Bill button */
 .ord .ord-bill { font-weight: 700; padding: 8px 22px; }
+
+/* Packing charge settings */
+.pk-types { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin: 8px 0; }
+.pk-default input { max-width: 140px; }
+.pk-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pk-head h2 { margin: 0; }
+.pk-cat { border-top: 1px solid var(--border); padding: 10px 0 4px; }
+.pk-catname { margin-bottom: 4px; }
+.pk-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0 5px 22px; }
+.pk-name { flex: 1; min-width: 0; margin: 0; }
+.pk-amt { white-space: nowrap; }
+.pk-amt input { width: 78px; padding: 6px 8px; }
+.pk-amt input:disabled { opacity: .45; }
+.pt-pack .pk-toggle { border: 0; background: none; color: #2563eb; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0 2px; }

@@ -104,6 +104,8 @@ DEFAULT_SETTINGS = {
     "bill_footer": "Thank you! Visit again 🙏", "bill_prefix": "", "paper": "80", "kot_on": True,
     "kot_with_bill": True,
     "gst_on": False, "gstin": "", "gst_inclusive": True, "default_gst": 5,
+    # packing charge (per piece, on the ticked items) for takeaway / delivery
+    "packing_on": False, "packing_takeaway": True, "packing_delivery": True, "packing_default": 1000,
     "menu_on": True, "online_on": False, "order_dine_in": True, "order_takeaway": True, "order_delivery": False,
     "delivery_note": "", "fssai": "",
     "theme": {"preset": "classic", **{k: v for k, v in THEMES["classic"].items() if k != "label"},
@@ -415,6 +417,7 @@ def item_dict(r, day=None):
         "photo": url_for("media", name=r["photo"]) if r["photo"] else "",
         "type": r["food_type"] or "", "tags": tags, "available": bool(r["available"]), "gst": r["gst_rate"],
         "sno": r["serial"], "unit": r["unit"] or "pc", "barcode": r["barcode"] or "", "pin": bool(r["pinned"]),
+        "pk": r["packing"] if "packing" in r.keys() else 0,
     }
 
 
@@ -712,14 +715,34 @@ def pay_breakdown(oid, d_from, d_to):
     return sorted(out, key=lambda x: -x["total"])
 
 
-def compute_totals(lines, gst_on, inclusive, discount):
-    """lines: [{'price': paise, 'qty': n, 'gst_rate': %}]. Returns subtotal, discount, taxable, cgst, sgst, gross."""
+def packing_applies(st, order_type):
+    return bool(st["packing_on"]) and order_type in ("takeaway", "delivery") and bool(st["packing_" + order_type])
+
+
+def packing_charge(st, order_type, lines, rates=None):
+    """Packing charge (paise) for a takeaway / delivery order: each ticked item's charge × its quantity.
+    lines: [{'item_id', 'qty'}]; rates: {item_id: paise} (read from the menu when not given)."""
+    if not packing_applies(st, order_type):
+        return 0
+    ids = {l.get("item_id") for l in lines if l.get("item_id")}
+    if rates is None and ids:
+        rows = H.query(f"SELECT id, packing FROM menu_items WHERE id IN ({','.join('?' * len(ids))})", tuple(ids))
+        rates = {r["id"]: r["packing"] or 0 for r in rows}
+    rates = rates or {}
+    return sum(int(rates.get(l.get("item_id"), 0)) * int(l.get("qty") or 0) for l in lines if l.get("qty", 0) > 0)
+
+
+def compute_totals(lines, gst_on, inclusive, discount, packing=0):
+    """lines: [{'price': paise, 'qty': n, 'gst_rate': %}]. Returns subtotal, discount, packing, taxable, cgst, sgst,
+    gross. The packing charge is not discounted and takes the GST rate of the items (the main supply)."""
     subtotal = sum(l["price"] * l["qty"] for l in lines)
     discount = max(0, min(int(discount or 0), subtotal))
     factor = (subtotal - discount) / subtotal if subtotal else 0
+    packing = max(0, int(packing or 0))
+    pk_rate = max([float(l.get("gst_rate") or 0) for l in lines] or [0])
     taxable = tax = 0.0
-    for l in lines:
-        amt = l["price"] * l["qty"] * factor
+    for l in lines + ([{"price": packing, "qty": 1, "gst_rate": pk_rate, "_pk": True}] if packing else []):
+        amt = l["price"] * l["qty"] * (1 if l.get("_pk") else factor)
         rate = float(l.get("gst_rate") or 0) if gst_on else 0
         if rate > 0:
             if inclusive:
@@ -735,13 +758,13 @@ def compute_totals(lines, gst_on, inclusive, discount):
     cgst = tax // 2
     sgst = tax - cgst
     if gst_on and inclusive:
-        gross = subtotal - discount
+        gross = subtotal - discount + packing
         taxable = gross - tax
     else:
         taxable = int(round(taxable))
         gross = taxable + tax
-    return {"subtotal": subtotal, "discount": discount, "taxable": int(taxable), "cgst": cgst, "sgst": sgst,
-            "gross": int(gross)}
+    return {"subtotal": subtotal, "discount": discount, "packing": packing, "taxable": int(taxable), "cgst": cgst,
+            "sgst": sgst, "gross": int(gross)}
 
 
 def round_rupee(paise):

@@ -1280,3 +1280,50 @@ def test_bill_times_show_in_india_time(cw):
     utc = datetime(2026, 11, 10, 17, 41, 5, tzinfo=timezone.utc)
     local = utc.astimezone().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     assert H.ist_time(local, "%H:%M") == "23:11"
+
+
+def test_packing_charge_settings_and_bills(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b)   # GST off by default in this helper
+    add_item(b, "Alfaham", "280")
+    add_item(b, "Juice", "70")
+    add_item(b, "Tea", "15")
+    alf, juice, tea = item_id(w, "Alfaham"), item_id(w, "Juice"), item_id(w, "Tea")
+    page = b.get("/cafe/settings/packing").text
+    assert "Packing charge" in page and 'id="pk-all"' in page
+    # on, takeaway only, usual ₹10; Alfaham ₹20, Juice usual, Tea none
+    b.post("/cafe/settings/packing", {"packing_on": "1", "packing_takeaway": "1", "packing_default": "10",
+                                      "items": [str(alf), str(juice)], f"amt_{alf}": "20", f"amt_{juice}": ""})
+    db = w["db"]()
+    pk = {r["name"]: r["packing"] for r in db.execute("SELECT name, packing FROM menu_items")}
+    assert pk == {"Alfaham": 2000, "Juice": 1000, "Tea": 0}
+    items = [{"item_id": alf, "qty": 1}, {"item_id": juice, "qty": 2}, {"item_id": tea, "qty": 3}]
+    # takeaway: 280 + 140 + 45 = 465 + packing 20 + 2×10 = 505
+    code, d = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": items})
+    bill = w["db"]().execute("SELECT * FROM cafe_bills WHERE id = ?", (d["bill_id"],)).fetchone()
+    assert bill["packing"] == 4000 and bill["subtotal"] == 46500 and bill["total"] == 50500
+    assert "Packing charge" in b.get(f"/cafe/bills/{d['bill_id']}/print").text
+    assert "Packing charge: ₹40" in d["wa_text"]
+    # delivery is off in the settings, dine-in never: no packing
+    code, d = pos(b, {"action": "bill", "order_type": "dine_in", "payment_mode": "Cash", "items": items,
+                      "table_id": None})
+    if d.get("ok"):
+        assert w["db"]().execute("SELECT packing FROM cafe_bills WHERE id = ?", (d["bill_id"],)).fetchone()[0] == 0
+    # taken off for one bill
+    code, d = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": items,
+                      "no_packing": True})
+    assert w["db"]().execute("SELECT packing, total FROM cafe_bills WHERE id = ?", (d["bill_id"],)).fetchone()[:] == (0, 46500)
+    # switched off
+    b.post("/cafe/settings/packing", {"packing_default": "10", "items": [str(alf)]})
+    code, d = pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": items})
+    assert w["db"]().execute("SELECT packing FROM cafe_bills WHERE id = ?", (d["bill_id"],)).fetchone()[0] == 0
+
+
+def test_packing_charge_with_gst():
+    import cafe
+    lines = [{"price": 10000, "qty": 1, "gst_rate": 5}]
+    t = cafe.compute_totals(lines, True, False, 0, packing=1000)     # GST extra: (100 + 10) + 5%
+    assert t["packing"] == 1000 and t["taxable"] == 11000 and t["cgst"] + t["sgst"] == 550 and t["gross"] == 11550
+    t = cafe.compute_totals(lines, True, True, 2000, packing=1000)   # GST included; discount not on packing
+    assert t["gross"] == 10000 - 2000 + 1000

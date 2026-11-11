@@ -1201,3 +1201,28 @@ def test_server_status_page(world, tmp_path):
     assert "Removed 2 old backups" in r.get_data(as_text=True)
     assert sorted(os.listdir(folder)) == ["crm-pre-v2.db", "crm-pre-v3.db"]
     assert w["a_admin"].c.get("/admin/server").status_code in (302, 403, 404)
+
+
+def test_catalogue_layouts_price_and_filters(world, tmp_path, monkeypatch):
+    import app as crm
+    w = world
+    monkeypatch.setenv("CRM_UPLOAD_DIR", str(tmp_path / "uploads"))
+    admin = w["a_admin"]
+    for name, cat, price in (("Log Splitter A", "Log Splitter", "255000"), ("Brick Machine B", "Brick", "From 2 lakh"),
+                             ("Log Splitter C", "Log Splitter", "")):
+        admin.post("/products/new", {"name": name, "active": "1", "show_in_catalog": "1", "price": price,
+                                     "category": cat})
+    admin.post("/organization", {"name": "Org A", "catalog_on": "1", "phone": "9847011111"})
+    html = Browser().get("/c/orga").get_data(as_text=True)
+    assert "layout-grid" in html                          # new default: 2 in a row on phones
+    assert "₹2,55,000" in html and "From 2 lakh" in html and "Price on request" in html
+    with w["db"]() as conn:
+        cats = [r[0] for r in conn.execute("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != ''")]
+    if len(cats) > 1:
+        assert 'class="cat-chip on" data-cat=""' in html
+    admin.post("/organization", {"name": "Org A", "catalog_on": "1", "phone": "9847011111", "catalog_layout": "list"})
+    assert "layout-list" in Browser().get("/c/orga").get_data(as_text=True)
+    admin.post("/organization", {"name": "Org A", "catalog_on": "1", "phone": "9847011111", "catalog_layout": "nope"})
+    assert "layout-grid" in Browser().get("/c/orga").get_data(as_text=True)
+    assert "How products are shown" in admin.get("/organization").get_data(as_text=True)
+    assert crm.price_text("1234567") == "₹12,34,567"

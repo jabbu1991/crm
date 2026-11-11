@@ -141,6 +141,8 @@ def bill_receipt(r, st, name, bill, items, balance=None, order_types=None):
     r.pair("Subtotal", _money(bill["subtotal"]))
     if bill["discount"]:
         r.pair("Discount", "-" + _money(bill["discount"]))
+    if "packing" in bill.keys() and bill["packing"]:
+        r.pair("Packing charge", _money(bill["packing"]))
     if bill["gst_on"]:
         r.pair("Taxable value", _money(bill["taxable"]))
         r.pair("CGST", _money(bill["cgst"]))

@@ -260,17 +260,23 @@
     var disc = state.dmode === "pct" ? Math.round(sub * Math.min(dv, 100) / 100) : Math.round(dv * 100);
     disc = Math.max(0, Math.min(disc, sub));
     var f = sub ? (sub - disc) / sub : 0, taxable = 0, tax = 0;
-    state.lines.forEach(function (l) {
-      var amt = l.price * l.qty * f, rate = cfg.gst_on ? ((byId[l.item_id] || {}).gst || 0) : 0;
+    // packing charge (takeaway / delivery): each ticked item's charge × qty; GST at the items' rate; never discounted
+    var pk = 0, pkRate = 0, pkCan = !!(cfg.packing && cfg.packing[state.type]);
+    if (pkCan) state.lines.forEach(function (l) { pk += ((byId[l.item_id] || {}).pk || 0) * l.qty; });
+    var pkFull = pk; if (state.nopack) pk = 0;
+    var parts = state.lines.map(function (l) { var g = (byId[l.item_id] || {}).gst || 0; if (g > pkRate) pkRate = g; return {amt: l.price * l.qty * f, rate: g}; });
+    if (pk) parts.push({amt: pk, rate: pkRate});
+    parts.forEach(function (p) {
+      var amt = p.amt, rate = cfg.gst_on ? p.rate : 0;
       if (rate > 0) { if (cfg.gst_inclusive) { var b = amt * 100 / (100 + rate); taxable += b; tax += amt - b; } else { taxable += amt; tax += amt * rate / 100; } }
       else taxable += amt;
     });
     tax = Math.round(tax);
-    var gross = cfg.gst_on && cfg.gst_inclusive ? sub - disc : Math.round(taxable) + tax;
+    var gross = cfg.gst_on && cfg.gst_inclusive ? sub - disc + pk : Math.round(taxable) + tax;
     var pts = $("pc-redeem") ? parseInt($("pc-redeem").value, 10) || 0 : 0;
     var pv = pts * cfg.point_value, payable = Math.max(0, gross - pv);
     var total = Math.floor((payable + 50) / 100) * 100;
-    return {sub: sub, disc: disc, tax: tax, gross: gross, pts: pts, pv: pv, total: total, round: total - payable};
+    return {sub: sub, disc: disc, pk: pk, pkFull: pkFull, tax: tax, gross: gross, pts: pts, pv: pv, total: total, round: total - payable};
   }
 
   // ---- cart
@@ -300,6 +306,13 @@
     function row(a, b, cls) { var r = el("div", "pt " + (cls || "")); r.appendChild(el("span", "", a)); r.appendChild(el("span", "", b)); box.appendChild(r); }
     row("Subtotal", rs(t.sub));
     if (t.disc) row("Discount", "−" + rs(t.disc));
+    if (t.pkFull) {   // packing charge, with a switch to take it off this bill
+      var pr = el("div", "pt pt-pack"), lab = el("span", "", "Packing charge ");
+      var tg = el("button", "pk-toggle", state.nopack ? "add" : "remove"); tg.type = "button";
+      tg.onclick = function () { state.nopack = !state.nopack; render(); };
+      lab.appendChild(tg); pr.appendChild(lab); pr.appendChild(el("span", state.nopack ? "muted" : "", state.nopack ? "—" : rs(t.pk)));
+      box.appendChild(pr);
+    }
     if (cfg.gst_on && t.tax) row(cfg.gst_inclusive ? "GST (included)" : "GST", rs(t.tax));
     if (t.pv) row("Points (" + t.pts + ")", "−" + rs(t.pv));
     if (t.round) row("Round off", rs(t.round), "muted");
@@ -447,7 +460,7 @@
       cfg.tables.forEach(function (t) { if (t.busy === state.order) t.busy = null; });
       state.order = null; cfg.order = null; DRAFT = "pos:" + cfg.org + ":new";
     }
-    state.type = state.type === "dine_in" ? "takeaway" : state.type; state.table = null;
+    state.type = state.type === "dine_in" ? "takeaway" : state.type; state.table = null; state.nopack = false;
     state.lines = []; state.cust = null; state.pay = cfg.modes[0];
     ["pc-phone", "pc-name", "pc-address", "pc-note", "pc-disc", "pc-redeem", "pc-bday", "pc-ref", "sp-cash", "sp-upi", "sp-card"].forEach(function (id) { if ($(id)) $(id).value = ""; });
     $("pc-custinfo").hidden = true; $("pc-newcust").hidden = true; if ($("pc-points")) $("pc-points").hidden = true;
@@ -508,7 +521,7 @@
       var payload = {
         client_ref: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
         payment_split: state.pay === "Split" ? {cash: $("sp-cash").value, upi: $("sp-upi").value, card: $("sp-card").value} : null,
-        action: act, order_id: state.order, order_type: state.type, table_id: state.table,
+        action: act, order_id: state.order, order_type: state.type, table_id: state.table, no_packing: !!state.nopack,
         items: state.lines.map(function (l) {
           var o = {line_id: l.line_id || null, item_id: l.item_id, qty: l.qty, note: l.note, measure: l.measure || null};
           if (l.priceSet) o.price = (l.price / 100).toFixed(2);

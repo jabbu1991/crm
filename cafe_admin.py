@@ -377,6 +377,57 @@ def item_action(iid, action):
     return redirect(H.safe_next(url_for("cafe.menu")) + f"#item{iid}")
 
 
+# ---------------------------------------------------------------- packing charge (takeaway / delivery)
+
+@bp.route("/cafe/settings/packing", methods=["GET", "POST"])
+@cafe_view("settings_edit")
+def packing():
+    """Settings → 📦 Packing charge: on/off, for takeaway and/or delivery, the usual amount, and which items
+    (each ticked item may have its own amount)."""
+    oid = H.org_id()
+    db = H.get_db()
+    st = json.loads(json.dumps(get_settings()))
+    if request.method == "POST":
+        if g.get("viewing"):
+            abort(403)
+        f = request.form
+        st["packing_on"] = bool(f.get("packing_on"))
+        st["packing_takeaway"] = bool(f.get("packing_takeaway"))
+        st["packing_delivery"] = bool(f.get("packing_delivery"))
+        default = to_paise(f.get("packing_default"), 0)
+        if default is None or default > 100000:
+            flash("The usual packing charge is not valid.", "error")
+            return redirect(url_for("cafe.packing"))
+        st["packing_default"] = default
+        ticked = {int(x) for x in f.getlist("items") if x.isdigit()}
+        ids = [r["id"] for r in db.execute("SELECT id FROM menu_items WHERE org_id = ? AND active = 1", (oid,))]
+        rows = []
+        for iid in ids:
+            amt = 0
+            if iid in ticked:
+                amt = to_paise(f.get(f"amt_{iid}"), default)
+                if amt is None or amt > 100000:
+                    amt = default
+            rows.append((amt, iid, oid))
+        db.executemany("UPDATE menu_items SET packing = ? WHERE id = ? AND org_id = ?", rows)
+        db.commit()
+        save_settings(st)
+        n = sum(1 for a, _, _ in rows if a)
+        H.audit("Packing charge settings", f"{'on' if st['packing_on'] else 'off'} · {n} item(s)")
+        flash(f"Packing charge saved · {n} item{'s' if n != 1 else ''} ticked.", "success")
+        return redirect(url_for("cafe.packing"))
+    cats = db.execute("SELECT id, name FROM menu_categories WHERE org_id = ? AND active = 1 ORDER BY sort, name",
+                      (oid,)).fetchall()
+    items = db.execute("""SELECT id, name, serial, category_id, price, packing FROM menu_items
+                          WHERE org_id = ? AND active = 1 ORDER BY serial, name""", (oid,)).fetchall()
+    live = {c["id"] for c in cats}
+    by_cat = {}
+    for it in items:
+        by_cat.setdefault(it["category_id"] if it["category_id"] in live else None, []).append(it)
+    return render_template("cafe/packing.html", st=st, cats=cats, by_cat=by_cat, paise_str=paise_str,
+                           total=len(items))
+
+
 # ---------------------------------------------------------------- remove many menu items at once (with undo)
 
 def _undo_path(tok):

@@ -328,6 +328,8 @@
     document.removeEventListener("click", pushAsk, true);
     try { var pr = Notification.requestPermission(pushOn); if (pr && pr.then) pr.then(pushOn); } catch (e) {}
   }
+  // Inside the Real View Android app: the app itself watches for orders (also when closed or locked)
+  if (window.RVApp && window.RVApp.watchOrders) { try { window.RVApp.watchOrders(true); } catch (e) {} }
   if (pushOk && !window.RVApp) {
     if (Notification.permission === "granted") pushOn();
     else if (Notification.permission === "default") document.addEventListener("click", pushAsk, true);

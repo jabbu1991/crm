@@ -207,3 +207,4 @@ main { max-width: 980px; margin: 0 auto; padding: 0 0 24px; }
 .mc-list .plus { color: #15803d; } .mc-list .minus { color: #b91c1c; }
 .mc-more summary { cursor: pointer; font-weight: 700; color: var(--p); padding: 8px 0; }
 .sheet label[hidden] { display: none; }
+.order-total.order-pack { font-size: 15px; color: #6b7280; padding-top: 4px; }

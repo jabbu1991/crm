@@ -78,6 +78,7 @@
   <table class="tot">
     <tr><td>Subtotal</td><td class="r">{{ bill.subtotal|rs }}</td></tr>
     {% if bill.discount %}<tr><td>Discount</td><td class="r">-{{ bill.discount|rs }}</td></tr>{% endif %}
+    {% if bill.packing %}<tr><td>Packing charge</td><td class="r">{{ bill.packing|rs }}</td></tr>{% endif %}
     {% if bill.gst_on %}
     <tr><td>Taxable value</td><td class="r">{{ bill.taxable|rs }}</td></tr>
     <tr><td>CGST</td><td class="r">{{ bill.cgst|rs }}</td></tr>

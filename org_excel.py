@@ -146,12 +146,12 @@ SHEETS = [
           FROM menu_items m LEFT JOIN menu_categories c ON c.id = m.category_id
          WHERE m.org_id = ? ORDER BY c.sort, c.name, m.sort, m.name""", "cafe"),
     ("Bills", [("Bill no", 9, T), ("Date", 12, D), ("Type", 10, T), ("Table", 10, T), ("Customer", 20, T),
-               ("Phone", 14, T), ("Subtotal ₹", 11, RS), ("Discount ₹", 10, RS), ("Taxable ₹", 11, RS),
-               ("CGST ₹", 9, RS), ("SGST ₹", 9, RS), ("Points used ₹", 10, RS), ("Round off ₹", 9, RS),
+               ("Phone", 14, T), ("Subtotal ₹", 11, RS), ("Discount ₹", 10, RS), ("Packing ₹", 9, RS),
+               ("Taxable ₹", 11, RS), ("CGST ₹", 9, RS), ("SGST ₹", 9, RS), ("Points used ₹", 10, RS), ("Round off ₹", 9, RS),
                ("Total ₹", 11, RS), ("Payment", 10, T), ("Cash ₹", 10, RS), ("UPI ₹", 10, RS), ("Card ₹", 10, RS),
                ("Due ₹", 9, RS), ("Status", 10, T), ("Cancel reason", 20, T), ("Billed by", 16, T), ("Time", 16, TS)],
-     f"""SELECT bill_no, bill_date, order_type, table_name, cust_name, cust_phone, subtotal, discount, taxable, cgst,
-                sgst, points_value, round_off, total, payment_mode, pay_cash, pay_upi, pay_card, due, status,
+     f"""SELECT bill_no, bill_date, order_type, table_name, cust_name, cust_phone, subtotal, discount, packing, taxable,
+                cgst, sgst, points_value, round_off, total, payment_mode, pay_cash, pay_upi, pay_card, due, status,
                 cancel_reason, {USER.format('created_by')}, created_at
            FROM cafe_bills WHERE org_id = ? ORDER BY id""", "cafe"),
     ("Bill items", [("Bill no", 9, T), ("Date", 12, D), ("Item", 26, T), ("Qty", 7, T), ("Unit", 7, T),

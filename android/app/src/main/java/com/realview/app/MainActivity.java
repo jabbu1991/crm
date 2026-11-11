@@ -10,6 +10,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -33,6 +35,7 @@ public class MainActivity extends Activity {
     private static final int REQ_PERM_BT = 2;
     private static final int REQ_PERM_CAM = 3;
     private static final int REQ_PERM_STORAGE = 4;
+    private static final int REQ_PERM_NOTIFY = 5;
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -46,6 +49,13 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         homeHost = Uri.parse(BuildConfig.HOME_URL).getHost();
         printer = new Printer(this);
+        OrderWatch.channels(this);
+        if (OrderWatch.wanted(this)) {
+            try {
+                OrderWatch.start(this);
+            } catch (Exception ignored) {
+            }
+        }
 
         web = new WebView(this);
         setContentView(web);
@@ -105,10 +115,62 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_PERM_STORAGE);
         }
 
-        if (savedInstanceState != null) {
+        String open = getIntent().getStringExtra("open");
+        if (open != null && isOurs(open)) {
+            web.loadUrl(open);
+        } else if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
         } else {
             web.loadUrl(BuildConfig.HOME_URL);
+        }
+    }
+
+    private boolean isOurs(String url) {
+        Uri u = Uri.parse(url);
+        return "https".equals(u.getScheme()) && homeHost.equalsIgnoreCase(u.getHost());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String open = intent.getStringExtra("open");
+        if (open != null && isOurs(open) && web != null) web.loadUrl(open);   // tapped an order notification
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        OrderWatch.appVisible = true;
+    }
+
+    /** Called by the Orders bell on the website for staff who handle online orders. */
+    private void askToWatchOrders() {
+        if (Build.VERSION.SDK_INT >= 33 && !hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
+            android.content.SharedPreferences p = getSharedPreferences("orders", MODE_PRIVATE);
+            if (p.getBoolean("asked_notify", false)) return;   // asked before and refused: phone Settings decides
+            p.edit().putBoolean("asked_notify", true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_PERM_NOTIFY);
+            return;   // continues in onRequestPermissionsResult
+        }
+        startWatch();
+    }
+
+    private void startWatch() {
+        try {
+            OrderWatch.start(this);
+        } catch (Exception e) {
+            return;
+        }
+        // ask once to let the app run in the background (so orders arrive while the phone is locked)
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        android.content.SharedPreferences p = getSharedPreferences("orders", MODE_PRIVATE);
+        if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName()) && !p.getBoolean("asked_battery", false)) {
+            p.edit().putBoolean("asked_battery", true).apply();
+            try {
+                startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -182,6 +244,14 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void watchOrders(boolean on) {
+            runOnUiThread(() -> {
+                if (on) askToWatchOrders();
+                else OrderWatch.stop(MainActivity.this);
+            });
+        }
+
+        @JavascriptInterface
         public String version() {
             return BuildConfig.VERSION_NAME;
         }
@@ -209,6 +279,9 @@ public class MainActivity extends Activity {
             afterBluetoothPermission = null;
             if (granted && then != null) then.run();
             else if (!granted) toast("Allow 'Nearby devices' so the app can use the Bluetooth printer.");
+        } else if (requestCode == REQ_PERM_NOTIFY) {
+            if (granted) startWatch();
+            else toast("Allow notifications so new orders can ring on this phone.");
         } else if (requestCode == REQ_PERM_CAM && pendingCamera != null) {
             if (granted) pendingCamera.grant(pendingCamera.getResources());
             else pendingCamera.deny();
@@ -240,6 +313,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        OrderWatch.appVisible = false;
         CookieManager.getInstance().flush();   // stay logged in
     }
 

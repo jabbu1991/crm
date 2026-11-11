@@ -1,0 +1,76 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Packing charge{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📦 Packing charge</h1>
+  <nav class="actions small"><a href="{{ url_for('cafe.settings') }}">← Settings</a></nav>
+</div>
+<form method="post" class="form pk-form">
+  {{ csrf() }}
+  <section class="card">
+    <label class="check"><input type="checkbox" name="packing_on" value="1" {{ 'checked' if st.packing_on }}> <b>Add a packing charge to bills</b></label>
+    <div class="pk-types">
+      <span>For:</span>
+      <label class="check"><input type="checkbox" name="packing_takeaway" value="1" {{ 'checked' if st.packing_takeaway }}> Takeaway</label>
+      <label class="check"><input type="checkbox" name="packing_delivery" value="1" {{ 'checked' if st.packing_delivery }}> Delivery</label>
+      <span class="muted small">(never for dine-in)</span>
+    </div>
+    <label class="pk-default">Usual packing charge per item (₹)
+      <input name="packing_default" id="pk-default" inputmode="decimal" value="{{ paise_str(st.packing_default) }}"></label>
+    <p class="muted small">The bill gets one line "Packing charge" = each ticked item's charge × quantity. GST is added at the
+      items' rate when GST is on. On the billing screen it can be taken off for one bill.</p>
+  </section>
+
+  <section class="card">
+    <div class="pk-head">
+      <h2>Items with a packing charge</h2>
+      {% if total %}<label class="check pk-all"><input type="checkbox" id="pk-all"> Select all</label>{% endif %}
+    </div>
+    {% if not total %}<p class="muted">Add menu items first.</p>{% endif %}
+    {% macro rows(list) %}
+      {% for it in list %}
+      <div class="pk-row">
+        <label class="check pk-name"><input type="checkbox" class="pk-item" name="items" value="{{ it.id }}" {{ 'checked' if it.packing }}>
+          {% if it.serial %}<span class="muted small">{{ it.serial }}.</span>{% endif %} {{ it.name }}</label>
+        <span class="pk-amt">₹ <input name="amt_{{ it.id }}" inputmode="decimal" value="{{ paise_str(it.packing) if it.packing else '' }}" placeholder="{{ paise_str(st.packing_default) }}" aria-label="Packing charge for {{ it.name }}"></span>
+      </div>
+      {% endfor %}
+    {% endmacro %}
+    {% for c in cats if by_cat.get(c.id) %}
+    <div class="pk-cat">
+      <label class="check pk-catname"><input type="checkbox" class="pk-catall"> <b>{{ c.name }}</b> <span class="muted small">· select all</span></label>
+      {{ rows(by_cat[c.id]) }}
+    </div>
+    {% endfor %}
+    {% if by_cat.get(None) %}
+    <div class="pk-cat">
+      <label class="check pk-catname"><input type="checkbox" class="pk-catall"> <b>Other</b> <span class="muted small">· select all</span></label>
+      {{ rows(by_cat[None]) }}
+    </div>
+    {% endif %}
+  </section>
+  <div class="sticky-save"><button class="btn btn-primary btn-big">💾 Save</button></div>
+</form>
+<script>
+(function () {
+  var def = document.getElementById("pk-default");
+  function amtOf(cb) { return cb.closest(".pk-row").querySelector(".pk-amt input"); }
+  function sync() {
+    document.querySelectorAll(".pk-cat").forEach(function (c) {
+      var its = c.querySelectorAll(".pk-item"), on = 0; its.forEach(function (x) { if (x.checked) on++; });
+      var a = c.querySelector(".pk-catall"); a.checked = its.length && on === its.length; a.indeterminate = on && on < its.length;
+    });
+    var all = document.querySelectorAll(".pk-item"), n = 0; all.forEach(function (x) { if (x.checked) n++; });
+    var pa = document.getElementById("pk-all"); if (pa) { pa.checked = all.length && n === all.length; pa.indeterminate = n && n < all.length; }
+    all.forEach(function (x) { amtOf(x).disabled = !x.checked; });
+  }
+  function tick(cb, v) { cb.checked = v; var a = amtOf(cb); if (v && !a.value) a.value = def.value; }
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.classList.contains("pk-item")) { tick(t, t.checked); sync(); }
+    else if (t.classList.contains("pk-catall")) { t.closest(".pk-cat").querySelectorAll(".pk-item").forEach(function (x) { tick(x, t.checked); }); sync(); }
+    else if (t.id === "pk-all") { document.querySelectorAll(".pk-item").forEach(function (x) { tick(x, t.checked); }); sync(); }
+  });
+  sync();
+})();
+</script>
+{% endblock %}

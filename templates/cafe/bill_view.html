@@ -54,6 +54,7 @@
   <dl class="details totals-dl">
     <dt>Subtotal</dt><dd>{{ b.subtotal|rs }}</dd>
     {% if b.discount %}<dt>Discount</dt><dd>-{{ b.discount|rs }}</dd>{% endif %}
+    {% if b.packing %}<dt>Packing charge</dt><dd>{{ b.packing|rs }}</dd>{% endif %}
     {% if b.gst_on %}<dt>Taxable</dt><dd>{{ b.taxable|rs }}</dd><dt>CGST + SGST</dt><dd>{{ b.cgst|rs }} + {{ b.sgst|rs }}</dd>{% endif %}
     {% if b.points_redeemed %}<dt>Points used</dt><dd>{{ b.points_redeemed }} (-{{ b.points_value|rs }})</dd>{% endif %}
     {% if b.round_off %}<dt>Round off</dt><dd>{{ b.round_off|rs }}</dd>{% endif %}

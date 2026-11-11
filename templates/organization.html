@@ -40,6 +40,8 @@
   <fieldset>
     <legend>📒 Digital catalogue</legend>
     <label class="check"><input type="checkbox" name="catalog_on" value="1" {{ 'checked' if org.catalog_on }}> Publish the catalogue</label>
+    <label>How products are shown
+      <select name="catalog_layout">{% for k, v in CATALOG_LAYOUTS.items() %}<option value="{{ k }}" {{ 'selected' if (org.catalog_layout or 'grid') == k }}>{{ v }}</option>{% endfor %}</select></label>
     <label>About your business <small>(shown at the top)</small><textarea name="catalog_about" rows="3" maxlength="600">{{ org.catalog_about or '' }}</textarea></label>
     <label>Logo<input type="file" name="catalog_logo" accept="image/*"></label>
     {% if org.catalog_logo %}<div class="thumbs"><figure><img src="{{ url_for('media', name=org.catalog_logo) }}" alt="Logo"></figure></div>

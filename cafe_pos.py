@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from flask import abort, flash, g, jsonify, make_response, redirect, render_template, request, session, url_for
 
-from cafe import (ORDER_TYPES, PAYMENT_MODES, BILL_PAY_MODES, PAY_COLS, parse_payment, pay_text, card_url, qr_svg, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals,
+from cafe import (ORDER_TYPES, PAYMENT_MODES, BILL_PAY_MODES, PAY_COLS, parse_payment, pay_text, card_url, qr_svg, fmt_measure, line_amount_text, UNIT_PER, add_points, bp, cafe_name, cafe_view, can, compute_totals, packing_charge, packing_applies,
                   customer_by_phone, customer_choice, expire_points, get_settings, has_cafe, host as H, live_banners, max_redeemable,
                   menu_data, menu_url, offer_active, effective_price, phone10, point_value, points_for_amount,
                   round_rupee, rupees, take_points, theme_css, to_int, to_paise, to_float, today, today_date, token,
@@ -221,7 +221,8 @@ def settle(db, order, payload):
     disc = discount_paise(payload, subtotal)
     if disc and not can("bill_discount"):
         raise BillError("You are not allowed to give discounts.")
-    t = compute_totals(lines, st["gst_on"], st["gst_inclusive"], disc)
+    packing = 0 if payload.get("no_packing") else packing_charge(st, order["order_type"], lines)
+    t = compute_totals(lines, st["gst_on"], st["gst_inclusive"], disc, packing)
 
     cust = payload.get("customer") or {}
     cid = order["customer_id"]
@@ -260,14 +261,14 @@ def settle(db, order, payload):
     cur = db.execute("""INSERT INTO cafe_bills (org_id, bill_no, bill_date, order_id, order_type, table_name,
                         customer_id, cust_name, cust_phone, subtotal, discount, taxable, cgst, sgst, points_redeemed,
                         points_value, round_off, total, points_earned, payment_mode, gst_on, gst_inclusive, gstin,
-                        status, token, created_by, created_at, pay_cash, pay_upi, pay_card, due)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?,?,?,?,?,?,?)""",
+                        status, token, created_by, created_at, pay_cash, pay_upi, pay_card, due, packing)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?,?,?,?,?,?,?,?)""",
                      (oid, next_no(db, "cafe_bills", "bill_no"), day, order["id"], order["order_type"], table_name,
                       cid, customer["name"] if customer else (cust.get("name") or order["cust_name"] or None),
                       customer["whatsapp"] if customer else None, t["subtotal"], t["discount"], t["taxable"],
                       t["cgst"], t["sgst"], redeem, pv, total - payable, total, earned, mode,
                       1 if st["gst_on"] else 0, 1 if st["gst_inclusive"] else 0, st["gstin"] if st["gst_on"] else None,
-                      token(), g.user["id"], ts, p_cash, p_upi, p_card, due))
+                      token(), g.user["id"], ts, p_cash, p_upi, p_card, due, t["packing"]))
     bill_id = cur.lastrowid
     db.executemany("""INSERT INTO cafe_bill_items (org_id, bill_id, item_id, name, qty, price, gst_rate, amount, unit,
                       measure, unit_price, price_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -340,6 +341,7 @@ def pos():
         "start_type": request.args.get("type") or ("dine_in" if request.args.get("table") else "takeaway"),
         "start_table": request.args.get("table", type=int),
         "gst_on": st["gst_on"], "gst_inclusive": st["gst_inclusive"], "kot_on": st["kot_on"],
+        "packing": {k: packing_applies(st, k) for k in ("takeaway", "delivery")},
         "loyalty": st["loyalty"]["on"], "point_value": point_value(st), "birthday_on": st["birthday_on"],
         "referral_on": st["referral"]["on"], "modes": PAYMENT_MODES, "org": g.org["code"].lower(),
         "perms": {p: can(p) for p in ("bill_discount", "points_redeem", "customers_view", "price_edit")},
@@ -500,6 +502,8 @@ def orders():
     oid = _org()
     base = """SELECT o.*, t.name table_name, u.name created_name,
                 (SELECT COALESCE(SUM(price * qty), 0) FROM cafe_order_items i WHERE i.order_id = o.id) amount,
+                (SELECT COALESCE(SUM(i.qty * m.packing), 0) FROM cafe_order_items i JOIN menu_items m ON m.id = i.item_id
+                   WHERE i.order_id = o.id AND i.qty > 0) pack_all,
                 (SELECT GROUP_CONCAT(qty || ' × ' || name || CASE WHEN measure IS NOT NULL THEN ' ' || measure || ' ' || unit ELSE '' END, ', ') FROM cafe_order_items i WHERE i.order_id = o.id
                    AND i.qty > 0) summary,
                 (SELECT MAX(id) FROM cafe_kots k WHERE k.order_id = o.id) last_kot
@@ -509,8 +513,19 @@ def orders():
     running = H.query(base + "AND o.status = 'open' ORDER BY o.id", (oid,))
     done = H.query(base + "AND o.status IN ('billed', 'rejected', 'cancelled') AND o.order_date = ? ORDER BY o.id DESC"
                    " LIMIT 60", (oid, today()))
-    return render_template("cafe/orders.html", pending=pending, running=running, done=done, ORDER_TYPES=ORDER_TYPES,
-                           st=get_settings())
+    st = get_settings()
+
+    def with_packing(rows):   # takeaway / delivery: the amount shown includes the packing charge (before GST)
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["packing"] = d.pop("pack_all") if packing_applies(st, d["order_type"]) else 0
+            d.pop("pack_all", None)
+            d["amount"] += d["packing"]
+            out.append(d)
+        return out
+    return render_template("cafe/orders.html", pending=with_packing(pending), running=with_packing(running), done=done,
+                           ORDER_TYPES=ORDER_TYPES, st=st)
 
 
 @bp.route("/cafe/orders/pending.json")
@@ -656,6 +671,8 @@ def bill_whatsapp_text(st, b, items, link, balance=None, card=None):
     lines.append("")
     if b["discount"]:
         lines.append(f"Discount: -{rupees(b['discount'])}")
+    if "packing" in b.keys() and b["packing"]:
+        lines.append(f"Packing charge: {rupees(b['packing'])}")
     if b["points_redeemed"]:
         lines.append(f"Points used: {b['points_redeemed']} (-{rupees(b['points_value'])})")
     lines.append(f"*Total: {rupees(b['total'])}* ({pay_text(b)})")
@@ -907,6 +924,7 @@ def public_menu(code):
     cfg = {
         "cats": data[0], "items": data[1], "banners": banners,
         "top": customer_choice(org["id"], data[1], st["choice_count"]) if st["choice_on"] else [],
+        "packing": {k: packing_applies(st, k) for k in ("takeaway", "delivery")},
         "online": bool(st["online_on"] and types), "types": {k: ORDER_TYPES[k] for k in types},
         "table": dict(table) if table else None, "birthday_on": st["birthday_on"],
         "referral": st["referral"]["on"], "ref": (request.args.get("ref") or "")[:20],

@@ -1,17 +1,52 @@
 {% extends '_catalog_base.html' %}
 {% block content %}
 {% if org.catalog_about %}<p class="cat-about">{{ org.catalog_about }}</p>{% endif %}
-<div class="cat-grid">
+{% if products|length > 6 or cats|length > 1 %}
+<div class="cat-tools">
+  {% if products|length > 6 %}<input type="search" id="cat-search" class="cat-search" placeholder="🔍 Search products" aria-label="Search products">{% endif %}
+  {% if cats|length > 1 %}
+  <div class="cat-chips" role="tablist">
+    <button type="button" class="cat-chip on" data-cat="">All</button>
+    {% for c in cats %}<button type="button" class="cat-chip" data-cat="{{ c }}">{{ c }}</button>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+<div class="cat-grid layout-{{ layout }}" id="cat-grid">
 {% for p in products %}
-  <a class="cat-card" href="{{ url_for('catalog_product', code=org.code.lower(), pid=p.id, l=token or None) }}">
+  <a class="cat-card" data-cat="{{ p.category or '' }}" data-name="{{ (p.name ~ ' ' ~ (p.category or ''))|lower }}"
+     href="{{ url_for('catalog_product', code=org.code.lower(), pid=p.id, l=token or None) }}">
     {% if p.photo %}<img src="{{ url_for('media', name=p.photo) }}" alt="{{ p.name }}" loading="lazy">{% else %}<div class="cat-noimg">{{ p.name[:1]|upper }}</div>{% endif %}
     <div class="cat-card-body">
-      {% if p.category %}<span class="cat-cat">{{ p.category }}</span>{% endif %}
-      <b>{{ p.name }}</b>
-      {% if p.price %}<span class="cat-price">{{ p.price }}</span>{% endif %}
-      {% if p.description %}<span class="cat-desc">{{ p.description[:110] }}{{ '…' if p.description|length > 110 }}</span>{% endif %}
+      {% if p.category and layout != 'grid' %}<span class="cat-cat">{{ p.category }}</span>{% endif %}
+      <b class="cat-name">{{ p.name }}</b>
+      <span class="cat-price">{{ p.price|price_text if p.price else 'Price on request' }}</span>
+      {% if p.description and layout != 'grid' %}<span class="cat-desc">{{ p.description[:110] }}{{ '…' if p.description|length > 110 }}</span>{% endif %}
     </div>
   </a>
 {% else %}<p class="cat-about">Products will be listed here soon.</p>{% endfor %}
 </div>
+<p class="cat-about cat-none" id="cat-none" hidden>No product matches.</p>
+<script>
+(function () {
+  var cat = "", q = "", cards = document.querySelectorAll("#cat-grid .cat-card");
+  function apply() {
+    var shown = 0;
+    cards.forEach(function (c) {
+      var ok = (!cat || c.dataset.cat === cat) && (!q || c.dataset.name.indexOf(q) >= 0);
+      c.hidden = !ok; if (ok) shown++;
+    });
+    document.getElementById("cat-none").hidden = shown > 0 || !cards.length;
+  }
+  document.querySelectorAll(".cat-chip").forEach(function (b) {
+    b.addEventListener("click", function () {
+      cat = b.dataset.cat;
+      document.querySelectorAll(".cat-chip").forEach(function (x) { x.classList.toggle("on", x === b); });
+      apply();
+    });
+  });
+  var s = document.getElementById("cat-search");
+  if (s) s.addEventListener("input", function () { q = s.value.trim().toLowerCase(); apply(); });
+})();
+</script>
 {% endblock %}
