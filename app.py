@@ -268,7 +268,8 @@ def load_user():
 VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static", "switch_module", "cafe.switch_mode"}
 # Pages a Cafe-only organization still uses (everything else in the CRM is hidden from it).
 SHARED_ENDPOINTS = {"logout", "login", "org_login", "org_manifest", "org_icon", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
-                    "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product"}
+                    "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product",
+                    "whats_new", "whats_new_seen", "feature_request", "perf_ping", "perf_tap"}
 WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
                         "product_edit", "staff_new", "staff_edit", "account", "prod.order_new", "prod.order_edit",
                         "prod.order_move", "prod.product_edit", "prod.stage_set"}

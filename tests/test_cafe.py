@@ -1342,3 +1342,16 @@ def test_billing_screen_most_sold_tab(cw):
     page = b.get("/cafe/pos").text
     m = re.search(r'"top": \[([^\]]*)\]', page)
     assert [int(x) for x in m.group(1).split(",")] == [ids["Ccc"], ids["Aaa"]]
+
+
+def test_cafe_people_can_open_and_close_whats_new(cw):
+    b = cw["cafe"]
+    settings(b)
+    page = b.get("/cafe/pos").text
+    assert "wn-strip" in page and "Packing charge" in page
+    nid = int(re.search(r'/whats-new/(\d+)/seen', page).group(1))
+    r = b.post(f"/whats-new/{nid}/seen", {"next": "/cafe/pos"})
+    assert r.status_code == 200 and "Page not found" not in r.text
+    r = b.get("/whats-new")
+    assert r.status_code == 200 and "Most sold" in r.text and "Staff performance" not in r.text
+    assert "wn-strip" not in b.get("/cafe/pos").text
