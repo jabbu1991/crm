@@ -1,0 +1,76 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Lead Capture{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📥 Lead Capture</h1>
+  {% if 'form_link' in on and not viewing %}<a class="btn btn-primary" href="{{ url_for('capture_form_new') }}">+ New lead form</a>{% endif %}</div>
+
+<section class="card">
+  <h2>Ways on for your company</h2>
+  <ul class="cap-list">
+  {% for k, label, d in FEATURES %}{% if k in on %}<li>✅ <b>{{ label }}</b> — <span class="muted">{{ d }}</span>
+    {% if k == 'share' %}<div class="small">How: install this app on the phone (Chrome ⋮ → Add to Home screen / Install app). In WhatsApp, long-press a message → Share → choose this app.</div>{% endif %}
+    {% if k == 'quick_add' %}<div class="small">How: tap <b>＋ Lead</b> at the bottom right of any CRM page.</div>{% endif %}
+  </li>{% endif %}{% endfor %}
+  </ul>
+  {% set soon = [] %}{% for k, label, d in FEATURES %}{% if k in SOON %}{% set _ = soon.append(label) %}{% endif %}{% endfor %}
+  <p class="small muted">Coming soon: {{ soon|join(', ') }}. Want another way switched on? Ask us from <a href="{{ url_for('whats_new') }}">🆕 What's new</a>.</p>
+</section>
+
+{% if 'form_link' in on %}
+<section class="card">
+  <h2>🔗 Lead Form Links &amp; QR</h2>
+  <p class="small muted">Put a link in your ad, Instagram bio or WhatsApp status, or print the QR on a poster. Each source has its own link, so you can see which one brings leads. A customer who fills it twice is not added twice.</p>
+  {% for f in forms %}
+  <div class="cap-form" id="form{{ f.id }}">
+    <div class="cap-form-head">
+      <div><b>{{ f.title }}</b>{% if not f.active %} <span class="badge">off</span>{% endif %}
+        <div class="small muted">{{ f.project_name or '—' }} · leads go to {{ {'admin': 'the admin', 'user': 'one staff member', 'rotate': 'staff in turn'}[f.assign_mode] }} · {{ f.views }} opened · {{ f.submits }} sent{% if f.views %} ({{ (100 * f.submits / f.views)|round|int }}%){% endif %}</div></div>
+      {% if not viewing %}<a class="btn btn-sm" href="{{ url_for('capture_form_edit', fid=f.id) }}">Edit</a>{% endif %}
+    </div>
+    <table class="table cap-links"><thead><tr><th>Source</th><th>Link</th><th>Opened</th><th>Sent</th><th></th></tr></thead><tbody>
+    {% set st = {} %}{% for s in stats.get(f.id, []) %}{% set _ = st.update({s.src: s}) %}{% endfor %}
+    {% for src, label in [('', 'Main link')] + LINK_SOURCES %}{% set url = url_for('public_form', code=g.org.code.lower(), slug=f.slug, s=src or None, _external=True) %}
+      <tr><td class="nowrap">{{ label }}</td>
+        <td><input class="cap-url" readonly value="{{ url }}" onclick="this.select()"></td>
+        <td>{{ st[src].views if src in st else 0 }}</td><td>{{ st[src].submits if src in st else 0 }}</td>
+        <td class="nowrap"><button type="button" class="btn btn-sm" onclick="navigator.clipboard.writeText('{{ url }}');this.textContent='✓ Copied'">Copy</button>
+          <a class="btn btn-sm" href="{{ url_for('capture_form_qr', fid=f.id, s=src or 'qr') }}">QR</a></td></tr>
+    {% endfor %}
+    {% for src, s in st.items() if src and src not in LINK_SOURCES|map('first')|list %}<tr class="muted"><td>{{ src }}</td><td></td><td>{{ s.views }}</td><td>{{ s.submits }}</td><td></td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  {% else %}<p class="muted">No forms yet. {% if not viewing %}<a href="{{ url_for('capture_form_new') }}">Make your first form →</a>{% endif %}</p>{% endfor %}
+  <form method="post" class="form cap-pixel">{{ csrf() }}<input type="hidden" name="act" value="pixel">
+    <label>Meta Pixel ID <span class="muted small">(optional — Facebook/Instagram ads count each sent form as a “Lead”)</span>
+      <input name="meta_pixel" inputmode="numeric" maxlength="20" value="{{ org_row.meta_pixel or '' }}" placeholder="e.g. 123456789012345"></label>
+    {% if not viewing %}<button class="btn btn-sm">Save</button>{% endif %}
+  </form>
+</section>
+{% endif %}
+
+{% if 'catalog_enquiry' in on %}
+<section class="card">
+  <h2>📒 Catalogue Enquiry Form</h2>
+  {% if org_row.catalog_allowed and org_row.catalog_on %}
+  <p>Each product page of your <a href="{{ url_for('catalog_page', code=g.org.code.lower()) }}" target="_blank">digital catalogue</a> now has an enquiry form. Leads land in the campaign <b>Catalogue Enquiries</b> with the product ticked.</p>
+  {% else %}<p class="muted">Your digital catalogue is off, so the form is not shown. Switch the catalogue on in Organization Settings.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if 'gforms' in on %}
+<section class="card">
+  <h2>📝 Google Forms Connect</h2>
+  <p class="small">Answers to your Google Form come in as leads (campaign <b>Google Forms</b>). The form needs questions with “Name” and “Phone” in them; other answers go into the lead's notes.</p>
+  <ol class="small">
+    <li>Open your Google Form → ⋮ (top right) → <b>Apps Script</b>.</li>
+    <li>Delete what is there, paste the script below, tap 💾 Save.</li>
+    <li>Click ⏰ <b>Triggers</b> → <b>Add trigger</b> → function <b>onSubmit</b>, event <b>From form · On form submit</b> → Save → allow access.</li>
+    <li>Fill the form once yourself to test: the lead appears in Leads.</li>
+  </ol>
+  <textarea class="cap-script" readonly rows="12" onclick="this.select()">{{ gscript }}</textarea>
+  <p><button type="button" class="btn btn-sm" onclick="navigator.clipboard.writeText(this.closest('section').querySelector('textarea').value);this.textContent='✓ Copied'">Copy script</button></p>
+  {% if not viewing %}<form method="post" onsubmit="return confirm('Make a new address? The script in your Google Form stops working until you paste the new one.')">{{ csrf() }}<input type="hidden" name="act" value="gform_token">
+    <button class="linkbtn small">Make a new address (if the script was shared by mistake)</button></form>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

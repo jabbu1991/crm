@@ -1,0 +1,10 @@
+{# Paste & Fill and Pick from Contacts buttons for a lead form. Needs a form with data-capture. #}
+{% macro capture_tools() %}{% if capture_on('paste') or capture_on('contacts') %}
+<div class="cap-tools">
+  {% if capture_on('paste') %}<button type="button" class="btn btn-sm" data-cap="paste">📋 Paste &amp; Fill</button>{% endif %}
+  {% if capture_on('contacts') %}<button type="button" class="btn btn-sm" data-cap="contacts">👤 From Contacts</button>{% endif %}
+  {% if capture_on('paste') %}<div class="cap-paste" hidden>
+    <textarea rows="4" placeholder="Paste a WhatsApp message, an enquiry or visiting-card text here"></textarea>
+    <button type="button" class="btn btn-sm btn-primary" data-cap="fill">Fill the form</button>
+  </div>{% endif %}
+</div>{% endif %}{% endmacro %}

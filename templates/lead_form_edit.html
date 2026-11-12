@@ -1,0 +1,33 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}{{ 'Edit lead form' if form else 'New lead form' }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🔗 {{ 'Edit lead form' if form else 'New lead form' }}</h1></div>
+{% set v = request.form if request.method == 'POST' else (form or {}) %}
+<form method="post" class="card form">
+  {{ csrf() }}
+  <div class="row-2">
+    <label>Title (customers see this) *<input name="title" required maxlength="80" value="{{ v.title or '' }}" placeholder="e.g. Free demo – book now"></label>
+    <label>Link name<input name="slug" maxlength="40" value="{{ v.slug or '' }}" placeholder="made from the title"><span class="small muted">The end of the link: …/lf/{{ g.org.code.lower() }}/<b>{{ v.slug or 'demo' }}</b></span></label>
+  </div>
+  <label>Short text above the form<textarea name="intro" rows="2" maxlength="300">{{ v.intro or '' }}</textarea></label>
+  <div class="row-2">
+    <label>Campaign the leads go to *<select name="project_id" required><option value="">— Choose —</option>{% for p in projects %}<option value="{{ p.id }}" {{ 'selected' if (v.project_id|string) == (p.id|string) }}>{{ p.name }}</option>{% endfor %}</select></label>
+    <label>Lead source<select name="source"><option value="">— From the link (Facebook, Instagram…) —</option>{% for s in sources %}<option {{ 'selected' if v.source == s }}>{{ s }}</option>{% endfor %}</select></label>
+  </div>
+  <fieldset><legend>Questions</legend>
+    <p class="small muted">Name and phone are always asked.</p>
+    {% set flds = (v.fields or 'place,product,message').split(',') if request.method != 'POST' else [] %}
+    <div class="checks">{% for k, label in FORM_FIELDS %}<label class="check"><input type="checkbox" name="fld_{{ k }}" value="1" {{ 'checked' if (k in flds or request.form.get('fld_' ~ k)) }}> {{ label }}</label>{% endfor %}</div>
+  </fieldset>
+  <fieldset><legend>Who gets the leads</legend>
+    {% set mode = v.assign_mode or 'admin' %}
+    <label class="check"><input type="radio" name="assign_mode" value="admin" {{ 'checked' if mode == 'admin' }}> The admin (assign later)</label>
+    <label class="check"><input type="radio" name="assign_mode" value="rotate" {{ 'checked' if mode == 'rotate' }}> Staff in turn (one by one)</label>
+    <label class="check"><input type="radio" name="assign_mode" value="user" {{ 'checked' if mode == 'user' }}> This staff member:
+      <select name="assign_user"><option value="">—</option>{% for s in staff %}<option value="{{ s.id }}" {{ 'selected' if (v.assign_user|string) == (s.id|string) }}>{{ s.name }}</option>{% endfor %}</select></label>
+  </fieldset>
+  <label>Thank-you message<input name="thank_text" maxlength="300" value="{{ v.thank_text or '' }}" placeholder="Thank you! We will call you soon."></label>
+  <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if (v.active if form or request.method == 'POST' else True) }}> Form is on</label>
+  <div class="actions"><button class="btn btn-primary">Save</button><a class="btn" href="{{ url_for('lead_capture') }}">Cancel</a></div>
+</form>
+{% endblock %}

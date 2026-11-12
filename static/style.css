@@ -601,3 +601,27 @@ body.board-dragging { cursor: grabbing; user-select: none; }
 .pcb { flex: 1 0 14px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; font-size: 10px; color: #6b7280; }
 .pcb i { display: block; width: 100%; background: #60a5fa; border-radius: 3px 3px 0 0; min-height: 1px; }
 .perf-od { padding: 4px 0; }
+
+/* 📥 Lead Capture */
+.qa-fab { position: fixed; right: 16px; bottom: 18px; z-index: 60; border: 0; border-radius: 999px; padding: 13px 18px; font-size: 16px; font-weight: 700; background: var(--mod, #2563eb); color: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.22); cursor: pointer; }
+.qa-dialog { border: 0; border-radius: 16px; padding: 0; width: min(440px, calc(100vw - 20px)); max-height: calc(100vh - 30px); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.qa-dialog::backdrop { background: rgba(17,24,39,.45); }
+.qa-dialog form { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.qa-head { display: flex; justify-content: space-between; align-items: center; font-size: 17px; }
+.qa-msg { font-size: 14px; min-height: 1em; } .qa-msg.ok { color: #047857; } .qa-msg.warn { color: #b45309; } .qa-msg.err { color: #b91c1c; }
+.cap-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.cap-tools [hidden] { display: none !important; }
+.cap-paste { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; }
+.cap-paste textarea { width: 100%; }
+.cap-dup { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 8px 10px; font-size: 14px; display: flex; flex-direction: column; gap: 3px; }
+.cap-dup[hidden] { display: none; }
+.cap-grid th { font-size: 12px; text-align: center; vertical-align: bottom; } .cap-grid input { width: 20px; height: 20px; }
+.cap-req { background: #fffbeb; }
+.cap-list { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.cap-form { border-top: 1px solid #e5e7eb; padding: 12px 0; }
+.cap-form-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.cap-links td { vertical-align: middle; } .cap-url { width: 100%; min-width: 180px; font-size: 12px; padding: 5px 7px; }
+.cap-script { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; }
+.cap-shared { white-space: pre-wrap; background: #f9fafb; border-radius: 10px; padding: 10px; font-size: 13px; max-height: 200px; overflow: auto; }
+.cap-pixel { margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+@media print { .qa-fab { display: none; } }

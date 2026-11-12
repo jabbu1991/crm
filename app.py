@@ -241,7 +241,7 @@ def load_user():
             request.method == "POST" or request.endpoint in WRITE_FORM_ENDPOINTS):
         abort(403, "Read-only: you are viewing a client's workspace. Exit to make changes.")
 
-    if request.method == "POST" and request.endpoint != "website_enquiry":
+    if request.method == "POST" and request.endpoint not in PUBLIC_POSTS:
         token = session.get("csrf_token")
         if not token or not secrets.compare_digest(token, request.form.get("csrf_token", "")):
             if request.endpoint == "cafe.public_order":
@@ -263,16 +263,20 @@ def load_user():
             session["app_mode"] = "crm"  # opening a CRM page from a link: show the CRM menu
 
 
+# Public POSTs from customers' phones (no login, no form token): guarded by a honeypot and a rate limit instead.
+PUBLIC_POSTS = {"website_enquiry", "public_form", "catalog_enquire", "gform_hook"}
 # While a Super Admin views a client workspace, these are the only POSTs allowed,
 # and these form pages are hidden (their submit would be refused anyway).
 VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static", "switch_module", "cafe.switch_mode"}
 # Pages a Cafe-only organization still uses (everything else in the CRM is hidden from it).
 SHARED_ENDPOINTS = {"logout", "login", "org_login", "org_manifest", "org_icon", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
                     "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product",
-                    "whats_new", "whats_new_seen", "feature_request", "perf_ping", "perf_tap"}
+                    "whats_new", "whats_new_seen", "feature_request", "perf_ping", "perf_tap",
+                    "public_form", "catalog_enquire", "gform_hook"}
 WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
                         "product_edit", "staff_new", "staff_edit", "account", "prod.order_new", "prod.order_edit",
-                        "prod.order_move", "prod.product_edit", "prod.stage_set"}
+                        "prod.order_move", "prod.product_edit", "prod.stage_set", "capture_form_new",
+                        "capture_form_edit"}
 
 
 def audit(action, detail="", org=None):
@@ -872,6 +876,9 @@ def org_manifest(code):
     color = b["palette"]["topbar"] if b["palette"] else "#111827"
     data = {"name": b["name"], "short_name": b["name"][:12], "start_url": url_for("org_login", code=b["code"]),
             "scope": "/", "display": "standalone", "background_color": color, "theme_color": color, "icons": icons}
+    if capture.capture_on("share", org):   # 📥 Lead Capture: the app shows in the phone's Share menu
+        data["share_target"] = {"action": url_for("share_lead"), "method": "GET",
+                                "params": {"title": "title", "text": "text", "url": "url"}}
     resp = app.response_class(json.dumps(data), mimetype="application/manifest+json")
     resp.headers["Cache-Control"] = "no-cache"
     return resp
@@ -3795,6 +3802,7 @@ import family  # noqa: E402
 import production  # noqa: E402
 import updates  # noqa: E402
 import perf  # noqa: E402
+import capture  # noqa: E402
 
 cafe.init(sys.modules[__name__])
 production.init(sys.modules[__name__])
@@ -3803,6 +3811,7 @@ backup_drive.init(sys.modules[__name__])
 instagram_stories.init(sys.modules[__name__])
 updates.init(sys.modules[__name__])
 perf.init(sys.modules[__name__])
+capture.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

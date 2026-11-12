@@ -4,11 +4,17 @@ key       unique, never reused (the note is stored once per server)
 date      'YYYY-MM-DD' (India date) — shown, and used to skip notes older than a new account
 module    all | crm | cafe | prod | fam   (who has that module sees it)
 audience  all | admins
-feature   optional: 'perf' → companies without it get a 🙋 Request button
+feature   optional: 'perf' / 'capture' → companies without it get a 🙋 Request button
 Screens are in English, so the notes are too.
 """
 
 SHIPPED = [
+    {"key": "2026-11-12-lead-capture", "date": "2026-11-12", "module": "crm", "audience": "admins", "feature": "capture",
+     "title": "📥 New: Lead Capture — get leads in faster",
+     "body": "Quick Add (＋ Lead button on every page), Pick from Contacts, Share a WhatsApp message to the app, "
+             "Paste & Fill, Duplicate Alert while typing a phone number, Lead Form links and QR codes for your ads "
+             "(with counts per source), an enquiry form on the catalogue, and Google Forms Connect. "
+             "Tap Request and we will switch on the ways that suit you."},
     {"key": "2026-11-11-perf", "date": "2026-11-11", "module": "crm", "audience": "admins", "feature": "perf",
      "title": "📊 New: Staff performance",
      "body": "See each staff member's work: leads added, follow-ups done on time, calls and WhatsApp taps, notes, "
@@ -34,4 +40,5 @@ SHIPPED = [
 
 FEATURES = {
     "perf": {"label": "📊 Staff performance", "column": "perf_allowed"},
+    "capture": {"label": "📥 Lead Capture", "column": None},   # the Super Admin picks the ways on Lead Capture
 }

@@ -1,0 +1,23 @@
+{% from '_capture_tools.html' import capture_tools with context %}{% set qa = quick_add_data() %}
+<button type="button" class="qa-fab" data-quick-add title="Quick Add lead">＋ Lead</button>
+<dialog id="qa-dialog" class="qa-dialog" data-dup="{{ url_for('lead_dup_check') if capture_on('dup_alert') else '' }}">
+  <form method="post" action="{{ url_for('lead_quick') }}" class="form" autocomplete="off" data-capture>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="confirm_duplicate" value="">
+    <div class="qa-head"><b>⚡ Quick Add lead</b><button type="button" class="linkbtn qa-close" aria-label="Close">✕</button></div>
+    {{ capture_tools() }}
+    {% if qa.projects %}
+    <label>Campaign *<select name="project_id" required>{% if qa.projects|length > 1 %}<option value="">— Choose —</option>{% endif %}{% for p in qa.projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+    <label>Customer name *<input name="customer_name" required maxlength="120"></label>
+    <label>Phone *<input name="phone" type="tel" required maxlength="40" inputmode="tel"></label>
+    <div class="cap-dup" hidden></div>
+    <div class="row-2">
+      <label>Place<input name="place" maxlength="120"></label>
+      {% if qa.products %}<label>Product<select name="product_id"><option value="">—</option>{% for p in qa.products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>{% endif %}
+    </div>
+    <input type="hidden" name="email">
+    <label>Note<textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+    <div class="qa-msg" role="status"></div>
+    <div class="actions"><button class="btn btn-primary qa-save">Save lead</button><a class="btn" href="{{ url_for('lead_new') }}">Full form</a></div>
+    {% else %}<p class="muted">No campaign yet. {% if is_admin() %}<a href="{{ url_for('project_new') }}">Create one first</a>.{% endif %}</p>{% endif %}
+  </form>
+</dialog>

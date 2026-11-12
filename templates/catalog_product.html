@@ -12,5 +12,23 @@
     {% if p.video_url %}<a class="cat-btn" href="{{ p.video_url }}" target="_blank" rel="noopener">▶ Watch video</a>{% endif %}
     {% if p.brochure_url %}<a class="cat-btn" href="{{ p.brochure_url }}" target="_blank" rel="noopener">📄 Brochure</a>{% endif %}
   </div>
+  {% if capture_on('catalog_enquiry', org) %}
+  <section class="cat-enquire" id="enquire">
+    {% if request.args.get('sent') %}<h2>✅ Thank you!</h2><p class="cat-text">We have your enquiry about {{ p.name }}. We will contact you soon.</p>
+    {% else %}
+    <h2>Enquire about this product</h2>
+    {% if request.args.get('err') %}<p class="lf-error">Please enter your name and a valid phone number.</p>{% endif %}
+    <form method="post" action="{{ url_for('catalog_enquire', code=org.code.lower()) }}" class="lf-form">
+      <input type="hidden" name="pid" value="{{ p.id }}"><input type="hidden" name="l" value="{{ token }}">
+      <div class="lf-hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+      <label>Your name *<input name="name" required maxlength="120" autocomplete="name"></label>
+      <label>Mobile number *<input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel"></label>
+      <label>Place<input name="place" maxlength="120" autocomplete="address-level2"></label>
+      <label>Message<textarea name="message" rows="2" maxlength="1000" placeholder="Size, quantity, when you need it…"></textarea></label>
+      <button class="cat-btn lf-send">Send enquiry</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
 </article>
 {% endblock %}

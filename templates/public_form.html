@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ form.title }} · {{ org.name }}</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="{{ url_for('static', filename='catalog.css') }}">
+  {% if org.meta_pixel %}<script>
+  !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', {{ org.meta_pixel|tojson }}); fbq('track', 'PageView');{% if done %} fbq('track', 'Lead');{% endif %}
+  </script>{% endif %}
+</head>
+<body>
+<header class="cat-head">
+  <span class="cat-brand">{% if org.catalog_logo %}<img src="{{ url_for('media', name=org.catalog_logo) }}" alt="">{% else %}<span class="cat-initial">{{ org.name[:1]|upper }}</span>{% endif %}<b>{{ org.name }}</b></span>
+</header>
+<main class="cat-main">
+  <article class="cat-product lf-card">
+  {% if done %}
+    <h1>✅ Thank you!</h1>
+    <p class="cat-text">{{ form.thank_text or 'We have received your details. We will contact you soon.' }}</p>
+    {% if wa %}<p><a class="cat-btn cat-wa" href="https://wa.me/{{ wa }}?text={{ ('Hi ' ~ org.name ~ ', I just sent the form “' ~ form.title ~ '”.')|urlencode }}">🟢 Chat on WhatsApp</a></p>{% endif %}
+  {% else %}
+    <h1>{{ form.title }}</h1>
+    {% if form.intro %}<p class="cat-text">{{ form.intro }}</p>{% endif %}
+    {% if error %}<p class="lf-error">{{ error }}</p>{% endif %}
+    <form method="post" class="lf-form" autocomplete="on">
+      <input type="hidden" name="s" value="{{ src }}">
+      <div class="lf-hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+      <label>Your name *<input name="name" required maxlength="120" autocomplete="name" value="{{ values.name or '' }}"></label>
+      <label>Mobile number *<input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" value="{{ values.phone or '' }}"></label>
+      {% if 'email' in fields %}<label>Email<input name="email" type="email" maxlength="120" autocomplete="email" value="{{ values.email or '' }}"></label>{% endif %}
+      {% if 'place' in fields %}<label>Place<input name="place" maxlength="120" autocomplete="address-level2" value="{{ values.place or '' }}"></label>{% endif %}
+      {% if 'product' in fields and products %}<label>Interested in<select name="product_id"><option value="">— Choose —</option>{% for p in products %}<option value="{{ p.id }}" {{ 'selected' if (values.product_id|string) == (p.id|string) }}>{{ p.name }}</option>{% endfor %}</select></label>{% endif %}
+      {% if 'message' in fields %}<label>Message<textarea name="message" rows="3" maxlength="1000">{{ values.message or '' }}</textarea></label>{% endif %}
+      <button class="cat-btn lf-send">Send</button>
+      <p class="lf-note">Your details are shared only with {{ org.name }}.</p>
+    </form>
+  {% endif %}
+  </article>
+</main>
+<footer class="cat-foot">Form by <a href="{{ brand.website }}" target="_blank" rel="noopener">{{ brand.product }}</a></footer>
+</body>
+</html>

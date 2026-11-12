@@ -16,7 +16,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1447,9 +1447,55 @@ V26_TABLES = """
     """
 
 
+def _migrate_v27(conn):
+    """📥 Lead Capture: which ways each company may use, public lead forms and their counts. Adds only."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)")}
+    if "meta_pixel" not in cols:
+        conn.execute("ALTER TABLE organizations ADD COLUMN meta_pixel TEXT")
+    if "capture_token" not in cols:   # secret part of the Google Forms Connect address
+        conn.execute("ALTER TABLE organizations ADD COLUMN capture_token TEXT")
+    for stmt in _split(V27_TABLES):
+        conn.execute(stmt)
+
+
+V27_TABLES = """
+CREATE TABLE IF NOT EXISTS org_capture (
+    org_id INTEGER NOT NULL,
+    feature TEXT NOT NULL,                -- quick_add, contacts, share, paste, dup_alert, form_link, catalog_enquiry, gforms
+    enabled_at TEXT NOT NULL,
+    PRIMARY KEY (org_id, feature)
+);
+CREATE TABLE IF NOT EXISTS lead_forms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL,
+    slug TEXT NOT NULL,
+    title TEXT NOT NULL,
+    intro TEXT,
+    project_id INTEGER NOT NULL,
+    source TEXT,                          -- lead source when the link has no ?s=
+    fields TEXT NOT NULL DEFAULT 'place,product,message',
+    assign_mode TEXT NOT NULL DEFAULT 'admin', -- admin | user | rotate
+    assign_user INTEGER,
+    rotate_next INTEGER NOT NULL DEFAULT 0,
+    thank_text TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE (org_id, slug)
+);
+CREATE TABLE IF NOT EXISTS lead_form_stats (
+    form_id INTEGER NOT NULL,
+    src TEXT NOT NULL DEFAULT '',
+    views INTEGER NOT NULL DEFAULT 0,
+    submits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (form_id, src)
+)
+"""
+
+
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21), (22, _migrate_v22), (23, _migrate_v23), (24, _migrate_v24), (25, _migrate_v25), (26, _migrate_v26)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21), (22, _migrate_v22), (23, _migrate_v23), (24, _migrate_v24), (25, _migrate_v25), (26, _migrate_v26), (27, _migrate_v27)]
 
 
 def migrate(db_path):

@@ -96,6 +96,9 @@ def whats_new():
 
 
 def has_feature(org, feature):
+    if feature == "capture":
+        import capture
+        return capture.capture_on(org=org)
     col = updates_list.FEATURES.get(feature, {}).get("column")
     return bool(col and org is not None and col in org.keys() and org[col])
 
@@ -204,6 +207,8 @@ def admin_page():
 
 def admin_request_action(rid, action):
     r = H.query("SELECT * FROM feature_requests WHERE id = ?", (rid,), one=True) or abort(404)
+    if action == "on" and r["feature"] == "capture":
+        return redirect(url_for("admin_capture") + f"#org{r['org_id']}")   # choose which ways to switch on
     if action == "on":
         enable_feature(r["org_id"], r["feature"])
         flash("Switched on and the company was told.", "success")

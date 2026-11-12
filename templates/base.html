@@ -58,7 +58,7 @@
   {% if pcan('import') or pcan('export') %}<a href="{{ url_for('prod.data') }}" class="{{ 'active' if ep.startswith('prod.import') or ep == 'prod.data' }}">⬆⬇ Import / Export</a>{% endif %}
   {% if pcan('settings') %}<a href="{{ url_for('prod.settings') }}" class="{{ 'active' if ep in ('prod.settings', 'prod.stage_set') }}">⚙️ Settings</a>{% endif %}
   {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates', 'admin_capture') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_capture') }}" class="super {{ 'active' if ep == 'admin_capture' }}">📥 Lead Capture</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password and cur_module == 'fam' %}
 <nav class="mainnav fam-nav">
@@ -73,7 +73,7 @@
   <a href="{{ url_for('fam.public_tree', code=g.org.code|lower) }}" target="_blank" rel="noopener">🌳 Family tree ↗</a>
   {% if fcan('settings') %}<a href="{{ url_for('fam.settings') }}" class="{{ 'active' if ep == 'fam.settings' }}">⚙️ Settings</a>{% endif %}
   {% if is_admin() %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates', 'admin_capture') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_capture') }}" class="super {{ 'active' if ep == 'admin_capture' }}">📥 Lead Capture</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password and cafe_mode %}
 <nav class="mainnav cafe-nav">
@@ -93,7 +93,7 @@
   {% if can('settings_edit') %}<a href="{{ url_for('cafe.settings') }}" class="{{ 'active' if ep == 'cafe.settings' }}">Settings</a>
   <a href="{{ url_for('cafe.design') }}" class="{{ 'active' if ep == 'cafe.design' }}">🎨 Menu Design</a>{% endif %}
   {% if is_admin() or can('staff_manage') %}<a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>{% endif %}
-  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
+  {% if is_super() %}<a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates', 'admin_capture') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>{% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_capture') }}" class="super {{ 'active' if ep == 'admin_capture' }}">📥 Lead Capture</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>{% endif %}
 </nav>
 {% elif not g.user.must_change_password %}
 <nav class="mainnav">
@@ -114,12 +114,13 @@
   <a href="{{ url_for('reports') }}" class="{{ 'active' if ep == 'reports' }}">Reports</a>
   {% if perf_on() %}<a href="{{ url_for('performance') }}" class="{{ 'active' if ep in ('performance', 'performance_person') }}">📊 Staff performance</a>{% endif %}
   <a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>
+  {% if capture_on() %}<a href="{{ url_for('lead_capture') }}" class="{{ 'active' if ep in ('lead_capture', 'capture_form_new', 'capture_form_edit') }}">📥 Lead Capture</a>{% endif %}
   <a href="{{ url_for('organization_settings') }}" class="{{ 'active' if ep == 'organization_settings' }}">Organization Settings</a>
   <a href="{{ url_for('recycle_bin') }}" class="{{ 'active' if ep == 'recycle_bin' }}">🗑 Recycle Bin</a>
   {% endif %}
   {% if is_super() %}
-  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>
-  {% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>
+  <a href="{{ url_for('admin_orgs') }}" class="super {{ 'active' if ep.startswith('admin_') and ep not in ('admin_server', 'admin_updates', 'admin_capture') and not ep.startswith('admin_backups') and not ep.startswith('admin_instagram') }}">Client Organizations</a>
+  {% set orq = open_requests() %}<a href="{{ url_for('admin_updates') }}" class="super {{ 'active' if ep == 'admin_updates' }}">📢 Updates{% if orq %} <span class="nav-count">{{ orq|length }}</span>{% endif %}</a><a href="{{ url_for('admin_capture') }}" class="super {{ 'active' if ep == 'admin_capture' }}">📥 Lead Capture</a><a href="{{ url_for('admin_server') }}" class="super {{ 'active' if ep == 'admin_server' }}">🖥 Server</a><a href="{{ url_for('admin_backups') }}" class="super {{ 'active' if ep.startswith('admin_backups') }}">🗄 Backups</a><a href="{{ url_for('admin_instagram') }}" class="super {{ 'active' if ep.startswith('admin_instagram') }}">📸 Instagram</a>
   {% endif %}
 </nav>
 {% endif %}
@@ -494,6 +495,8 @@
   });
 })();
 </script>
+{% if g.user and g.org and not viewing and not g.user.must_change_password and cur_module == 'crm' and (capture_on('quick_add') or ep == 'share_lead') %}{% include '_quick_add.html' %}{% endif %}
+{% if g.user and g.org and capture_on() %}<script src="{{ url_for('static', filename='capture.js') }}" defer></script>{% endif %}
 {% if g.user and perf_on() and not is_super() and not viewing %}
 <script>
 // Staff performance: time actively using the app (visible and used in the last 5 minutes) and Call / WhatsApp taps.

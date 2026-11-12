@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}New lead from share{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📤 Shared to CRM</h1></div>
+<section class="card">
+  <p class="muted small">The details were filled in the Quick Add window. Check them and tap <b>Save lead</b>.</p>
+  {% if shared %}<pre class="cap-shared">{{ shared }}</pre>{% endif %}
+  <p><button type="button" class="btn btn-primary" data-quick-add-shared>⚡ Open Quick Add again</button> <a class="btn" href="{{ url_for('leads') }}">Leads</a></p>
+</section>
+<script>window.RV_SHARED = {{ shared|tojson }};
+document.addEventListener("DOMContentLoaded", function () { var b = document.querySelector("[data-quick-add-shared]");
+  if (b) b.addEventListener("click", function () { window.RVC.openQuick(window.RV_SHARED); }); });</script>
+{% endblock %}

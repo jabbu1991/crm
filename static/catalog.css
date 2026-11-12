@@ -59,3 +59,16 @@ a { color: inherit; }
 
 /* Layout: Large cards (as before) */
 .cat-grid.layout-large { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* 📥 Lead forms (public form page and catalogue enquiry) */
+.lf-card { max-width: 520px; margin: 0 auto; }
+.lf-form { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.lf-form label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; font-weight: 600; color: #374151; }
+.lf-form input, .lf-form select, .lf-form textarea { padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 12px; font: inherit; font-size: 16px; font-weight: 400; background: #fff; }
+.lf-form input:focus, .lf-form select:focus, .lf-form textarea:focus { outline: 2px solid #111827; outline-offset: 1px; }
+.lf-send { justify-content: center; background: #111827; color: #fff; border-color: #111827; font-size: 16px; padding: 13px; cursor: pointer; }
+.lf-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.lf-error { background: #fef2f2; color: #991b1b; border-radius: 10px; padding: 10px 12px; }
+.lf-note { font-size: 12px; color: #6b7280; text-align: center; margin: 0; }
+.cat-enquire { margin-top: 22px; padding-top: 16px; border-top: 1px solid #e5e7eb; scroll-margin-top: 70px; }
+.cat-enquire h2 { font-size: 18px; margin: 0 0 4px; }

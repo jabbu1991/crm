@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}{% from '_capture_tools.html' import capture_tools with context %}
 {% block title %}{{ 'Edit lead' if lead else 'Add lead' }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -19,7 +19,7 @@
 {% if not projects_all %}
 <div class="card empty"><h2>No project available</h2><p>Leads are saved under a project / campaign. {% if is_admin() %}<a href="{{ url_for('project_new') }}">Create a project first →</a>{% else %}Ask your administrator to create one or assign you to a project.{% endif %}</p></div>
 {% else %}
-<form method="post" class="card form lead-form" autocomplete="off">
+<form method="post" class="card form lead-form" autocomplete="off" data-capture{% if capture_on('dup_alert') and not duplicates %} data-dup="{{ url_for('lead_dup_check') }}"{% if lead %} data-exclude="{{ lead.id }}"{% endif %}{% endif %}>
   {{ csrf() }}
   <fieldset>
     <legend>{{ fl('sec_project') }}</legend>
@@ -40,6 +40,7 @@
 
   <fieldset>
     <legend>{{ fl('sec_customer') }}</legend>
+    {% if not lead %}{{ capture_tools() }}{% endif %}
     <div class="row-2">
       <label>{{ fl('customer_name') }} *<input autocomplete="off" name="customer_name" required value="{{ data.customer_name or '' }}" {{ 'autofocus' if not lead }}></label>
       {% if not fhidden('company') %}<label>{{ fl('company') }}<input autocomplete="off" name="company_name" value="{{ data.company_name or '' }}" placeholder="The firm this person represents"></label>{% endif %}
@@ -52,6 +53,7 @@
       </label>{% endif %}
       {% if not fhidden('email') %}<label>{{ fl('email') }}<input autocomplete="off" type="email" name="email" value="{{ data.email or '' }}"></label>{% endif %}
     </div>
+    <div class="cap-dup" hidden></div>
     <div class="row-4">
       {% if not fhidden('place') %}<label>{{ fl('place') }}<input autocomplete="off" name="place" list="places" value="{{ data.place or '' }}"></label>{% endif %}
       {% if not fhidden('district') %}<label>{{ fl('district') }}<input autocomplete="off" name="district" list="districts" value="{{ data.district or '' }}"></label>{% endif %}

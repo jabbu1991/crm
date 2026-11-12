@@ -1,0 +1,24 @@
+{% extends 'base.html' %}{% from '_macros.html' import csrf with context %}
+{% block title %}Lead Capture{% endblock %}
+{% block content %}
+<div class="page-head"><h1>📥 Lead Capture</h1></div>
+<p class="muted">Tick the ways each company may use. Only ticked ways appear for that company. Add Lead and Import stay for everyone. When you switch something on, the company gets a note in 🆕 What's new.</p>
+<form method="post" class="card">
+  {{ csrf() }}
+  <div class="table-wrap"><table class="table cap-grid">
+    <thead><tr><th>Company</th>{% for k, label, d in FEATURES %}<th title="{{ d }}" class="{{ 'muted' if k in SOON }}">{{ label }}{% if k in SOON %}<br><small>coming soon</small>{% endif %}</th>{% endfor %}<th></th></tr></thead>
+    <tbody>
+    {% for o in orgs %}<tr id="org{{ o.id }}" class="{{ 'cap-req' if o.id in reqs }}">
+      <td><b>{{ o.name }}</b>{% if o.id in reqs %}<br><span class="badge">🙋 requested</span>{% endif %}</td>
+      {% for k, label, d in FEATURES %}<td class="center">{% if k in SOON %}<span class="muted">—</span>{% else %}<input type="checkbox" name="f_{{ o.id }}_{{ k }}" value="1" {{ 'checked' if k in on[o.id] }} aria-label="{{ label }} for {{ o.name }}">{% endif %}</td>{% endfor %}
+      <td><button type="button" class="linkbtn small" onclick="this.closest('tr').querySelectorAll('input').forEach(function(c){c.checked=true})">all</button></td>
+    </tr>{% else %}<tr><td colspan="12" class="muted">No company uses the CRM yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <div class="actions"><button class="btn btn-primary">Save</button></div>
+</form>
+<section class="card">
+  <h2>What each way does</h2>
+  <ul class="small">{% for k, label, d in FEATURES %}<li><b>{{ label }}</b>{% if k in SOON %} <span class="muted">(coming soon)</span>{% endif %} — {{ d }}</li>{% endfor %}</ul>
+</section>
+{% endblock %}
