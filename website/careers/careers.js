@@ -1,6 +1,8 @@
-// Careers form: checks the answers, then opens WhatsApp with them. Nothing is sent to any server.
+// Careers form: checks the answers, saves them in our CRM (Job Applications) and shows "submitted".
+// A WhatsApp button then lets the applicant tell us; if saving fails, that button carries the whole application.
 (function () {
   var WHATSAPP_NUMBER = "918547275320";
+  var CRM_URL = "https://crm.realviewcreativestudio.in/job-application";
   var form = document.getElementById("apply-form");
   if (!form) return;
   var errorBox = form.querySelector(".form-error");
@@ -49,7 +51,9 @@
     if (!get("experience")) return fail("Please choose your experience.", form.querySelector("[name=experience]"));
     errorBox.hidden = true;
 
-    var lines = [
+    if (data.get("website")) return;   // bot
+
+    var full = [
       "*Job Application – Real View Creative Studio*",
       "",
       "Name: " + get("name"),
@@ -60,18 +64,34 @@
       "Work location: " + locations.join(", "),
       "Experience: " + get("experience")
     ];
-    if (get("portfolio")) lines.push("Portfolio / Resume: " + get("portfolio"));
-    if (get("about")) lines.push("", "About me:", get("about"));
-    var url = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
+    if (get("portfolio")) full.push("Portfolio / Resume / Instagram: " + get("portfolio"));
+    if (get("about")) full.push("", "About me:", get("about"));
+    var short = "Hi, I have submitted my application for *" + get("role") + "* on your website. My name is *" + get("name") + "*.";
+    var btn = form.querySelector("button[type=submit]");
+    var waBtn = document.getElementById("apply-wa");
 
-    // No personal data in the event: only the role and the choices.
-    pixel().once("apply", "SubmitApplication", {
-      content_name: get("role").slice(0, 60), job_type: jobTypes.join(", "), work_location: locations.join(", ")
-    });
-    okBox.hidden = false;
-    // A new tab keeps this page (and the thank-you note); if the browser blocks it, open WhatsApp here.
-    var win = window.open(url, "_blank");
-    if (win) win.opener = null;
-    else setTimeout(function () { window.location.href = url; }, 300);
+    function done(saved) {
+      btn.disabled = false; btn.textContent = "Submit application";
+      waBtn.href = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(saved ? short : full.join("\n"));
+      if (saved) {
+        okBox.querySelector("p").innerHTML = "<b>✅ Application submitted successfully.</b> Thank you! We will contact you soon.";
+        form.querySelectorAll("input, textarea").forEach(function (x) { x.disabled = true; });
+        btn.style.display = "none";
+        // No personal data in the event: only the role and the choices.
+        pixel().once("apply", "SubmitApplication", {
+          content_name: get("role").slice(0, 60), job_type: jobTypes.join(", "), work_location: locations.join(", ")
+        });
+      } else {
+        okBox.querySelector("p").innerHTML = "<b>⚠️ We could not save it right now.</b> Please send your application on WhatsApp instead.";
+      }
+      okBox.hidden = false;
+      okBox.scrollIntoView({behavior: "smooth", block: "center"});
+    }
+    btn.disabled = true; btn.textContent = "Submitting…";
+    var body = new FormData(form);
+    body.set("whatsapp", phone);
+    fetch(CRM_URL, {method: "POST", body: body})
+      .then(function (r) { done(r.ok); })
+      .catch(function () { done(false); });
   });
 })();

@@ -264,7 +264,7 @@ def load_user():
 
 
 # Public POSTs from customers' phones (no login, no form token): guarded by a honeypot and a rate limit instead.
-PUBLIC_POSTS = {"website_enquiry", "public_form", "catalog_enquire", "gform_hook"}
+PUBLIC_POSTS = {"website_enquiry", "website_job", "public_form", "catalog_enquire", "gform_hook"}
 # While a Super Admin views a client workspace, these are the only POSTs allowed,
 # and these form pages are hidden (their submit would be refused anyway).
 VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "static", "switch_module", "cafe.switch_mode"}
@@ -272,7 +272,8 @@ VIEW_ALLOWED_ENDPOINTS = {"logout", "admin_view_exit", "admin_view_enter", "stat
 SHARED_ENDPOINTS = {"logout", "login", "org_login", "org_manifest", "org_icon", "setup", "reset_password", "account", "static", "media", "staff", "staff_new",
                     "staff_edit", "staff_password", "staff_toggle", "website_enquiry", "catalog_page", "catalog_product",
                     "whats_new", "whats_new_seen", "feature_request", "perf_ping", "perf_tap",
-                    "public_form", "catalog_enquire", "gform_hook"}
+                    "public_form", "catalog_enquire", "gform_hook", "website_job", "notify_key", "notify_subscribe",
+                    "notify_unsubscribe", "notify_test"}
 WRITE_FORM_ENDPOINTS = {"lead_new", "lead_edit", "leads_import", "project_new", "project_edit", "product_new",
                         "product_edit", "staff_new", "staff_edit", "account", "prod.order_new", "prod.order_edit",
                         "prod.order_move", "prod.product_edit", "prod.stage_set", "capture_form_new",
@@ -3806,6 +3807,7 @@ import production  # noqa: E402
 import updates  # noqa: E402
 import perf  # noqa: E402
 import capture  # noqa: E402
+import jobs  # noqa: E402
 
 cafe.init(sys.modules[__name__])
 production.init(sys.modules[__name__])
@@ -3815,6 +3817,7 @@ instagram_stories.init(sys.modules[__name__])
 updates.init(sys.modules[__name__])
 perf.init(sys.modules[__name__])
 capture.init(sys.modules[__name__])
+jobs.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

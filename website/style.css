@@ -362,3 +362,8 @@ a { color: var(--accent); }
   .ps { animation: none !important; } .ps-1 { opacity: 1; }
   .rv { opacity: 1; transform: none; }
 }
+
+/* Careers: after the application is sent */
+.form-success p { margin: 0 0 10px; } .form-success p:last-child { margin: 0; }
+.btn-wa { background: #25d366; color: #fff; box-shadow: none; }
+.form-success[hidden] { display: none; }

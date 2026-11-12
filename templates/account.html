@@ -29,6 +29,51 @@
     </label>
     <p class="muted small">Saved in this browser only, so each browser can use its own setting. Messages go from the WhatsApp account logged in here. Phones always open the WhatsApp app.</p>
   </div>
+  {% if g.org.kind == 'agency' and is_admin() and not viewing %}
+  <h2>📲 Phone notifications</h2>
+  <div class="form">
+    <p class="muted small">New job applications from the website careers page show on this phone or computer, even when the screen is off.</p>
+    <p><button type="button" class="btn btn-sm" id="push-btn" hidden>📲 Turn on notifications</button>
+      <button type="button" class="btn btn-sm" id="push-test" hidden>Send a test</button></p>
+    <p class="small muted" id="push-msg"></p>
+  </div>
+  <script>
+  (function () {
+    var csrf = "{{ csrf_token() }}", msg = document.getElementById("push-msg");
+    var pb = document.getElementById("push-btn"), pt = document.getElementById("push-test");
+    if (!("serviceWorker" in navigator && "PushManager" in window && window.Notification)) {
+      msg.textContent = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone: open this page in Safari → Share ⬆️ → Add to Home Screen, then open it from the Home Screen icon and turn them on here." : "This browser cannot show notifications. Use Chrome.";
+      return;
+    }
+    var b64 = function (s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; };
+    var post = function (url, data) { var fd = new FormData(); fd.append("csrf_token", csrf); Object.keys(data).forEach(function (k) { fd.append(k, data[k]); }); return fetch(url, {method: "POST", body: fd, credentials: "same-origin"}).then(function (r) { return r.json(); }); };
+    pb.hidden = false;
+    navigator.serviceWorker.register("{{ url_for('cafe.service_worker') }}", {scope: "/"}).then(function (reg) {
+      var paint = function (sub) {
+        var on = !!sub && Notification.permission === "granted";
+        pb.textContent = on ? "📲 Notifications on ✓ (tap to turn off)" : "📲 Turn on notifications"; pt.hidden = !on;
+        if (Notification.permission === "denied") msg.textContent = "Notifications are blocked. Chrome ⋮ → Settings → Site settings → Notifications → allow this site.";
+      };
+      reg.pushManager.getSubscription().then(paint);
+      pb.onclick = function () {
+        reg.pushManager.getSubscription().then(function (sub) {
+          if (sub && Notification.permission === "granted") {
+            return post("{{ url_for('notify_unsubscribe') }}", {endpoint: sub.endpoint}).then(function () { return sub.unsubscribe(); }).then(function () { paint(null); msg.textContent = "Notifications off on this device."; });
+          }
+          return fetch("{{ url_for('notify_key') }}", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (k) {
+            return reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64(k.key)});
+          }).then(function (s) {
+            return post("{{ url_for('notify_subscribe') }}", {payload: JSON.stringify(s)}).then(function (d) {
+              paint(d.ok ? s : null); msg.textContent = d.ok ? "Done. Tap 'Send a test' to check." : (d.error || "");
+            });
+          });
+        }).catch(function () { paint(null); msg.textContent = "Could not turn on notifications on this browser."; });
+      };
+      pt.onclick = function () { post("{{ url_for('notify_test') }}", {}).then(function (d) { msg.textContent = d.ok ? "Test sent. It should arrive in a few seconds." : (d.error || ""); }); };
+    }).catch(function () { pb.hidden = true; });
+  })();
+  </script>
+  {% endif %}
   <h2>Change password</h2>
   <form method="post" class="form">
     {{ csrf() }}
