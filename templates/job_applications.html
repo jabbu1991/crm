@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Job Applications{% endblock %}
+{% block content %}
+<div class="page-head"><h1>🧑‍💼 Job Applications ({{ rows|length }})</h1>
+  <a class="btn" href="{{ url_for('job_apps_xlsx') }}">⬇️ Excel</a></div>
+<form method="get" class="card ja-filters">
+  <input name="q" value="{{ q }}" placeholder="Search name, number, place, role…">
+  <select name="role"><option value="">All roles</option>{% for r in roles %}<option {{ 'selected' if r == role }}>{{ r }}</option>{% endfor %}</select>
+  <select name="status"><option value="">All ({{ counts.values()|sum }})</option>{% for s in STATUSES %}<option value="{{ s }}" {{ 'selected' if s == status }}>{{ s }} ({{ counts.get(s, 0) }})</option>{% endfor %}</select>
+  <button class="btn btn-sm">Show</button>{% if q or role or status %} <a class="btn btn-sm" href="{{ url_for('job_apps') }}">Clear</a>{% endif %}
+</form>
+<p class="small muted">Tap a WhatsApp number to send: “We have received your application. Our team will review it and contact you soon.”</p>
+{% for a in rows %}
+<section class="card ja-card ja-{{ a.status|lower }}" id="app{{ a.id }}">
+  <div class="ja-top">
+    <div><b class="ja-name">{{ a.name }}</b>{% if a.applied_before %} <span class="badge">Applied before</span>{% endif %}
+      <div class="small muted">{{ a.created_at|ist('%d %b %Y, %I:%M %p') }}{% if a.place %} · {{ a.place }}{% endif %}</div></div>
+    <select class="ja-status" data-id="{{ a.id }}" {{ 'disabled' if viewing }}>{% for s in STATUSES %}<option {{ 'selected' if s == a.status }}>{{ s }}</option>{% endfor %}</select>
+  </div>
+  {% set msg = message.replace('{name}', a.name).replace('{role}', a.role or 'this').replace('{org_name}', g.org.name) %}
+  {% if a.whatsapp %}<p><a class="btn btn-sm ja-wa" href="https://wa.me/{{ a.whatsapp|wa_number }}?text={{ msg|urlencode }}" data-phone="{{ a.whatsapp|wa_number }}" data-msg="{{ msg }}" target="_blank" rel="noopener">🟢 {{ a.whatsapp }}</a>
+    <a class="btn btn-sm" href="tel:{{ a.whatsapp }}">📞 Call</a></p>{% endif %}
+  <dl class="ja-dl">
+    <dt>Role</dt><dd><b>{{ a.role or '—' }}</b></dd>
+    <dt>Job type</dt><dd>{{ a.job_type or '—' }}</dd>
+    <dt>Work location</dt><dd>{{ a.work_location or '—' }}</dd>
+    <dt>Experience</dt><dd>{{ a.experience or '—' }}</dd>
+    <dt>Portfolio / Resume / Instagram</dt><dd>{% for t in (a.link or '').replace(',', ' ').split() %}<a href="{{ t if t.lower().startswith(('http://', 'https://')) else 'https://' ~ t }}" target="_blank" rel="noopener nofollow">{{ t }}</a>{{ ' · ' if not loop.last }}{% else %}—{% endfor %}</dd>
+    {% if a.about %}<dt>About</dt><dd class="prewrap">{{ a.about }}</dd>{% endif %}
+  </dl>
+  <form method="post" action="{{ url_for('job_app_update', aid=a.id) }}" class="ja-note">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <textarea name="note" rows="2" maxlength="2000" placeholder="Note (e.g. called, interview on Monday)" {{ 'disabled' if viewing }}>{{ a.note or '' }}</textarea>
+    {% if not viewing %}<button class="btn btn-sm">Save note</button>{% endif %}
+  </form>
+</section>
+{% else %}<p class="card muted">No applications{{ ' match' if q or role or status else ' yet' }}.</p>{% endfor %}
+<script>
+(function () {
+  var csrf = "{{ csrf_token() }}";
+  document.querySelectorAll(".ja-status").forEach(function (s) {
+    s.addEventListener("change", function () {
+      var fd = new FormData(); fd.append("csrf_token", csrf); fd.append("status", s.value);
+      fetch("/job-applications/" + s.dataset.id, {method: "POST", body: fd, credentials: "same-origin", headers: {"X-Requested-With": "fetch"}})
+        .then(function (r) { if (!r.ok) throw 0; var c = s.closest(".ja-card"); c.className = c.className.replace(/ja-\w+$/, "ja-" + s.value.toLowerCase()); })
+        .catch(function () { alert("Could not save. Check the connection."); });
+    });
+  });
+  document.querySelectorAll(".ja-wa").forEach(function (a) {
+    a.addEventListener("click", function (e) {
+      if (!window.famOpenWhatsApp) return;
+      e.preventDefault(); e.stopPropagation(); window.famOpenWhatsApp(a.dataset.phone, a.dataset.msg);
+    });
+  });
+})();
+</script>
+{% endblock %}

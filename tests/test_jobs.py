@@ -33,24 +33,31 @@ def test_job_application_to_agency_crm(world, monkeypatch):
     r = c.post("/job-application", data=dict(FORM, org_id=w["org_a"]), headers=SITE)
     assert r.status_code == 201 and r.headers["Access-Control-Allow-Origin"] == SITE["Origin"]
     with w["db"]() as conn:
-        row = conn.execute("SELECT l.id, o.kind, p.code, p.name, l.requirement, l.place, l.notes, l.source"
-                           " FROM leads l JOIN organizations o ON o.id = l.org_id JOIN projects p ON p.id = l.project_id"
-                           " WHERE l.customer_name = 'Asha K'").fetchone()
-        tpl = [t for (t,) in conn.execute("SELECT title FROM wa_templates WHERE org_id = ? AND scope = 'org'", (agency,))]
-    lid = row[0]
-    assert row[1:6] == ("agency", "JOBS", "Job Applications", "Graphic Designer", "Tirur") and row[7] == "Website"
-    assert "Job type: Full-time, Internship" in row[6] and "instagram.com/asha" in row[6]
-    assert "Application received" in tpl and "Interview call" in tpl
-    assert sent and sent[0]["title"] == "🧑‍💼 New job application: Asha K" and sent[0]["url"] == f"/leads/{lid}"
-    assert "Asha K" in w["sup"].get("/leads").get_data(as_text=True)
-    assert "Asha K" not in w["a_admin"].get("/leads").get_data(as_text=True)
-    # the same number again: no second lead, a line in its history; templates not added twice
+        assert conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0] == 0          # not a lead
+        row = conn.execute("SELECT id, org_id, role, place, job_type, work_location, experience, link, status,"
+                           " applied_before FROM job_applications WHERE name = 'Asha K'").fetchone()
+    aid = row[0]
+    assert row[1:] == (agency, "Graphic Designer", "Tirur", "Full-time, Internship", "Remote", "Fresher",
+                       "https://behance.net/asha https://instagram.com/asha", "New", 0)
+    assert sent and sent[0]["title"] == "🧑‍💼 New job application: Asha K" and sent[0]["url"] == f"/job-applications#app{aid}"
+    page = w["sup"].get("/job-applications").get_data(as_text=True)
+    assert "Asha K" in page and "Our team will review it" in page and 'href="https://instagram.com/asha"' in page
+    assert w["a_admin"].get("/job-applications").status_code == 404           # agency only
+    assert w["a_s1"].get("/job-applications").status_code == 403
+    # status and note
+    w["sup"].post(f"/job-applications/{aid}", {"status": "Shortlisted", "note": "Good portfolio"})
+    with w["db"]() as conn:
+        assert conn.execute("SELECT status, note FROM job_applications WHERE id = ?", (aid,)).fetchone() == (
+            "Shortlisted", "Good portfolio")
+    assert "Asha K" in w["sup"].get("/job-applications?status=Shortlisted").get_data(as_text=True)
+    assert "Asha K" not in w["sup"].get("/job-applications?status=New").get_data(as_text=True)
+    assert w["b_admin"].post(f"/job-applications/{aid}", {"status": "Rejected"}).status_code == 404
+    x = w["sup"].get("/job-applications.xlsx")
+    assert x.status_code == 200 and x.data[:2] == b"PK"
+    # the same number again: a new row marked "Applied before"
     c.post("/job-application", data=dict(FORM, role="Video Editor"), headers=SITE)
     with w["db"]() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM leads WHERE phone_norm = '9847011223'").fetchone()[0] == 1
-        hist = [h for (h,) in conn.execute("SELECT action FROM lead_activity WHERE lead_id = ?", (lid,))]
-        assert conn.execute("SELECT COUNT(*) FROM wa_templates WHERE title = 'Interview call'").fetchone()[0] == 1
-    assert any(h.startswith("Applied again on the website — Role: Video Editor") for h in hist)
+        assert conn.execute("SELECT applied_before FROM job_applications WHERE role = 'Video Editor'").fetchone()[0] == 1
     # honeypot and rate limit
     c.post("/job-application", data=dict(FORM, name="Bot", whatsapp="9847000999", website="x"), headers=SITE)
     with w["db"]() as conn:
@@ -74,3 +81,29 @@ def test_admin_notification_switch(world):
     w["sup"].post("/notify/unsubscribe", {"endpoint": "https://push.example/2"})
     with w["db"]() as conn:
         assert conn.execute("SELECT COUNT(*) FROM push_subscriptions").fetchone()[0] == 0
+
+
+def test_old_lead_applications_move_to_the_page(world):
+    w = world
+    sup = w["sup"]
+    agency = w["ids"]("SELECT id FROM organizations WHERE kind = 'agency'")[0]
+    uid = w["uid"]("super")
+    with w["db"]() as conn:
+        pid = conn.execute("INSERT INTO projects (org_id, name, code, status, created_by, created_at) VALUES"
+                           " (?, 'Job Applications', 'JOBS', 'Active', ?, '2026-11-12 20:00:00')", (agency, uid)).lastrowid
+        lid = conn.execute("INSERT INTO leads (org_id, project_id, customer_name, phone, whatsapp, phone_norm, place,"
+                           " requirement, notes, status, entered_by, created_at, updated_at) VALUES"
+                           " (?,?, 'Old Applicant', '9847022334', '9847022334', '9847022334', 'Kochi', 'Video Editor',"
+                           " ?, 'New', ?, '2026-11-12 20:00:00', '2026-11-12 20:00:00')",
+                           (agency, pid, "Role: Video Editor\nJob type: Part-time\nExperience: 3+ years\n"
+                                         "Portfolio / Resume / Instagram: youtube.com/x", uid)).lastrowid
+    page = sup.get("/job-applications").get_data(as_text=True)
+    assert "Old Applicant" in page and "moved here from Leads" in page
+    with w["db"]() as conn:
+        row = conn.execute("SELECT role, job_type, experience, link, place, created_at FROM job_applications").fetchone()
+        assert row == ("Video Editor", "Part-time", "3+ years", "youtube.com/x", "Kochi", "2026-11-12 20:00:00")
+        assert conn.execute("SELECT COUNT(*) FROM leads WHERE id = ?", (lid,)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM deleted_leads WHERE lead_id = ?", (lid,)).fetchone()[0] == 1
+    # opening again moves nothing twice
+    sup.get("/job-applications")
+    assert w["ids"]("SELECT COUNT(*) FROM job_applications")[0] == 1

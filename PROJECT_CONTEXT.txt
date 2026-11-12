@@ -233,10 +233,12 @@ Digital Catalogue (built 16 Oct 2026)
   APK later: floating ＋ bubble over other apps + company icon (pinned shortcut) — not done yet.
   Coming later (shown as 'coming soon'): meta_ads, indiamart. /f/<code>/... belongs to the Family module.
 - Website careers form (website/careers/careers.js) posts to /job-application (jobs.py; CRM_ENQUIRY_ORIGINS, honeypot,
-  rate limit) -> agency lead in campaign code JOBS 'Job Applications' (role in requirement, details in notes; same
-  number again = 'Applied again' activity). First application adds company WhatsApp templates 'Application received'
-  and 'Interview call'. Page shows 'submitted' + optional 'Let us know on WhatsApp' (full details if saving failed).
-  Agency admins turn on phone notifications on My Account (/notify/*, Web Push via cafe_push._dispatch).
+  rate limit) -> table job_applications (v29, agency only; NOT leads). Page /job-applications (agency admins, menu
+  '🧑‍💼 Job Applications'): all form fields, Status New/Shortlisted/Interview/Selected/Rejected, note, filters, Excel;
+  tapping the number opens WhatsApp with jobs.DEFAULT_MESSAGE. Same number again = new row 'Applied before'.
+  Old applications saved as JOBS-campaign leads move here on first page open (leads -> Recycle Bin).
+  Website shows 'submitted' + optional 'Let us know on WhatsApp'. Agency admins turn on phone notifications on
+  My Account (/notify/*, Web Push via cafe_push._dispatch).
 - Cafe billing screen: '⭐ Most sold' tab first (cafe.top_billed, 20 items, 30 days).
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).
 - Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).

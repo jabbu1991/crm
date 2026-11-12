@@ -626,3 +626,16 @@ body.board-dragging { cursor: grabbing; user-select: none; }
 .cap-pixel { margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
 @media print { .qa-fab { display: none; } }
 .cap-default { margin-top: 6px; display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; } .cap-default label { flex: 1 1 240px; }
+
+/* 🧑‍💼 Job Applications */
+.ja-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ja-filters input { flex: 1 1 220px; } .ja-filters select { flex: 0 1 180px; }
+.ja-card { border-left: 4px solid #2563eb; }
+.ja-card.ja-shortlisted { border-left-color: #f59e0b; } .ja-card.ja-interview { border-left-color: #8b5cf6; }
+.ja-card.ja-selected { border-left-color: #10b981; } .ja-card.ja-rejected { border-left-color: #9ca3af; opacity: .8; }
+.ja-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.ja-name { font-size: 17px; } .ja-status { width: auto; }
+.ja-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0; font-size: 14px; }
+.ja-dl dt { color: #6b7280; } .ja-dl dd { margin: 0; word-break: break-word; }
+@media (max-width: 560px) { .ja-dl { grid-template-columns: 1fr; } .ja-dl dd { margin-bottom: 6px; } }
+.ja-note { display: flex; gap: 8px; align-items: flex-end; } .ja-note textarea { flex: 1; }

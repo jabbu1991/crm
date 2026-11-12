@@ -113,6 +113,7 @@
   {% if is_admin() %}
   <a href="{{ url_for('reports') }}" class="{{ 'active' if ep == 'reports' }}">Reports</a>
   {% if perf_on() %}<a href="{{ url_for('performance') }}" class="{{ 'active' if ep in ('performance', 'performance_person') }}">📊 Staff performance</a>{% endif %}
+  {% if g.org.kind == 'agency' %}<a href="{{ url_for('job_apps') }}" class="{{ 'active' if ep == 'job_apps' }}">🧑‍💼 Job Applications</a>{% endif %}
   <a href="{{ url_for('staff') }}" class="{{ 'active' if ep.startswith('staff') }}">Staff &amp; Users</a>
   {% if capture_on() %}<a href="{{ url_for('lead_capture') }}" class="{{ 'active' if ep in ('lead_capture', 'capture_form_new', 'capture_form_edit') }}">📥 Lead Capture</a>{% endif %}
   <a href="{{ url_for('organization_settings') }}" class="{{ 'active' if ep == 'organization_settings' }}">Organization Settings</a>

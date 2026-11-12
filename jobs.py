@@ -1,25 +1,22 @@
-"""Website Careers form → agency CRM ("Job Applications"), with a phone notification to the agency's admins.
+"""Website Careers form → agency CRM page 🧑‍💼 Job Applications (not leads), with a phone notification to the admins.
 
 The website posts here from the careers page (only from CRM_ENQUIRY_ORIGINS, like the contact form). No login,
 no form token: the organization, campaign and creator are fixed here, never taken from the form.
 Admins turn on phone notifications on My Account (Web Push, the same helper as the cafe and family alerts).
 """
+import io
 import json
 import re
 import time
 
-from flask import g, request, url_for
+from flask import abort, flash, g, redirect, render_template, request, send_file, url_for
 
 H = None
 _hits = {}
-TEMPLATES = [
-    ("Application received",
-     "Hi {name}, thank you for applying to {org_name}. We have received your application and will contact you "
-     "soon.\n\n– {my_name}"),
-    ("Interview call",
-     "Hi {name}, this is {my_name} from {org_name}. We liked your application and would like to talk to you. "
-     "When is a good time to call you?"),
-]
+STATUSES = ["New", "Shortlisted", "Interview", "Selected", "Rejected"]
+# Tapping an applicant's WhatsApp number opens WhatsApp with this message ({name}, {role}, {org_name}).
+DEFAULT_MESSAGE = ("Hi {name},\n\nThank you for applying to {org_name} for the {role} role. We have received your "
+                   "application. Our team will review it and contact you soon.\n\nRegards,\n{org_name}")
 
 
 def init(host):
@@ -28,6 +25,9 @@ def init(host):
     app = host.app
     r = app.add_url_rule
     r("/job-application", "website_job", website_job, methods=["POST", "OPTIONS"])
+    r("/job-applications", "job_apps", host.admin_required(page))
+    r("/job-applications/<int:aid>", "job_app_update", host.admin_required(update), methods=["POST"])
+    r("/job-applications.xlsx", "job_apps_xlsx", host.admin_required(export))
     r("/notify/key", "notify_key", host.admin_required(notify_key))
     r("/notify/subscribe", "notify_subscribe", host.admin_required(notify_subscribe), methods=["POST"])
     r("/notify/unsubscribe", "notify_unsubscribe", host.admin_required(notify_unsubscribe), methods=["POST"])
@@ -61,57 +61,130 @@ def website_job():
         return {"ok": False, "error": "name_phone_role_required"}, 400, headers
     pick = lambda k: ", ".join(H.clean(x)[:30] for x in f.getlist(k)[:5] if H.clean(x))
     link = _clean("portfolio", 500)
-    details = [("Role", role), ("Job type", pick("job_type")), ("Work location", pick("location")),
-               ("Experience", _clean("experience", 30)), ("Portfolio / Resume / Instagram", link),
-               ("About", _clean("about", 600))]
-    notes = "\n".join(f"{k}: {v}" for k, v in details if v)
 
     db = H.get_db()
     org = db.execute("SELECT * FROM organizations WHERE kind = 'agency' ORDER BY id LIMIT 1").fetchone()
-    owner = org and db.execute("SELECT id FROM users WHERE org_id = ? AND role = ? AND active = 1 ORDER BY id LIMIT 1",
-                               (org["id"], H.SUPER_ADMIN)).fetchone()
-    if not owner:
+    if not org:
         return {"ok": False, "error": "not_set_up"}, 503, headers
-    oid, uid, ts = org["id"], owner[0], H.now()
-    project = db.execute("SELECT id FROM projects WHERE org_id = ? AND code = 'JOBS'", (oid,)).fetchone()
-    if project:
-        pid = project[0]
-    else:
-        pid = db.execute(
-            "INSERT INTO projects (org_id, name, code, campaign_type, description, status, created_by, created_at,"
-            " updated_at) VALUES (?, 'Job Applications', 'JOBS', 'Other', 'Applications from the website careers page',"
-            " 'Active', ?, ?, ?)", (oid, uid, ts, ts)).lastrowid
-        _add_templates(db, oid, uid, ts)
-    key = H.phone_key(phone)
-    old = db.execute("SELECT id FROM leads WHERE org_id = ? AND project_id = ? AND phone_norm = ? ORDER BY id DESC LIMIT 1",
-                     (oid, pid, key)).fetchone()
-    if old:
-        lid = old[0]
-        db.execute("UPDATE leads SET updated_at = ? WHERE id = ?", (ts, lid))
-        db.execute("INSERT INTO lead_activity (lead_id, user_id, action, created_at) VALUES (?,?,?,?)",
-                   (lid, uid, "Applied again on the website — " + notes.replace("\n", " · "), ts))
-    else:
-        opts = lambda kind, want: want if want in H.opt_all(kind, oid) else ""
-        lid = db.execute(
-            "INSERT INTO leads (org_id, project_id, customer_name, phone, whatsapp, phone_norm, place, requirement,"
-            " notes, status, priority, source, country, entered_by, assigned_to, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'India', ?,?,?,?)",
-            (oid, pid, name, phone, phone, key, place, role, notes, H.default_status(oid), H.default_priority(oid),
-             opts("source", "Website"), uid, uid, ts, ts)).lastrowid
-        db.execute("INSERT INTO lead_activity (lead_id, user_id, action, created_at) VALUES (?,?,?,?)",
-                   (lid, uid, "Job application from the website careers page", ts))
+    oid, ts, key = org["id"], H.now(), H.phone_key(phone)
+    before = db.execute("SELECT 1 FROM job_applications WHERE org_id = ? AND phone_norm = ?", (oid, key)).fetchone()
+    aid = db.execute(
+        "INSERT INTO job_applications (org_id, name, whatsapp, phone_norm, place, role, job_type, work_location,"
+        " experience, link, about, applied_before, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (oid, name, phone, key, place, role, pick("job_type"), pick("location"), _clean("experience", 30), link,
+         _clean("about", 600), 1 if before else 0, ts, ts)).lastrowid
     db.commit()
     notify_admins(oid, f"🧑‍💼 New job application: {name}", f"{role} · {place} — tap to open",
-                  f"/leads/{lid}", f"job-{lid}")
+                  f"/job-applications#app{aid}", f"job-{aid}")
     return {"ok": True}, 201, headers
 
 
-def _add_templates(db, oid, uid, ts):
-    have = {r[0] for r in db.execute("SELECT title FROM wa_templates WHERE org_id = ? AND scope = 'org'", (oid,))}
-    for i, (title, body) in enumerate(TEMPLATES):
-        if title not in have:
-            db.execute("INSERT INTO wa_templates (org_id, scope, title, body, active, sort, created_by, created_at)"
-                       " VALUES (?, 'org', ?, ?, 1, ?, ?, ?)", (oid, title, body, 50 + i, uid, ts))
+# ---------------------------------------------------------------- the Job Applications page (agency admins)
+
+def _agency_only():
+    if g.org["kind"] != "agency":
+        abort(404)
+
+
+def page():
+    _agency_only()
+    if not g.get("viewing"):
+        _move_old_leads()
+    oid = g.org["id"]
+    a = request.args
+    q, role, status = (a.get("q") or "").strip(), (a.get("role") or "").strip(), a.get("status") or ""
+    where, args = ["org_id = ?"], [oid]
+    if q:
+        where.append("(name LIKE ? OR whatsapp LIKE ? OR place LIKE ? OR role LIKE ? OR about LIKE ?)")
+        args += [f"%{q}%"] * 5
+    if role:
+        where.append("role = ? COLLATE NOCASE")
+        args.append(role)
+    if status in STATUSES:
+        where.append("status = ?")
+        args.append(status)
+    rows = H.query(f"SELECT * FROM job_applications WHERE {' AND '.join(where)} ORDER BY created_at DESC, id DESC "
+                   "LIMIT 500", args)
+    roles = [r[0] for r in H.query("SELECT DISTINCT role FROM job_applications WHERE org_id = ? AND role != '' "
+                                   "ORDER BY role COLLATE NOCASE", (oid,))]
+    counts = {r["status"]: r["n"] for r in H.query("SELECT status, COUNT(*) n FROM job_applications WHERE org_id = ? "
+                                                    "GROUP BY status", (oid,))}
+    return render_template("job_applications.html", rows=rows, roles=roles, counts=counts, STATUSES=STATUSES,
+                           q=q, role=role, status=status, message=DEFAULT_MESSAGE)
+
+
+def update(aid):
+    _agency_only()
+    row = H.query("SELECT * FROM job_applications WHERE id = ? AND org_id = ?", (aid, g.org["id"]), one=True) or abort(404)
+    f = request.form
+    status = f.get("status") if f.get("status") in STATUSES else row["status"]
+    note = H.clean(f.get("note"))[:2000] if "note" in f else row["note"]
+    H.execute("UPDATE job_applications SET status = ?, note = ?, updated_at = ?, updated_by = ? WHERE id = ?",
+              (status, note, H.now(), g.user["id"], aid))
+    if request.headers.get("X-Requested-With") == "fetch":
+        return {"ok": True}
+    flash("Saved.", "success")
+    return redirect(url_for("job_apps") + f"#app{aid}")
+
+
+def export():
+    _agency_only()
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Job applications"
+    ws.append(["Applied", "Name", "WhatsApp", "Place", "Role", "Job type", "Work location", "Experience",
+               "Portfolio / Resume / Instagram", "About", "Status", "Note", "Applied before"])
+    for r in H.query("SELECT * FROM job_applications WHERE org_id = ? ORDER BY created_at DESC, id DESC", (g.org["id"],)):
+        ws.append([H.ist_time(r["created_at"], "%d-%m-%Y %H:%M"), r["name"], r["whatsapp"], r["place"], r["role"],
+                   r["job_type"], r["work_location"], r["experience"], r["link"], r["about"], r["status"], r["note"],
+                   "Yes" if r["applied_before"] else ""])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = min(40, max(10, max(len(str(c.value or "")) for c in col) + 2))
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return send_file(out, as_attachment=True, download_name="job-applications.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+NOTE_KEYS = {"Role": "role", "Job type": "job_type", "Work location": "work_location", "Experience": "experience",
+             "Portfolio / Resume / Instagram": "link", "About": "about"}
+
+
+def _move_old_leads():
+    """Applications saved as leads (campaign JOBS, before this page existed) move here; the leads go to the
+    Recycle Bin (restorable for 30 days), so nothing is lost."""
+    db = H.get_db()
+    oid = g.org["id"]
+    old = H.query(f"SELECT {H.LEAD_COLUMNS} {H.LEAD_FROM} WHERE l.org_id = ? AND p.code = 'JOBS'", (oid,))
+    if not old:
+        return 0
+    ts = H.now()
+    for lead in old:
+        if db.execute("SELECT 1 FROM job_applications WHERE from_lead = ?", (lead["id"],)).fetchone():
+            continue
+        vals = {v: "" for v in NOTE_KEYS.values()}
+        for line in (lead["notes"] or "").splitlines():
+            k, _, v = line.partition(": ")
+            if k in NOTE_KEYS:
+                vals[NOTE_KEYS[k]] = v.strip()
+        extra = [h for (h,) in db.execute("SELECT action FROM lead_activity WHERE lead_id = ? AND action LIKE "
+                                          "'Applied again%' ORDER BY id", (lead["id"],))]
+        db.execute(
+            "INSERT INTO job_applications (org_id, name, whatsapp, phone_norm, place, role, job_type, work_location,"
+            " experience, link, about, note, from_lead, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (oid, lead["customer_name"], lead["whatsapp"] or lead["phone"], lead["phone_norm"], lead["place"],
+             vals["role"] or lead["requirement"] or "", vals["job_type"], vals["work_location"], vals["experience"],
+             vals["link"], vals["about"], "\n".join(extra), lead["id"], lead["created_at"], ts))
+        H.move_to_recycle_bin(db, lead, ts)
+    db.commit()
+    flash(f"{len(old)} earlier application(s) were moved here from Leads. The old lead copies are in the Recycle Bin.",
+          "success")
+    return len(old)
 
 
 # ---------------------------------------------------------------- phone notifications for admins
