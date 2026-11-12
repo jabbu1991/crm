@@ -876,6 +876,9 @@ def org_manifest(code):
     color = b["palette"]["topbar"] if b["palette"] else "#111827"
     data = {"name": b["name"], "short_name": b["name"][:12], "start_url": url_for("org_login", code=b["code"]),
             "scope": "/", "display": "standalone", "background_color": color, "theme_color": color, "icons": icons}
+    if capture.capture_on("quick_add", org):   # long-press the app icon (phone) / right-click (computer) → Quick Add
+        data["shortcuts"] = [{"name": "＋ Quick Add lead", "short_name": "＋ Lead", "url": url_for("quick_add_page"),
+                              "icons": [icons[0]]}]
     if capture.capture_on("share", org):   # 📥 Lead Capture: the app shows in the phone's Share menu
         data["share_target"] = {"action": url_for("share_lead"), "method": "GET",
                                 "params": {"title": "title", "text": "text", "url": "url"}}

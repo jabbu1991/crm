@@ -227,6 +227,10 @@ Digital Catalogue (built 16 Oct 2026)
   product page -> POST /c/<code>/enquire, campaign code CAT), gforms (Apps Script posts JSON to
   /hook/gform/<organizations.capture_token>, campaign code GFORM). Public leads: entered_by = company admin, same phone
   again = 'Enquired again' activity, honeypot 'website' + per-IP rate limit, no CSRF (PUBLIC_POSTS in app.py).
+  Quick Add: campaign optional -> organizations.quick_project (v28, admin sets on Lead Capture page) else project code
+  GEN 'General Leads' (auto-made); follow-up date defaults to tomorrow (schedule_follow_up). Manifest 'shortcuts'
+  -> /quick-add (app icon long-press / taskbar right-click). WhatsApp text messages have no Share: use Paste & Fill.
+  APK later: floating ＋ bubble over other apps + company icon (pinned shortcut) — not done yet.
   Coming later (shown as 'coming soon'): meta_ads, indiamart. /f/<code>/... belongs to the Family module.
 - Cafe billing screen: '⭐ Most sold' tab first (cafe.top_billed, 20 items, 30 days).
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).

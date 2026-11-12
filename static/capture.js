@@ -138,6 +138,11 @@
   };
 
   // ------------------------------------------------------------ Quick Add window
+  function tomorrow() {
+    var d = new Date(); d.setDate(d.getDate() + 1);
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+
   RVC.initQuick = function () {
     var dlg = document.getElementById("qa-dialog");
     if (!dlg) return;
@@ -151,6 +156,7 @@
       form.reset(); confirm.value = ""; msg.textContent = ""; msg.className = "qa-msg"; dupBox.hidden = true;
       var sel = form.querySelector('[name="project_id"]');
       if (sel && lastProject && sel.querySelector('option[value="' + lastProject + '"]')) sel.value = lastProject;
+      var fu = form.querySelector(".qa-fu"); if (fu) fu.value = tomorrow();
       if (text) RVC.fill(form, RVC.parse(text), true);
       if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
       setTimeout(function () { (form.querySelector('[name="customer_name"]').value
@@ -176,6 +182,7 @@
             var keep = form.querySelector('[name="project_id"]').value;
             form.reset(); confirm.value = ""; dupBox.hidden = true;
             form.querySelector('[name="project_id"]').value = keep;
+            var fu2 = form.querySelector(".qa-fu"); if (fu2) fu2.value = tomorrow();
             form.querySelector('[name="customer_name"]').focus();
           } else if (j.duplicate) {
             msg.className = "qa-msg warn";

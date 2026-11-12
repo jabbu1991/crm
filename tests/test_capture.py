@@ -59,7 +59,22 @@ def test_switches_and_staff_tools(world):
     row = one(w, "SELECT org_id, entered_by, assigned_to, place, notes, whatsapp, phone_norm FROM leads WHERE id = ?", (lid,))
     assert row[:6] == (w["org_a"], w["uid"]("a_staff1"), w["uid"]("a_staff1"), "Kochi", "wants demo", "98470 12345")
     assert one(w, "SELECT COUNT(*) FROM lead_products WHERE lead_id = ?", (lid,))[0] == 1
-    assert s1.post("/leads/quick", {"customer_name": "No project", "phone": "9847000002"}).status_code == 400
+    # no campaign chosen: 'General Leads' is made and used; the follow-up date is saved
+    j = s1.post("/leads/quick", {"customer_name": "No project", "phone": "9847000002",
+                                 "next_follow_up": "2026-12-01"}).get_json()
+    assert j["ok"]
+    row = one(w, "SELECT p.code, l.next_follow_up FROM leads l JOIN projects p ON p.id = l.project_id WHERE l.id = ?", (j["id"],))
+    assert row == ("GEN", "2026-12-01")
+    assert one(w, "SELECT COUNT(*) FROM follow_ups WHERE lead_id = ? AND status = 'Pending'", (j["id"],))[0] == 1
+    assert s1.post("/leads/quick", {"customer_name": "Bad date", "phone": "9847000005",
+                                    "next_follow_up": "31-12-2026"}).status_code == 400
+    # the admin picks the default campaign
+    admin.post("/lead-capture", {"act": "quick_project", "quick_project": w["proj_a"]})
+    j = s1.post("/leads/quick", {"customer_name": "Default camp", "phone": "9847000006"}).get_json()
+    assert one(w, "SELECT project_id FROM leads WHERE id = ?", (j["id"],))[0] == w["proj_a"]
+    assert "A Campaign (default)" in s1.get("/").get_data(as_text=True)
+    assert 'type="date" name="next_follow_up"' in s1.get("/").get_data(as_text=True)
+    assert "⚡ Quick Add" in s1.get("/quick-add").get_data(as_text=True)
     # another company's product is ignored
     j = s1.post("/leads/quick", {"project_id": w["proj_a"], "customer_name": "P", "phone": "9847000003",
                                  "product_id": w["prod_b1"]}).get_json()
@@ -81,7 +96,7 @@ def test_switches_and_staff_tools(world):
     assert 'data-dup="/leads/dup-check"' in form and "From Contacts" in form
     # Share to CRM: the app is in the phone's Share menu; the share page opens Quick Add filled
     man = json.loads(s1.get("/orga/app.webmanifest").get_data(as_text=True))
-    assert man["share_target"]["action"] == "/share-lead"
+    assert man["share_target"]["action"] == "/share-lead" and man["shortcuts"][0]["url"] == "/quick-add"
     assert "share_target" not in json.loads(s1.get("/orgb/app.webmanifest").get_data(as_text=True))
     page = s1.get("/share-lead?text=Rahul%0A9847099999").get_data(as_text=True)
     assert "RV_SHARED" in page and "9847099999" in page and "qa-dialog" in page
@@ -89,7 +104,7 @@ def test_switches_and_staff_tools(world):
     switch(w, w["org_a"], ["dup_alert"])
     assert s1.post("/leads/quick", {"project_id": w["proj_a"], "customer_name": "Z", "phone": "9847000004"}).status_code == 404
     assert "qa-fab" not in s1.get("/").get_data(as_text=True)
-    assert s1.get("/share-lead").status_code == 404
+    assert s1.get("/share-lead").status_code == 404 and s1.get("/quick-add").status_code == 404
 
 
 def test_lead_form_link(world):

@@ -16,6 +16,11 @@ from test_crm import PW, Browser, crm, crm_db  # noqa: F401
 import production
 
 
+def india_today():
+    """The app's day is the India day (tests may run on a UTC machine just after midnight IST)."""
+    return date.fromisoformat(crm.today())
+
+
 @pytest.fixture()
 def pw(tmp_path, monkeypatch):
     db_path = str(tmp_path / "crm.db")
@@ -78,7 +83,7 @@ def stage_id(W, code, name):
 def test_migration_keeps_modules_and_production_starts_off(pw):
     c = pw["db"]()
     rows = {r["code"]: r for r in c.execute("SELECT * FROM organizations")}
-    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 27
+    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 28
     assert rows["STAR"]["mod_crm"] == 1 and rows["STAR"]["mod_prod"] == 1 and rows["STAR"]["mod_cafe"] == 0
     assert rows["ONLY"]["mod_prod"] == 0 and rows["ONLY"]["app_type"] == "crm"
     assert rows["FACT"]["mod_crm"] == 0 and rows["FACT"]["mod_prod"] == 1
@@ -182,7 +187,7 @@ def test_full_flow_maker_bill_warranty_points(pw):
                                              "power_source": "Electric", "quantity": "1", "unit_price": "14000",
                                              "prod_days": "10", "approved_by": "Abdul Salam",
                                              "referral_code": ref_code.lower(),
-                                             "adv_date": [date.today().isoformat()], "adv_amount": ["2000"],
+                                             "adv_date": [india_today().isoformat()], "adv_amount": ["2000"],
                                              "adv_note": ["UPI"],
                                              "part_name": ["Motor"], "part_company": ["Crompton"], "part_months": ["24"],
                                              "part_serial": ["CR1"]})
@@ -194,14 +199,14 @@ def test_full_flow_maker_bill_warranty_points(pw):
     assert "Who makes it?" in r.text
     r = star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1"})
     assert "Choose who makes it" in r.text
-    start = date.today().isoformat()
+    start = india_today().isoformat()
     r = star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
                                                          "new_maker": "Babu", "new_maker_phone": "9000011111",
                                                          "mfg_start": start, "exp_finish": "", "maker_amount": ""})
     assert "→ In Production" in r.text
     o = orders(pw, "STAR")[-1]
     assert o["maker_id"] and o["maker_amount"] is None
-    assert o["exp_finish"] == (date.today() + timedelta(days=10)).isoformat()
+    assert o["exp_finish"] == (india_today() + timedelta(days=10)).isoformat()
     # maker amount can be added later
     star.post(f"/production/orders/{o['id']}/maker-amount", {"maker_amount": "3500", "maker_id": o["maker_id"]})
     assert orders(pw, "STAR")[-1]["maker_amount"] == 350000
@@ -214,7 +219,7 @@ def test_full_flow_maker_bill_warranty_points(pw):
     # Ready -> Dispatch asks the GST bill number
     r = star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "Dispatch")})
     assert "GST bill no" in r.text
-    bill_day = (date.today() - timedelta(days=5)).isoformat()
+    bill_day = (india_today() - timedelta(days=5)).isoformat()
     r = star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "Dispatch"), "confirm": "1",
                                                          "bill_no": "GST/26/101", "bill_date": bill_day})
     assert "→ Dispatch" in r.text
@@ -223,11 +228,11 @@ def test_full_flow_maker_bill_warranty_points(pw):
     c = pw["db"]()
     assert c.execute("SELECT points FROM prod_customers WHERE unit_code = ?", (ref_code,)).fetchone()[0] == 1
     o = orders(pw, "STAR")[-1]
-    assert o["points_given"] == 1 and o["delivered_date"] == date.today().isoformat()
+    assert o["points_given"] == 1 and o["delivered_date"] == india_today().isoformat()
     # customer link: warranty page from the bill date, parts too, never the maker
     page = Browser().get(f"/t/star/{o['token']}").text
     days_left = (date.fromisoformat(bill_day).replace(year=date.fromisoformat(bill_day).year + 1)
-                 - timedelta(days=1) - date.today()).days
+                 - timedelta(days=1) - india_today()).days
     end_day = (date.fromisoformat(bill_day).replace(year=date.fromisoformat(bill_day).year + 1) - timedelta(days=1))
     # default: "Under warranty · valid till <date>", no countdown of days
     assert "Under warranty" in page and end_day.strftime("%d-%m-%Y") in page and "days of warranty left" not in page
@@ -283,7 +288,7 @@ def test_redeem_points_and_cancel_gives_no_points(pw):
     cid, pts = c.execute("SELECT id, points FROM prod_customers WHERE unit_code = ?", (code,)).fetchone()
     assert pts == 2
     r = star.post(f"/production/customers/{cid}", {"action": "redeem", "points": "2", "amount": "", "pay_mode": "UPI",
-                                                   "pay_date": date.today().isoformat(), "note": "ref 123"})
+                                                   "pay_date": india_today().isoformat(), "note": "ref 123"})
     assert "Redeemed 2 points (₹2,000 paid)" in r.text
     assert c.execute("SELECT points FROM prod_customers WHERE id = ?", (cid,)).fetchone()[0] == 0
     tok = c.execute("SELECT token FROM prod_orders WHERE customer_id = ? ORDER BY id LIMIT 1", (cid,)).fetchone()[0]
@@ -303,7 +308,7 @@ def test_queue_dates_follow_what_is_really_in_production(pw):
         from flask import g
         g.org = pw["db"]().execute("SELECT * FROM organizations WHERE code = 'STAR'").fetchone()
         sc = production.schedule(g.org["id"])
-    t = date.today()
+    t = india_today()
     # nothing in production: one after another
     assert [sc[i]["finish"] for i in ids] == [t + timedelta(days=10 * n) for n in (1, 2, 3)]
     # two orders put into production -> two places; the third starts when the first place frees up
@@ -477,7 +482,7 @@ def queue_positions(W):
 
 def test_queue_priority_first_advance_then_pin(pw):
     star = pw["star"]
-    t = date.today()
+    t = india_today()
     # A ordered first but no advance; B paid an advance 3 days ago; C paid 10 days ago (small amount is enough)
     star.post("/production/orders/new", {"name": "A", "phone": "9000000801", "product_name": "Pump"})
     star.post("/production/orders/new", {"name": "B", "phone": "9000000802", "product_name": "Pump",
@@ -519,13 +524,13 @@ def test_maker_page_counts_month_production_finished(pw):
     o = orders(pw, "STAR")
     assert o[0]["finished_at"] and o[1]["finished_at"] and o[2]["finished_at"] is None
     # one of them finished last month (as if)
-    last = (date.today().replace(day=1) - timedelta(days=1)).isoformat() + " 10:00:00"
+    last = (india_today().replace(day=1) - timedelta(days=1)).isoformat() + " 10:00:00"
     c = sqlite3.connect(pw["db_path"])
     c.execute("UPDATE prod_orders SET finished_at = ? WHERE id = ?", (last, ids[0]))
     c.commit()
     html = star.get(f"/production/makers/{mid}").text
     assert "Month by month" in html and "Making now" in html
-    this_m, last_m = date.today().isoformat()[:7], last[:7]
+    this_m, last_m = india_today().isoformat()[:7], last[:7]
     page = star.get(f"/production/makers/{mid}?month={this_m}").text
     assert "<b>#2</b>" in page and "<b>#1</b>" not in page and "<b>#3</b>" not in page
     page = star.get(f"/production/makers/{mid}?month={last_m}").text
@@ -549,7 +554,7 @@ def test_maker_month_is_ready_for_dispatch_day_and_date_can_be_set(pw):
                                                   "bill_no": "OLD-77", "bill_date": "2026-03-18"})
     mid = orders(pw, "STAR")[0]["maker_id"]
     # counts in the month it reached Ready for Dispatch, even though the GST bill date is earlier
-    assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month={date.today().isoformat()[:7]}").text
+    assert "<b>#1</b>" in star.get(f"/production/makers/{mid}?month={india_today().isoformat()[:7]}").text
     assert "<b>#1</b>" not in star.get(f"/production/makers/{mid}?month=2026-03").text
     # set by hand wins
     star.post(f"/production/orders/{oid_}/finished", {"finished": "2026-02-10"})
@@ -656,7 +661,7 @@ def test_count_in_month_and_amounts(pw):
     star = pw["star"]
     db = pw["db"]
     aid = db().execute("SELECT id FROM users WHERE username = 'star_admin'").fetchone()[0]
-    this_m = date.today().isoformat()[:7]
+    this_m = india_today().isoformat()[:7]
     # order taker: date chosen on the new-order form + incentive
     star.post("/production/orders/new", {"name": "Month One", "phone": "9000001300", "product_name": "Pump",
                                          "taken_by": str(aid), "taker_month": "2026-01-15", "taker_amount": "300"})
@@ -737,7 +742,7 @@ def test_customer_page_extras(pw):
     assert "Thank you for choosing Starway" not in before and "Care tips" not in before   # only after delivery
     star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "Delivered"), "confirm": "1",
                                                      "new_maker": "Babu", "bill_no": "GST/9/1",
-                                                     "bill_date": date.today().isoformat()})
+                                                     "bill_date": india_today().isoformat()})
     c = pw["db"]()
     c.execute("UPDATE organizations SET phone = '9847012345' WHERE code = 'STAR'")
     c.commit()
@@ -753,7 +758,7 @@ def test_customer_link_shows_product_details_not_money(pw):
                                          "category": "Crompton 7.5", "machine_type": "Vertical", "power_source": "Electric",
                                          "weight": "450 kg", "details": "6 ft, 20 ton, with trolley",
                                          "note": "customer asked for discount", "unit_price": "185000",
-                                         "adv_date": date.today().isoformat(), "adv_amount": "50000", "adv_note": "cash"})
+                                         "adv_date": india_today().isoformat(), "adv_amount": "50000", "adv_note": "cash"})
     o = orders(pw, "STAR")[-1]
     page = Browser().get(f"/t/star/{o['token']}").text
     for must in ("Your product", "Log Splitter", "Crompton 7.5", "Vertical", "Electric", "450 kg", "6 ft, 20 ton, with trolley"):

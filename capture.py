@@ -18,9 +18,9 @@ from flask import Response, abort, flash, g, jsonify, redirect, render_template,
 
 H = None
 FEATURES = [
-    ("quick_add", "Quick Add", "A ＋ Lead button on every CRM page: name and phone, saved in seconds."),
+    ("quick_add", "Quick Add", "A ＋ Lead button on every CRM page (and on the app icon): name and phone, saved in seconds."),
     ("contacts", "Pick from Contacts", "Fill name and phone from the phone's contacts (Android Chrome)."),
-    ("share", "Share to CRM", "Share a WhatsApp message to the installed app: a new lead opens, already filled."),
+    ("share", "Share to CRM", "Share text from another app (Chrome, Gmail…) to the installed app: a new lead opens, filled."),
     ("paste", "Paste & Fill", "Paste a message or visiting-card text: name, phone, email and place fill in."),
     ("dup_alert", "Duplicate Alert", "Warns while the phone number is typed if the customer is already in the CRM."),
     ("form_link", "Lead Form Link & QR", "Public form links for each campaign and source, with QR codes and counts."),
@@ -54,6 +54,7 @@ def init(host):
     r("/leads/quick", "lead_quick", host.login_required(quick_add), methods=["POST"])
     r("/leads/dup-check", "lead_dup_check", host.login_required(dup_check))
     r("/share-lead", "share_lead", host.login_required(share_lead))
+    r("/quick-add", "quick_add_page", host.login_required(quick_add_page))
     r("/lf/<code>/<slug>", "public_form", public_form, methods=["GET", "POST"])
     r("/c/<code>/enquire", "catalog_enquire", catalog_enquire, methods=["POST"])
     r("/hook/gform/<token>", "gform_hook", gform_hook, methods=["POST"])
@@ -62,9 +63,24 @@ def init(host):
     app.jinja_env.globals["quick_add_data"] = quick_add_data
 
 
+def default_project(oid, create=False):
+    """The campaign Quick Add uses when none is chosen: the admin's choice, else 'General Leads'.
+    Returns (id, name) or (None, 'General Leads') when it does not exist yet and create is False."""
+    row = H.query("""SELECT p.id, p.name FROM organizations o JOIN projects p ON p.id = o.quick_project
+                     AND p.org_id = o.id WHERE o.id = ?""", (oid,), one=True)
+    if row:
+        return row["id"], row["name"]
+    row = H.query("SELECT id, name FROM projects WHERE org_id = ? AND code = 'GEN'", (oid,), one=True)
+    if row:
+        return row["id"], row["name"]
+    if create:
+        return _project_for(oid, "General Leads", "GEN"), "General Leads"
+    return None, "General Leads"
+
+
 def quick_add_data():
-    """Campaigns and products for the Quick Add window."""
-    return {"projects": H.visible_projects(active_only=True),
+    """Campaigns, products and the default campaign for the Quick Add window."""
+    return {"projects": H.visible_projects(active_only=True), "default": default_project(g.org["id"])[1],
             "products": H.query("SELECT id, name FROM products WHERE org_id = ? AND active = 1 "
                                 "ORDER BY name COLLATE NOCASE", (g.org["id"],))}
 
@@ -373,6 +389,11 @@ def page():
             px = re.sub(r"\D", "", request.form.get("meta_pixel") or "")[:20]
             H.execute("UPDATE organizations SET meta_pixel = ? WHERE id = ?", (px or None, org["id"]))
             flash("Meta Pixel saved." if px else "Meta Pixel removed.", "success")
+        elif act == "quick_project" and capture_on("quick_add"):
+            pid = request.form.get("quick_project", type=int)
+            ok = pid and H.query("SELECT 1 FROM projects WHERE id = ? AND org_id = ?", (pid, org["id"]), one=True)
+            H.execute("UPDATE organizations SET quick_project = ? WHERE id = ?", (pid if ok else None, org["id"]))
+            flash("Default campaign saved.", "success")
         elif act == "gform_token" and capture_on("gforms"):
             H.execute("UPDATE organizations SET capture_token = ? WHERE id = ?", (secrets.token_hex(16), org["id"]))
             H.audit("Google Forms Connect address changed", "")
@@ -387,12 +408,14 @@ def page():
     for r in H.query("SELECT s.* FROM lead_form_stats s JOIN lead_forms f ON f.id = s.form_id WHERE f.org_id = ?",
                      (org["id"],)):
         stats.setdefault(r["form_id"], []).append(r)
-    org_row = H.query("SELECT meta_pixel, capture_token, catalog_on, catalog_allowed FROM organizations WHERE id = ?",
+    org_row = H.query("SELECT meta_pixel, capture_token, catalog_on, catalog_allowed, quick_project FROM organizations "
+                      "WHERE id = ?",
                       (org["id"],), one=True)
     hook = url_for("gform_hook", token=org_row["capture_token"], _external=True) if org_row["capture_token"] else ""
     return render_template("lead_capture.html", forms=forms, stats=stats, FEATURES=FEATURES, SOON=SOON,
                            org_row=org_row, gscript=GFORM_SCRIPT % hook if hook else "", LINK_SOURCES=LINK_SOURCES,
-                           on=enabled(org["id"]))
+                           on=enabled(org["id"]), all_projects=H.visible_projects(active_only=True),
+                           default_name=default_project(org["id"])[1])
 
 
 def form_edit(fid=None):
@@ -470,6 +493,15 @@ def quick_add():
     data["place"] = H.clean(f.get("place"))[:120]
     data["notes"] = H.clean(f.get("notes"))[:2000]
     data["project_id"] = f.get("project_id", type=int)
+    if not data["project_id"]:                       # no campaign chosen: the company's default campaign
+        dp = default_project(g.org["id"], create=True)[0]
+        visible = {p["id"] for p in H.visible_projects()}
+        data["project_id"] = dp if dp in visible else default_project_general(g.org["id"])
+    due = (f.get("next_follow_up") or "").strip()
+    try:
+        due = datetime.strptime(due, "%Y-%m-%d").strftime("%Y-%m-%d") if due else ""
+    except ValueError:
+        return jsonify(ok=False, error="The follow-up date looks wrong."), 400
     pid = f.get("product_id", type=int)
     if pid and H.query("SELECT 1 FROM products WHERE id = ? AND org_id = ?", (pid, g.org["id"]), one=True):
         data["product_ids"] = [pid]
@@ -486,9 +518,15 @@ def quick_add():
                      f" VALUES (?,?,?,?,?, {', '.join('?' * len(cols))})",
                      (g.org["id"], g.user["id"], H.phone_key(data["phone"]), ts, ts, *[data[k] for k in cols])).lastrowid
     H.sync_products(db, lid, data["product_ids"], ts)
-    H.log_activity(lid, "Lead created (Quick Add)", commit=False)
+    H.schedule_follow_up(db, lid, due, "", ts)
+    H.log_activity(lid, "Lead created (Quick Add)" + (f", follow-up {due}" if due else ""), commit=False)
     db.commit()
     return jsonify(ok=True, id=lid, url=url_for("lead_view", lid=lid), name=data["customer_name"])
+
+
+def default_project_general(oid):
+    """'General Leads' (no staff list, so every staff member can use it)."""
+    return _project_for(oid, "General Leads", "GEN")
 
 
 def _dup_row(d):
@@ -511,3 +549,9 @@ def share_lead():
     _need("share")
     text = "\n".join(x for x in (request.args.get("title"), request.args.get("text"), request.args.get("url")) if x)
     return render_template("share_lead.html", shared=text[:3000])
+
+
+def quick_add_page():
+    """Opened from the app icon's '＋ Quick Add' shortcut (phone: long-press the icon; computer: right-click)."""
+    _need("quick_add")
+    return render_template("share_lead.html", shared="", quick=True)

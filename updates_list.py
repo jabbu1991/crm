@@ -9,6 +9,11 @@ Screens are in English, so the notes are too.
 """
 
 SHIPPED = [
+    {"key": "2026-11-13-quick-add-followup", "date": "2026-11-13", "module": "crm", "audience": "all",
+     "title": "⚡ Quick Add: follow-up date, campaign optional",
+     "body": "Quick Add (＋ Lead) now sets the follow-up to the next day (change it if needed). Choosing a campaign "
+             "is optional: leads go to your default campaign. In the installed app, long-press the app icon (or "
+             "right-click it on the computer) → ＋ Quick Add."},
     {"key": "2026-11-12-lead-capture", "date": "2026-11-12", "module": "crm", "audience": "admins", "feature": "capture",
      "title": "📥 New: Lead Capture — get leads in faster",
      "body": "Quick Add (＋ Lead button on every page), Pick from Contacts, Share a WhatsApp message to the app, "

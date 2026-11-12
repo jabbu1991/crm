@@ -8,8 +8,11 @@
   <h2>Ways on for your company</h2>
   <ul class="cap-list">
   {% for k, label, d in FEATURES %}{% if k in on %}<li>✅ <b>{{ label }}</b> — <span class="muted">{{ d }}</span>
-    {% if k == 'share' %}<div class="small">How: install this app on the phone (Chrome ⋮ → Add to Home screen / Install app). In WhatsApp, long-press a message → Share → choose this app.</div>{% endif %}
-    {% if k == 'quick_add' %}<div class="small">How: tap <b>＋ Lead</b> at the bottom right of any CRM page.</div>{% endif %}
+    {% if k == 'share' %}<div class="small">How: install this app on the phone (Chrome ⋮ → Install app). In another app, select text → Share → choose this app. WhatsApp text messages have no Share: long-press → Copy, then ＋ Lead → 📋 Paste &amp; Fill.</div>{% endif %}
+    {% if k == 'quick_add' %}<div class="small">How: tap <b>＋ Lead</b> at the bottom right of any CRM page. Installed app: long-press the app icon on the phone (or right-click it on the computer's taskbar) → <b>＋ Quick Add</b>. The follow-up is set to the next day; change it if needed.</div>
+      {% if not viewing %}<form method="post" class="form cap-default">{{ csrf() }}<input type="hidden" name="act" value="quick_project">
+        <label>Default campaign (when staff do not choose one)<select name="quick_project"><option value="">General Leads</option>{% for p in all_projects %}<option value="{{ p.id }}" {{ 'selected' if org_row.quick_project == p.id }}>{{ p.name }}</option>{% endfor %}</select></label>
+        <button class="btn btn-sm">Save</button></form>{% endif %}{% endif %}
   </li>{% endif %}{% endfor %}
   </ul>
   {% set soon = [] %}{% for k, label, d in FEATURES %}{% if k in SOON %}{% set _ = soon.append(label) %}{% endif %}{% endfor %}

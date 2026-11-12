@@ -16,7 +16,7 @@ from datetime import datetime
 
 from crm_constants import DEFAULT_COUNTRY, ORG_ADMIN, SUPER_ADMIN, normalize_location, phone_key
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 # Original (v0) schema. Kept so a brand-new database goes through the same migration path.
 SCHEMA_V0 = """
@@ -1447,6 +1447,13 @@ V26_TABLES = """
     """
 
 
+def _migrate_v28(conn):
+    """Lead Capture: the campaign Quick Add uses when none is chosen."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)")}
+    if "quick_project" not in cols:
+        conn.execute("ALTER TABLE organizations ADD COLUMN quick_project INTEGER")
+
+
 def _migrate_v27(conn):
     """📥 Lead Capture: which ways each company may use, public lead forms and their counts. Adds only."""
     cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)")}
@@ -1495,7 +1502,7 @@ CREATE TABLE IF NOT EXISTS lead_form_stats (
 
 MIGRATIONS = [(1, _migrate_v1), (2, _migrate_v2), (3, _migrate_v3), (4, _migrate_v4), (5, _migrate_v5),
               (6, _migrate_v6), (7, _migrate_v7), (8, _migrate_v8), (9, _migrate_v9), (10, _migrate_v10),
-              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21), (22, _migrate_v22), (23, _migrate_v23), (24, _migrate_v24), (25, _migrate_v25), (26, _migrate_v26), (27, _migrate_v27)]
+              (11, _migrate_v11), (12, _migrate_v12), (13, _migrate_v13), (14, _migrate_v14), (15, _migrate_v15), (16, _migrate_v16), (17, _migrate_v17), (18, _migrate_v18), (19, _migrate_v19), (20, _migrate_v20), (21, _migrate_v21), (22, _migrate_v22), (23, _migrate_v23), (24, _migrate_v24), (25, _migrate_v25), (26, _migrate_v26), (27, _migrate_v27), (28, _migrate_v28)]
 
 
 def migrate(db_path):

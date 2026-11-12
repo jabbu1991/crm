@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
-{% block title %}New lead from share{% endblock %}
+{% block title %}{{ 'Quick Add' if quick else 'New lead from share' }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>📤 Shared to CRM</h1></div>
+<div class="page-head"><h1>{{ '⚡ Quick Add' if quick else '📤 Shared to CRM' }}</h1></div>
 <section class="card">
-  <p class="muted small">The details were filled in the Quick Add window. Check them and tap <b>Save lead</b>.</p>
+  <p class="muted small">{% if quick %}Fill the Quick Add window and tap <b>Save lead</b>. It stays open for the next lead.{% else %}The details were filled in the Quick Add window. Check them and tap <b>Save lead</b>.{% endif %}</p>
   {% if shared %}<pre class="cap-shared">{{ shared }}</pre>{% endif %}
   <p><button type="button" class="btn btn-primary" data-quick-add-shared>⚡ Open Quick Add again</button> <a class="btn" href="{{ url_for('leads') }}">Leads</a></p>
 </section>
