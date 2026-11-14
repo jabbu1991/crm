@@ -27,6 +27,14 @@
     {% endif %}
     {% if o.delivered_date %}<span>📦 Delivered {{ dmy(o.delivered_date) }}</span>{% endif %}
   </div>
+  {% if o.status == 'active' and ph in ('queue', 'working', 'ready') and (o.delay_reason or (sched and sched.finish < today_d)) %}
+  <form method="post" action="{{ url_for('prod.order_delay', order_id=o.id) }}" class="delay-form">{{ csrf() }}
+    <label>⏳ Delay reason <span class="small muted">(the customer sees this on the order link)</span>
+      <input name="delay_reason" maxlength="300" value="{{ o.delay_reason or '' }}" placeholder="e.g. Motor arrives late from the supplier" {{ 'disabled' if viewing or not pcan('edit') }}></label>
+    {% if pcan('edit') and not viewing %}<button class="btn btn-sm">Save</button>{% endif %}
+    {% if sched and sched.finish < today_d %}<span class="small overdue">Late by {{ (today_d - sched.finish).days }} day(s) · the customer sees {{ dmy(customer_date(sched)) }}</span>{% endif %}
+  </form>
+  {% endif %}
   {% if ph == 'queue' and is_admin() and not viewing and o.status == 'active' %}
   {% if o.pinned_at %}
   <form method="post" action="{{ url_for('prod.order_pin', order_id=o.id) }}" class="inline-form">{{ csrf() }}<input type="hidden" name="action" value="unpin">

@@ -45,7 +45,7 @@
           <div class="bcard-sub">{{ o.product_name or 'Product not set' }}{% if o.quantity and o.quantity > 1 %} × {{ o.quantity }}{% endif %}</div>
           <div class="bcard-meta small">
             {% if o.maker_name and c.ph in ('working', 'ready') %}<span>👷 {{ o.maker_name }}</span>{% endif %}
-            {% if c.sc and c.ph in ('queue', 'working') %}<span class="{{ 'overdue' if c.sc.late else '' }}">🚚 ~{{ dmy(c.sc.finish) }}{{ ' late' if c.sc.late }}</span>
+            {% if c.sc and c.ph in ('queue', 'working') %}<span class="{{ 'overdue' if c.sc.late else '' }}">🚚 ~{{ dmy(c.sc.finish) }}{{ ' late' if c.sc.late }}</span>{% if o.delay_reason %}<span class="small overdue" title="Delay reason">⏳ {{ o.delay_reason }}</span>{% endif %}
             {% elif c.ph == 'ready' %}<span class="w-ok">Ready ✓</span>
             {% elif c.ph == 'delivered' %}<span>📦 {{ dmy(o.delivered_date) }}</span>
             {% elif o.bill_no %}<span>🧾 {{ o.bill_no }}</span>{% endif %}

@@ -83,7 +83,7 @@ def stage_id(W, code, name):
 def test_migration_keeps_modules_and_production_starts_off(pw):
     c = pw["db"]()
     rows = {r["code"]: r for r in c.execute("SELECT * FROM organizations")}
-    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 32
+    assert c.execute("PRAGMA user_version").fetchone()[0] == crm_db.SCHEMA_VERSION == 33
     assert rows["STAR"]["mod_crm"] == 1 and rows["STAR"]["mod_prod"] == 1 and rows["STAR"]["mod_cafe"] == 0
     assert rows["ONLY"]["mod_prod"] == 0 and rows["ONLY"]["app_type"] == "crm"
     assert rows["FACT"]["mod_crm"] == 0 and rows["FACT"]["mod_prod"] == 1
@@ -322,6 +322,37 @@ def test_queue_dates_follow_what_is_really_in_production(pw):
     assert sc[ids[2]]["start"] == t + timedelta(days=10) and sc[ids[2]]["finish"] == t + timedelta(days=20)
     page = Browser().get(f"/t/star/{orders(pw, 'STAR')[2]['token']}").text
     assert "Expected dispatch" in page and (t + timedelta(days=20)).strftime("%d-%m-%Y") in page
+
+
+def test_late_order_shows_today_plus_two_and_delay_reason(pw):
+    star = pw["star"]
+    star.post("/production/orders/new", {"name": "Late Co", "phone": "9000000201", "product_name": "Press",
+                                         "prod_days": "5"})
+    o = orders(pw, "STAR")[0]
+    star.post(f"/production/orders/{o['id']}/move", {"to": stage_id(pw, "STAR", "In Production"), "confirm": "1",
+                                                     "new_maker": "Babu"})
+    t = india_today()
+    planned = t - timedelta(days=3)                      # the planned date has passed
+    with pw["db"]() as c:
+        c.execute("UPDATE prod_orders SET exp_finish = ? WHERE id = ?", (planned.isoformat(), o["id"]))
+    page = Browser().get(f"/t/star/{o['token']}").text
+    assert (t + timedelta(days=2)).strftime("%d-%m-%Y") in page and planned.strftime("%d-%m-%Y") not in page
+    assert "Delay reason" not in page
+    view = star.get(f"/production/orders/{o['id']}").text
+    assert "Late by 3 day(s)" in view and "⏳ Delay reason" in view
+    star.post(f"/production/orders/{o['id']}/delay", {"delay_reason": "Motor arrives late from the supplier"})
+    page = Browser().get(f"/t/star/{o['token']}").text
+    assert "Motor arrives late from the supplier" in page
+    assert "Motor arrives late" in star.get("/production/orders?show=late").text
+    assert any("Delay reason: Motor" in r[0] for r in pw["db"]().execute(
+        "SELECT note FROM prod_stage_log WHERE order_id = ?", (o["id"],)))
+    # an order still on time keeps its planned date
+    with pw["db"]() as c:
+        c.execute("UPDATE prod_orders SET exp_finish = ? WHERE id = ?", ((t + timedelta(days=4)).isoformat(), o["id"]))
+    assert (t + timedelta(days=4)).strftime("%d-%m-%Y") in Browser().get(f"/t/star/{o['token']}").text
+    # reason removed: no longer shown (after dispatch it is hidden anyway: no expected date then)
+    star.post(f"/production/orders/{o['id']}/delay", {"delay_reason": ""})
+    assert "Delay reason" not in Browser().get(f"/t/star/{o['token']}").text
 
 
 # ---------------------------------------------------------------- stage sets

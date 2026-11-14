@@ -644,7 +644,8 @@ def sync_after_lead_change(resp):
 
 @bp.app_context_processor
 def prod_context():
-    return dict(PROD_MARKS=MARKS, has_prod=bool(g.get("org")) and has_prod())
+    return dict(PROD_MARKS=MARKS, has_prod=bool(g.get("org")) and has_prod(), today_d=today_date(),
+                customer_date=customer_date)
 
 
 def stage_counts(oid):
@@ -1299,6 +1300,31 @@ def order_new_link(order_id):
                                                                               H.org_id()))
     flash("New customer link made. The old link no longer works.", "success")
     return redirect(url_for("prod.order_view", order_id=order_id))
+
+
+@bp.route("/production/orders/<int:order_id>/delay", methods=["POST"])
+@prod_view("edit")
+def order_delay(order_id):
+    """⏳ Why a late order is late. The customer sees it on the tracking page until the order is dispatched."""
+    o = get_order(None, order_id)
+    reason = clean(request.form.get("delay_reason"), 300)
+    if reason != (o["delay_reason"] or ""):
+        db = H.get_db()
+        ts = _now()
+        db.execute("UPDATE prod_orders SET delay_reason = ?, updated_at = ? WHERE id = ?", (reason or None, ts, order_id))
+        log(db, order_id, o["stage_name"], f"⏳ Delay reason: {reason}" if reason else "⏳ Delay reason removed", ts=ts)
+        db.commit()
+        flash("Delay reason saved. The customer sees it on the order link." if reason else "Delay reason removed.",
+              "success")
+    return redirect(url_for("prod.order_view", order_id=order_id))
+
+
+def customer_date(sched):
+    """Expected dispatch for the customer: the planned date, or (once it has passed) today + 2 days."""
+    if not sched or not sched.get("finish"):
+        return None
+    t = today_date()
+    return sched["finish"] if sched["finish"] >= t else t + timedelta(days=2)
 
 
 @bp.route("/production/orders/<int:order_id>/pin", methods=["POST"])

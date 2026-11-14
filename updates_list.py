@@ -9,6 +9,10 @@ Screens are in English, so the notes are too.
 """
 
 SHIPPED = [
+    {"key": "2026-11-14-prod-delay", "date": "2026-11-14", "module": "prod", "audience": "all",
+     "title": "⏳ Late orders: new date and delay reason on the customer link",
+     "body": "When an order passes its expected date, the customer link now shows today + 2 days instead of the old "
+             "date. On the order page, write a Delay reason (e.g. 'Motor arrives late') — the customer sees it too."},
     {"key": "2026-11-14-cafe-hide-item", "date": "2026-11-14", "module": "cafe", "audience": "admins",
      "title": "👁 Hide an item from customers",
      "body": "Menu: tap 👁 next to an item to hide it from the customer menu and QR menu (it turns 🙈). "

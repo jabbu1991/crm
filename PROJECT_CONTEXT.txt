@@ -242,6 +242,9 @@ Digital Catalogue (built 16 Oct 2026)
 - Cafe menu_items.show_menu (v30): 👁/🙈 button on Menu page and a box on the item form (hidden field show_menu_field
   marks that the box was on the form). Hidden items: not on /m/<code> (menu_data for_public), not in banners, public
   orders refused; POS billing keeps them. User decided: no separate star option (📌 Pin to top stays).
+- Production late orders: customer link shows production.customer_date(sched) = planned finish, or today + 2 days
+  once it has passed. prod_orders.delay_reason (v33) set on the order page (prod_view 'edit', logged in history),
+  shown on the customer link (only while an expected date shows) and on orders list / board / home Late list.
 - Cafe billing screen: '⭐ Most sold' tab first (cafe.top_billed, 20 items, 30 days).
 - Menu item photos are shrunk to <= 20 KB (ITEM_PHOTO_KB); banners/logo/cover stay <= 50 KB (PHOTO_MAX_KB).
 - Customer Choice: settings choice_on (default on) + choice_count (3-30, default 10); cafe.customer_choice() = most sold available items (paid bills, 30 days); public menu cfg.top shows a '⭐ Customer Choice' group first (hidden while searching). Cards use data-iid (an item can show twice).

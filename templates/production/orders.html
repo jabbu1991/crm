@@ -37,7 +37,7 @@
     <span class="po-dates small">
       {% if sc %}
         {% if ph == 'queue' %}<span class="{{ 'w-ok' if o.first_adv else 'muted' }}">{{ ('Advance ' ~ dmy(o.first_adv)) if o.first_adv else 'No advance' }}</span><br>Start ~{{ dmy(sc.start) }}<br>{% endif %}
-        {% if ph in ('queue', 'working') %}<span class="{{ 'overdue' if sc.late }}">Dispatch ~{{ dmy(sc.finish) }}</span>{% elif ph == 'ready' %}<span class="w-ok">Ready ✓</span>{% endif %}
+        {% if ph in ('queue', 'working') %}<span class="{{ 'overdue' if sc.late }}">Dispatch ~{{ dmy(sc.finish) }}</span>{% elif ph == 'ready' %}<span class="w-ok">Ready ✓</span>{% endif %}{% if o.delay_reason and o.status == 'active' %}<span class="small overdue" title="Delay reason">⏳ {{ o.delay_reason }}</span>{% endif %}
       {% elif o.bill_no %}Bill {{ o.bill_no }}{% if o.delivered_date %}<br>Delivered {{ dmy(o.delivered_date) }}{% endif %}
       {% else %}<span class="muted">Ordered {{ dmy(o.order_date) }}</span>{% endif %}
     </span>

@@ -34,7 +34,7 @@
       <a class="run-row" href="{{ url_for('prod.order_view', order_id=o.id) }}">
         <span class="run-main"><b>#{{ o.order_no }}</b> {{ o.cust_name }} · {{ o.product_name or '—' }}</span>
         {{ stage_badge(o.stage_name, o.stage_mark) }}
-        <span class="overdue small">due {{ dmy(sched[o.id].finish) }}</span>
+        <span class="overdue small">due {{ dmy(sched[o.id].finish) }}</span>{% if o.delay_reason %}<span class="small muted"> · ⏳ {{ o.delay_reason }}</span>{% else %}<span class="small muted"> · no reason written</span>{% endif %}
       </a>
     {% else %}<p class="muted">Nothing late 👍</p>{% endfor %}
     {% if pending %}

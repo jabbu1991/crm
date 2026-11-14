@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from flask import Response, abort, flash, g, redirect, render_template, request, url_for
 
-from production import (MARKS, bp, can, clean, create_order, customer_by_code, details_pending, get_order,
+from production import (MARKS, bp, can, clean, create_order, customer_by_code, customer_date, details_pending, get_order,
                         get_settings, has_prod, host as H, int_in, marks_of, order_days, order_rows, phase,
                         prod_view, schedule, set_stages, to_date, today, warranty_info)
 
@@ -49,6 +49,7 @@ def public_track(code, tok):
     parts = H.query("SELECT * FROM prod_parts WHERE order_id = ? ORDER BY sort, id", (o["id"],)) if st["parts"] else []
     ph = phase(o)
     sched = schedule(org["id"]).get(o["id"]) if ph in ("queue", "working", "ready") else None
+    eta = customer_date(sched)          # a passed date shows as today + 2 days
     ledger, value = [], 0
     if st["referral"]:
         ledger = H.query("""SELECT p.change, p.kind, p.amount, p.note, p.created_at, p.pay_date FROM prod_points p
@@ -75,7 +76,7 @@ def public_track(code, tok):
         help_wa = f"https://wa.me/{('91' + digits) if len(digits) == 10 else digits}?text=" + quote(
             f"Hi, I need help with my {o['product_name'] or 'machine'} (order #{o['order_no']}, unit code {o['unit_code']}).")
     return render_template("production/public.html", o=o, org=org, st=st, stages=stages, reached=reached,
-                           w=warranty_info(o, parts) if st["warranty"] else None, ph=ph, sched=sched, ledger=ledger,
+                           w=warranty_info(o, parts) if st["warranty"] else None, ph=ph, sched=sched, eta=eta, ledger=ledger,
                            value=value, brand=brand, share=share, cancelled=o["status"] != "active",
                            delivered=ph == "delivered", care=care, catalog=catalog, help_wa=help_wa, photo=photo)
 
