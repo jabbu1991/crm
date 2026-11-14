@@ -44,7 +44,7 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
 .mnav .mbtn { padding: 10px 18px; font-size: 14px; }
 
 /* hero */
-.hero { position: relative; min-height: 100svh; display: grid; align-items: center; padding: 110px 0 90px; overflow: hidden; }
+.hero { position: relative; display: grid; align-items: center; padding: clamp(120px, 16vh, 170px) 0 clamp(40px, 6vh, 70px); overflow: hidden; }
 .hero-bg { position: absolute; inset: 0; z-index: -1; }
 .hero-img { position: absolute; inset: -4%; background: center/cover no-repeat; opacity: 0; transition: opacity 1.4s ease; animation: kenburns 24s ease-in-out infinite alternate; }
 .hero-img.on { opacity: .42; }
@@ -70,7 +70,7 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
 .hero-social a { display: inline-flex; align-items: center; gap: 8px; color: #b9c6e2; text-decoration: none; font-size: 14px; }
 .hero-social a:hover { color: #fff; }
 .up { opacity: 0; transform: translateY(16px); animation: word .8s cubic-bezier(.2,.7,.2,1) forwards; animation-delay: calc(.15s + var(--i) * .11s); }
-.scroll-cue { position: absolute; left: 50%; bottom: 26px; width: 26px; height: 42px; margin-left: -13px; border: 2px solid rgba(255,255,255,.35); border-radius: 14px; }
+.scroll-cue { display: none; position: absolute; left: 50%; bottom: 26px; width: 26px; height: 42px; margin-left: -13px; border: 2px solid rgba(255,255,255,.35); border-radius: 14px; }
 .scroll-cue span { position: absolute; left: 50%; top: 8px; width: 4px; height: 8px; margin-left: -2px; border-radius: 2px; background: #fff; animation: cue 1.8s infinite; }
 @keyframes cue { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(14px); } }
 
@@ -247,6 +247,9 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
   .tile .meta b { font-size: 14px; } .tile .meta span { font-size: 11.5px; }
   .tile .play, .feat .play { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
   .f2 { grid-template-columns: 1fr; }
+  .hero { padding: 100px 0 30px; }
+  .hero-cta .mbtn { padding: 11px 16px; font-size: 14px; }
+  .eyebrow { margin-bottom: 18px; }
   .svc-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   .svc { padding: 18px 14px; }
   .svc h3 { font-size: 15.5px; } .svc p { font-size: 13px; } .svc-ico { font-size: 24px; margin-bottom: 8px; }
@@ -277,7 +280,7 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
 .car-dots i.on { width: 28px; background: var(--grad); }
 
 /* films */
-.films { padding-bottom: 60px; }
+.films { padding-top: clamp(30px, 5vw, 60px); padding-bottom: 60px; }
 .film { width: min(820px, 74vw, (100vh - 300px) * 16 / 9); border-radius: 22px; overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: 0 40px 80px -40px rgba(0,0,0,.8); }
 .film-media { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
 .film-media img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s cubic-bezier(.2,.7,.2,1), opacity .4s; }
