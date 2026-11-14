@@ -504,3 +504,6 @@ REALVIEW MEDIA PRODUCTION PAGE (14 Nov 2026)
 - Editors (Media Page -> Editors): own username/password, log in at /media/login, see ONLY this page.
 - Works: title, category, date, place, YouTube/Instagram link, photos (shrunk, in uploads so backed up),
   Featured/Hidden/cover. DB v31 adds media_settings, media_works, media_photos, media_editors, media_log.
+- 14 Nov (later): Media Page "Paste a YouTube or Instagram link" box (YouTube title via oEmbed); website gets
+  swipe carousels: Films (YouTube, plays inside the card) and On Instagram (Instagram's own embed, loaded when
+  near the screen); photo gallery shows only works with photos. "⬆ Top" pins a work first (DB v32 pinned_at).

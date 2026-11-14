@@ -54,7 +54,7 @@
       <img class="mlogo-text" src="../assets/media/logo-text-light.png" alt="Realview Media Production" width="120" height="54">
     </a>
     <nav class="mlinks" aria-label="Sections">
-      <a href="#work">Work</a><a href="#about">About</a><a href="#services">Services</a><a href="#book">Book</a>
+      <a href="#films">Films</a><a href="#instagram">Instagram</a><a href="#about">About</a><a href="#services">Services</a><a href="#book">Book</a>
     </nav>
     <a class="mbtn mbtn-pri shine js-wa" href="https://wa.me/917025504627" target="_blank" rel="noopener">Book a Shoot</a>
   </div>
@@ -72,39 +72,52 @@
         <a class="mbtn mbtn-pri shine js-wa" href="https://wa.me/917025504627" target="_blank" rel="noopener">
           <svg viewBox="0 0 32 32" aria-hidden="true"><use href="#i-wa"/></svg> Book a Shoot</a>
         <button class="mbtn mbtn-ghost js-reel" type="button" hidden>▶ Watch showreel</button>
-        <a class="mbtn mbtn-ghost js-seework" href="#work">See our work</a>
+        <a class="mbtn mbtn-ghost js-seework" href="#films">See our work</a>
       </div>
       <div class="hero-social up" style="--i:8">
         <a class="js-ig" href="https://www.instagram.com/realview__wedding/" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24"><use href="#i-ig"/></svg><span>@realview__wedding</span></a>
         <a class="js-yt" href="https://www.youtube.com/@azeezrealview4509" target="_blank" rel="noopener" aria-label="YouTube"><svg viewBox="0 0 24 24"><use href="#i-yt"/></svg><span>YouTube</span></a>
       </div>
     </div>
-    <a class="scroll-cue" href="#work" aria-label="Scroll to our work"><span></span></a>
+    <a class="scroll-cue" href="#films" aria-label="Scroll to our work"><span></span></a>
   </section>
 
-  <!-- FEATURED -->
-  <section class="msec featured" id="featured" hidden>
+  <!-- FILMS (YouTube links from the CRM) -->
+  <section class="msec films" id="films" hidden>
     <div class="mwrap">
-      <p class="kick rv">Featured</p>
-      <div class="feat-row"></div>
+      <div class="sec-head">
+        <div><p class="kick rv">Films</p><h2 class="rv">Watch the story unfold.</h2></div>
+        <div class="car-arrows rv"><button type="button" class="car-btn prev" aria-label="Previous film">‹</button><button type="button" class="car-btn next" aria-label="Next film">›</button></div>
+      </div>
+    </div>
+    <div class="car" data-car="films"><div class="car-track" role="list"></div></div>
+    <div class="mwrap"><div class="car-dots" aria-hidden="true"></div>
+      <div class="more-links rv"><a class="mbtn mbtn-ghost js-yt" href="https://www.youtube.com/@azeezrealview4509" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><use href="#i-yt"/></svg> Watch more on YouTube</a></div>
+    </div>
+  </section>
+
+  <!-- INSTAGRAM (Instagram links from the CRM) -->
+  <section class="msec insta" id="instagram" hidden>
+    <div class="mwrap">
+      <div class="sec-head">
+        <div><p class="kick rv">On Instagram</p><h2 class="rv">Fresh from our feed.</h2></div>
+        <div class="car-arrows rv"><button type="button" class="car-btn prev" aria-label="Previous post">‹</button><button type="button" class="car-btn next" aria-label="Next post">›</button></div>
+      </div>
+    </div>
+    <div class="car" data-car="insta"><div class="car-track" role="list"></div></div>
+    <div class="mwrap"><div class="car-dots" aria-hidden="true"></div>
+      <div class="more-links rv"><a class="mbtn mbtn-pri shine js-ig" href="https://www.instagram.com/realview__wedding/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><use href="#i-ig"/></svg> Follow <span class="js-ighandle">@realview__wedding</span></a></div>
     </div>
   </section>
 
   <!-- WORK -->
-  <section class="msec" id="work">
+  <section class="msec" id="work" hidden>
     <div class="mwrap">
       <div class="sec-head">
-        <div><p class="kick rv">Recent work</p><h2 class="rv">Real moments, beautifully told.</h2></div>
+        <div><p class="kick rv">Photo gallery</p><h2 class="rv">Real moments, beautifully told.</h2></div>
         <div class="filters rv" role="tablist" aria-label="Filter work"></div>
       </div>
       <div class="masonry" aria-live="polite"></div>
-      <div class="work-empty" hidden>
-        <p>New work is on its way. Meanwhile, see our latest shoots on Instagram.</p>
-      </div>
-      <div class="more-links rv">
-        <a class="mbtn mbtn-ghost js-ig" href="https://www.instagram.com/realview__wedding/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><use href="#i-ig"/></svg> See more on Instagram</a>
-        <a class="mbtn mbtn-ghost js-yt" href="https://www.youtube.com/@azeezrealview4509" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><use href="#i-yt"/></svg> Watch more on YouTube</a>
-      </div>
     </div>
   </section>
 

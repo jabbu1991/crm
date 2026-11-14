@@ -20,7 +20,7 @@
     return "https://wa.me/" + d + (text ? "?text=" + encodeURIComponent(text) : "");
   }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
-  function track(ev, data) { try { if (window.fbq) fbq("track", ev, data || {}); } catch (e) { /* ignore */ } }
+  function track_(ev, data) { try { if (window.fbq) fbq("track", ev, data || {}); } catch (e) { /* ignore */ } }
   function niceDate(d) {
     if (!d) return "";
     var t = new Date(d + "T00:00:00");
@@ -92,7 +92,7 @@
       var pkg = a.getAttribute("data-pkg");
       var text = pkg ? S.wa_default.replace(/\n\nEvent:/, "\nPackage: " + pkg + "\n\nEvent:") : S.wa_default;
       a.href = waLink(text);
-      if (!a._t) { a._t = 1; a.addEventListener("click", function () { track("Contact", { content_name: "WhatsApp" }); }); }
+      if (!a._t) { a._t = 1; a.addEventListener("click", function () { track_("Contact", { content_name: "WhatsApp" }); }); }
     });
   }
 
@@ -119,23 +119,33 @@
   }
 
   function renderWorks() {
+    var films = works.filter(function (w) { return w.kind === "youtube" && w.lid; });
+    var insta = works.filter(function (w) { return w.kind === "instagram" && w.lid; });
+    var album = works.filter(function (w) { return w.photos && w.photos.length; });
+    var star = function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0); };   // featured first, else as given
+    films.sort(star); insta.sort(star); album.sort(star);
+    renderFilms(films);
+    renderInsta(insta);
+    // photo gallery
     var box = $(".masonry");
-    $(".work-empty").hidden = works.length > 0;
-    box.innerHTML = works.map(tileHtml).join("");
-    // featured
-    var feats = works.map(function (w, i) { return [w, i]; }).filter(function (x) { return x[0].featured && coverOf(x[0]); }).slice(0, 2);
-    if (feats.length) {
-      $("#featured").hidden = false;
-      $(".feat-row").innerHTML = feats.map(function (x, k) {
-        var w = x[0], c = w.cover ? w.cover.big : w.photos[0].src;
-        return '<button type="button" class="feat rv" style="--d:' + k + '" data-i="' + x[1] + '"><img src="' + esc(c) + '" alt="' + esc(w.title) +
-          '" loading="lazy" onload="if(this.naturalWidth<=120)this.src=\'' + esc(coverOf(w).src) + '\'" onerror="this.onerror=null;this.src=\'' + esc(coverOf(w).src) + '\'">' +
-          (w.kind === "youtube" ? '<span class="play" aria-hidden="true"></span>' : "") +
-          '<span class="cap"><b>' + esc(w.title) + "</b><span>" + esc([w.category, metaLine(w)].filter(Boolean).join(" · ")) + "</span></span></button>";
-      }).join("");
-    }
-    // hero background: the newest featured (or newest) picture
-    var heroW = (feats[0] && feats[0][0]) || works.filter(coverOf)[0];
+    $("#work").hidden = album.length === 0;
+    box.innerHTML = album.map(function (w) { return tileHtml(w, works.indexOf(w)); }).join("");
+    var cats = ["All"].concat((DATA.settings.categories || []).filter(function (c) {
+      return album.some(function (w) { return w.category === c; });
+    }));
+    var f = $(".filters");
+    f.innerHTML = cats.length > 2 ? cats.map(function (c) {
+      return '<button type="button" role="tab" aria-selected="' + (c === current) + '">' + esc(c) + "</button>";
+    }).join("") : "";
+    $$("button", f).forEach(function (b) { b.addEventListener("click", function () { filter(b.textContent); }); });
+    $$(".masonry .tile[data-i]").forEach(function (t) {
+      t.addEventListener("click", function () { openViewer(works[+t.getAttribute("data-i")], 0); });
+    });
+    // "See our work" goes to the first section that has something
+    var first = !$("#films").hidden ? "#films" : !$("#instagram").hidden ? "#instagram" : !$("#work").hidden ? "#work" : "#about";
+    $$(".js-seework, .scroll-cue").forEach(function (a) { a.setAttribute("href", first); });
+    // hero background: newest featured / newest picture
+    var heroW = works.filter(function (w) { return w.featured && coverOf(w); })[0] || works.filter(coverOf)[0];
     if (heroW) {
       var src = heroW.cover ? heroW.cover.big : heroW.photos[0].src;
       var im = new Image();
@@ -145,18 +155,137 @@
       };
       im.src = src;
     }
-    // filters
-    var cats = ["All"].concat(DATA.settings.categories || []);
-    var f = $(".filters");
-    f.innerHTML = cats.length > 2 ? cats.map(function (c) {
-      return '<button type="button" role="tab" aria-selected="' + (c === current) + '">' + esc(c) + "</button>";
-    }).join("") : "";
-    $$("button", f).forEach(function (b) { b.addEventListener("click", function () { filter(b.textContent); }); });
-    $$(".tile[data-i], .feat[data-i]").forEach(function (t) {
-      t.addEventListener("click", function () { openViewer(works[+t.getAttribute("data-i")], 0); });
-    });
     lazyImages();
     reveal();
+  }
+
+  // ------------------------------------------------------------ swipe carousels (films, instagram)
+  function carousel(root, onChange) {
+    var sec = root.closest("section"), track = $(".car-track", root), dots = $(".car-dots", sec);
+    var cards = $$(".card-c", track), idx = 0;
+    dots.innerHTML = cards.length > 1 ? cards.map(function (_, i) { return '<i data-i="' + i + '"></i>'; }).join("") : "";
+    var arrows = $(".car-arrows", sec);
+    if (arrows) arrows.hidden = cards.length < 2;
+    function go(i) {
+      i = Math.max(0, Math.min(cards.length - 1, i));
+      var c = cards[i];
+      track.scrollTo({ left: c.offsetLeft - (track.clientWidth - c.offsetWidth) / 2, behavior: reduce ? "auto" : "smooth" });
+    }
+    function mark(i) {
+      if (i === idx && dots.children[i] && dots.children[i].className) return;
+      idx = i;
+      $$("i", dots).forEach(function (d, k) { d.className = k === i ? "on" : ""; });
+      cards.forEach(function (c, k) { c.classList.toggle("cur", k === i); });
+      if (onChange) onChange(i, cards);
+    }
+    var t = null;
+    track.addEventListener("scroll", function () {
+      clearTimeout(t);
+      t = setTimeout(function () {
+        var mid = track.scrollLeft + track.clientWidth / 2, best = 0, bd = 1e9;
+        cards.forEach(function (c, k) { var d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (d < bd) { bd = d; best = k; } });
+        mark(best);
+      }, 80);
+    }, { passive: true });
+    $$(".car-btn.prev", sec).forEach(function (b) { b.addEventListener("click", function () { go(idx - 1); }); });
+    $$(".car-btn.next", sec).forEach(function (b) { b.addEventListener("click", function () { go(idx + 1); }); });
+    dots.addEventListener("click", function (e) { var d = e.target.closest("i"); if (d) go(+d.getAttribute("data-i")); });
+    track.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight") { e.preventDefault(); go(idx + 1); } else if (e.key === "ArrowLeft") { e.preventDefault(); go(idx - 1); }
+    });
+    // drag with the mouse on computers (phones swipe natively)
+    var down = null;
+    track.addEventListener("pointerdown", function (e) { if (e.pointerType === "mouse") down = { x: e.clientX, s: track.scrollLeft, moved: false }; });
+    window.addEventListener("pointermove", function (e) {
+      if (!down) return;
+      var dx = e.clientX - down.x;
+      if (Math.abs(dx) > 5) { down.moved = true; track.classList.add("drag"); track.scrollLeft = down.s - dx; }
+    });
+    window.addEventListener("pointerup", function () {
+      if (!down) return;
+      var moved = down.moved; down = null; track.classList.remove("drag");
+      if (moved) { track._justDragged = true; setTimeout(function () { track._justDragged = false; }, 50); }
+    });
+    mark(0);
+  }
+
+  function renderFilms(films) {
+    var sec = $("#films");
+    sec.hidden = films.length === 0;
+    if (!films.length) return;
+    $(".car-track", sec).innerHTML = films.map(function (w, k) {
+      return '<div class="card-c film rv" role="listitem" style="--d:' + Math.min(k, 3) + '" data-vid="' + esc(w.lid) + '">' +
+        '<div class="film-media"><img alt="" decoding="async" loading="lazy" src="https://i.ytimg.com/vi/' + esc(w.lid) + '/maxresdefault.jpg"' +
+        ' onload="if(this.naturalWidth<=120)this.src=\'https://i.ytimg.com/vi/' + esc(w.lid) + '/hqdefault.jpg\'"' +
+        ' onerror="this.onerror=null;this.src=\'https://i.ytimg.com/vi/' + esc(w.lid) + '/hqdefault.jpg\'">' +
+        '<button type="button" class="film-play" aria-label="Play ' + esc(w.title) + '"><span class="play"></span></button></div>' +
+        '<div class="film-cap"><span class="badge">' + esc(w.category) + "</span><b>" + esc(w.title) + "</b><span>" + esc(metaLine(w)) + "</span>" +
+        '<a class="film-wa js-wawork" target="_blank" rel="noopener" href="' + waLink(S.wa_work.replace(/\{work\}/g, w.title)) + '">' +
+        '<svg viewBox="0 0 32 32"><use href="#i-wa"/></svg> Book a similar shoot</a></div></div>';
+    }).join("");
+    var track = $(".car-track", sec);
+    function stopAll(except) {
+      $$(".film", track).forEach(function (c) {
+        if (c === except) return;
+        var f = $("iframe", c);
+        if (f) { f.remove(); c.classList.remove("playing"); }
+      });
+    }
+    $$(".film", track).forEach(function (c) {
+      $(".film-play", c).addEventListener("click", function () {
+        if (track._justDragged) return;
+        stopAll(c);
+        var vid = c.getAttribute("data-vid");
+        var f = document.createElement("iframe");
+        f.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(vid) + "?autoplay=1&rel=0&modestbranding=1&playsinline=1";
+        f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+        f.allowFullscreen = true;
+        f.title = "Film";
+        $(".film-media", c).appendChild(f);
+        c.classList.add("playing");
+        track.scrollTo({ left: c.offsetLeft - (track.clientWidth - c.offsetWidth) / 2, behavior: "smooth" });
+        track_("ViewContent", { content_name: $("b", c).textContent, content_category: "Film" });
+      });
+    });
+    $$(".js-wawork", track).forEach(function (a) { a.addEventListener("click", function () { track_("Contact", { content_name: "Film" }); }); });
+    carousel($(".car", sec), function (i, cards) { stopAll(cards[i]); });
+  }
+
+  function renderInsta(posts) {
+    var sec = $("#instagram");
+    sec.hidden = posts.length === 0;
+    if (!posts.length) return;
+    var handle = (S.instagram || "").match(/instagram\.com\/([^/?#]+)/);
+    if (handle) $$(".js-ighandle").forEach(function (el) { el.textContent = "@" + handle[1]; });
+    var track = $(".car-track", sec);
+    track.innerHTML = posts.map(function (w, k) {
+      var reel = w.lid.indexOf("reel/") === 0;
+      return '<div class="card-c ig-card rv' + (reel ? " reel" : "") + '" role="listitem" style="--d:' + Math.min(k, 3) + '" data-src="https://www.instagram.com/' +
+        esc(w.lid) + '/embed/">' + '<div class="ig-skel"><span class="ig-ring"><svg viewBox="0 0 24 24"><use href="#i-ig"/></svg></span><b>' +
+        esc(w.title) + "</b><i></i><i></i></div>" +
+        '<a class="ig-open" href="https://www.instagram.com/' + esc(w.lid) + '/" target="_blank" rel="noopener">Open on Instagram ↗</a></div>';
+    }).join("");
+    // load an embed only when its card comes near the screen
+    var load = function (c) {
+      if (c._l) return;
+      c._l = 1;
+      var f = document.createElement("iframe");
+      f.src = c.getAttribute("data-src");
+      f.loading = "lazy";
+      f.setAttribute("scrolling", "no");
+      f.setAttribute("allowtransparency", "true");
+      f.title = "Instagram post";
+      f.onload = function () { c.classList.add("ld"); };
+      c.insertBefore(f, c.firstChild);
+    };
+    var cards = $$(".ig-card", track);
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); load(e.target); } });
+      }, { rootMargin: "300px 600px" });
+      cards.forEach(function (c) { io.observe(c); });
+    } else cards.forEach(load);
+    carousel($(".car", sec));
   }
 
   function filter(cat) {
@@ -211,7 +340,7 @@
     document.documentElement.style.overflow = "hidden";
     requestAnimationFrame(function () { lb.classList.add("open"); });
     show(start || 0);
-    track("ViewContent", { content_name: w.title, content_category: w.category || "Showreel" });
+    track_("ViewContent", { content_name: w.title, content_category: w.category || "Showreel" });
   }
   function show(i) {
     pos = (i + items.length) % items.length;
@@ -236,7 +365,7 @@
   $(".lb-prev").addEventListener("click", function () { show(pos - 1); });
   $(".lb-next").addEventListener("click", function () { show(pos + 1); });
   lb.addEventListener("click", function (e) { if (e.target === lb || e.target === stage) closeViewer(); });
-  $(".lb-wa").addEventListener("click", function () { track("Contact", { content_name: lbWork ? lbWork.title : "" }); });
+  $(".lb-wa").addEventListener("click", function () { track_("Contact", { content_name: lbWork ? lbWork.title : "" }); });
   document.addEventListener("keydown", function (e) {
     if (lb.hidden) return;
     if (e.key === "Escape") closeViewer();
@@ -314,7 +443,7 @@
       var win = window.open(waLink(text), "_blank", "noopener");
       if (!win) location.href = waLink(text);
       msg.textContent = "Opening WhatsApp… just tap Send. Thank you!";
-      track("Lead", { content_name: "Media Production booking", content_category: d.get("event") });
+      track_("Lead", { content_name: "Media Production booking", content_category: d.get("event") });
       try { fetch(CRM + "/mp/enquiry", { method: "POST", body: new URLSearchParams(d), mode: "cors", credentials: "omit" }); } catch (err) { /* WhatsApp is enough */ }
       f.reset();
     });

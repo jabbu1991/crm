@@ -1,6 +1,16 @@
 {% extends 'media/_layout.html' %}{% block title %}Works{% endblock %}
 {% block content %}
 <h1>🎬 Recent work <span class="sp"></span><a class="btn pri" href="{{ url_for('mp_work_new') }}">＋ Add work</a></h1>
+<form method="post" action="{{ url_for('mp_link') }}" class="card paste">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <b>⚡ Paste a YouTube or Instagram link</b>
+  <div class="paste-row">
+    <input name="url" type="url" required placeholder="https://youtu.be/…  or  https://www.instagram.com/reel/…" inputmode="url">
+    <select name="category">{% for c in cats %}<option>{{ c }}</option>{% endfor %}</select>
+    <button class="btn pri">＋ Add</button>
+  </div>
+  <span class="muted small">YouTube → 🎬 Films (the name and picture come by themselves). Instagram → 📸 On Instagram. Newest shows first.</span>
+</form>
 <p class="muted small">Newest first on the website. ⭐ Featured works show big at the top. Hidden works stay here but not on the website.</p>
 <div class="chips"><a href="{{ url_for('mp_home') }}" class="{{ 'on' if not cat }}">All ({{ works|length if not cat else '…' }})</a>
 {% for c in cats %}<a href="{{ url_for('mp_home', cat=c) }}" class="{{ 'on' if cat == c }}">{{ c }}</a>{% endfor %}</div>
@@ -9,13 +19,14 @@
 {% for w in works %}{% set cv = covers[w.id] %}
   <div class="work{{ ' off' if w.hidden }}">
     <a class="pic" href="{{ url_for('mp_work_edit', wid=w.id) }}" style="{% if cv[0] %}background-image:url('{{ cv[0] }}'){% endif %}">
-      <span class="tag">{{ w.category }}</span>{% if w.featured %}<span class="star">⭐ Featured</span>{% endif %}
+      <span class="tag">{{ w.category }}</span>{% if w.featured %}<span class="star">⭐ Featured</span>{% elif w.pinned_at %}<span class="star" style="background:#2849a0">📌 Top</span>{% endif %}
       <span class="kind">{% if w.link_kind == 'youtube' %}▶ YouTube{% elif w.link_kind == 'instagram' %}◎ Instagram{% elif counts.get(w.id) %}🖼 {{ counts[w.id] }} photos{% else %}No media{% endif %}</span>
     </a>
     <div class="bd"><b>{{ w.title }}</b><span class="muted small">{{ w.event_date or '' }}{{ ' · ' + w.place if w.place }}{{ ' · hidden' if w.hidden }}</span></div>
     <div class="acts">
       <a class="btn sm" href="{{ url_for('mp_work_edit', wid=w.id) }}">✏️ Edit</a>
       <form method="post" action="{{ url_for('mp_work_quick', wid=w.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="cat" value="{{ cat }}">
+        <button class="btn sm" name="action" value="{{ 'untop' if w.pinned_at else 'top' }}">{{ '📌 Unpin' if w.pinned_at else '⬆ Top' }}</button>
         <button class="btn sm" name="action" value="{{ 'unfeature' if w.featured else 'feature' }}">{{ '☆ Unfeature' if w.featured else '⭐ Feature' }}</button>
         <button class="btn sm" name="action" value="{{ 'show' if w.hidden else 'hide' }}">{{ '👁 Show' if w.hidden else '🙈 Hide' }}</button>
         <button class="btn sm bad" name="action" value="delete" onclick="return confirm('Delete this work and its photos for good?')">🗑</button></form>

@@ -14,6 +14,8 @@ import io
 import json
 import re
 import time
+import urllib.parse
+import urllib.request
 from functools import wraps
 from urllib.parse import parse_qs, urlparse
 
@@ -69,6 +71,7 @@ def init(host):
     r("/media/work/new", "mp_work_new", need(work_form), methods=["GET", "POST"])
     r("/media/work/<int:wid>", "mp_work_edit", need(work_form), methods=["GET", "POST"])
     r("/media/work/<int:wid>/quick", "mp_work_quick", need(work_quick), methods=["POST"])
+    r("/media/link", "mp_link", need(quick_link), methods=["POST"])
     r("/media/settings", "mp_settings", need(settings_page), methods=["GET", "POST"])
     r("/media/editors", "mp_editors", need(editors_page, super_only=True), methods=["GET", "POST"])
     r("/mp/data.json", "mp_data", public_data)
@@ -225,7 +228,7 @@ def home():
     st = settings()
     cat = request.args.get("cat", "")
     sql = "SELECT * FROM media_works" + (" WHERE category = ?" if cat else "") + \
-          " ORDER BY COALESCE(event_date, substr(created_at, 1, 10)) DESC, id DESC"
+          " ORDER BY (pinned_at IS NULL), pinned_at DESC, COALESCE(event_date, substr(created_at, 1, 10)) DESC, id DESC"
     works = H.query(sql, (cat,) if cat else ())
     covers = {}
     for w in works:
@@ -308,10 +311,51 @@ def work_quick(wid):
     elif act in ("hide", "show"):
         H.execute("UPDATE media_works SET hidden = ? WHERE id = ?", (1 if act == "hide" else 0, wid))
         log(f"{act.title()} work #{wid}")
+    elif act in ("top", "untop"):
+        H.execute("UPDATE media_works SET pinned_at = ? WHERE id = ?", (H.now() if act == "top" else None, wid))
+        log(("Moved to top" if act == "top" else "Unpinned") + f" work #{wid}")
     elif act in ("feature", "unfeature"):
         H.execute("UPDATE media_works SET featured = ? WHERE id = ?", (1 if act == "feature" else 0, wid))
         log(f"{act.title()} work #{wid}")
     return redirect(url_for("mp_home", cat=request.form.get("cat") or None))
+
+
+def youtube_title(vid):
+    """The video's title from YouTube (oEmbed, no key needed); '' if YouTube can't be reached. Replaceable in tests."""
+    url = "https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(f"https://www.youtube.com/watch?v={vid}")
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "RealViewCRM/1.0"}),
+                                    timeout=6) as r:
+            return (json.loads(r.read(200000) or b"{}").get("title") or "")[:120]
+    except Exception:  # noqa: BLE001  (no title is fine)
+        return ""
+
+
+def quick_link():
+    """Paste a YouTube / Instagram link -> a work at once (YouTube title + picture come by themselves)."""
+    url = clean_url(request.form.get("url"))
+    kind, lid = parse_link(url)
+    if kind not in ("youtube", "instagram"):
+        flash("Paste a YouTube video link or an Instagram post / reel link.", "error")
+        return redirect(url_for("mp_home"))
+    dup = H.query("SELECT id, title FROM media_works WHERE link_kind = ? AND link_id = ?", (kind, lid), one=True)
+    if dup:
+        flash(f"This link is already on the page (\"{dup['title']}\").", "warning")
+        return redirect(url_for("mp_home"))
+    st = settings()
+    cat = H.clean(request.form.get("category"))[:40] or categories(st)[0]
+    if kind == "youtube":
+        title = youtube_title(lid) or "Film"
+    else:
+        title = "Instagram reel" if lid.startswith("reel/") else "Instagram post"
+    ts = H.now()
+    wid = H.execute("INSERT INTO media_works (title, category, event_date, link_url, link_kind, link_id, created_by,"
+                    " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (title, cat, ts[:10], url, kind, lid, g.mp["name"], ts, ts))
+    log(f"Added {kind} link #{wid}: {title}")
+    flash(("🎬 Film added: " if kind == "youtube" else "📸 Instagram post added: ") + title
+          + ". It shows first on the website within a minute.", "success")
+    return redirect(url_for("mp_home"))
 
 
 def settings_page():
@@ -433,7 +477,7 @@ def public_data():
     base = request.url_root.rstrip("/")
     works = []
     rows = H.query("SELECT * FROM media_works WHERE hidden = 0"
-                   " ORDER BY COALESCE(event_date, substr(created_at, 1, 10)) DESC, id DESC")
+                   " ORDER BY (pinned_at IS NULL), pinned_at DESC, COALESCE(event_date, substr(created_at, 1, 10)) DESC, id DESC")
     photos = {}
     for p in H.query("SELECT * FROM media_photos ORDER BY sort, id"):
         photos.setdefault(p["work_id"], []).append(p)
@@ -442,7 +486,7 @@ def public_data():
         src, cw, ch, big = cover_of(w, ps)
         full = lambda u: (base + u) if u.startswith("/") else u  # noqa: E731
         works.append({
-            "id": w["id"], "title": w["title"], "category": w["category"], "date": w["event_date"] or "",
+            "id": w["id"], "pinned": bool(w["pinned_at"]), "title": w["title"], "category": w["category"], "date": w["event_date"] or "",
             "place": w["place"] or "", "about": w["about"] or "", "featured": bool(w["featured"]),
             "kind": w["link_kind"] or "", "link": w["link_url"] or "", "lid": w["link_id"] or "",
             "cover": {"src": full(src), "big": full(big), "w": cw, "h": ch} if src else None,

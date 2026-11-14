@@ -115,7 +115,7 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
 .tile .play::before, .feat .play::before { content: ""; border-left: 18px solid #fff; border-top: 11px solid transparent; border-bottom: 11px solid transparent; margin-left: 5px; }
 .tile .play::after, .feat .play::after { content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); animation: ring 2.2s ease-out infinite; }
 @keyframes ring { from { transform: scale(1); opacity: .8; } to { transform: scale(1.6); opacity: 0; } }
-.tile:hover .play, .feat:hover .play { transform: scale(1.1); background: var(--sky); }
+.tile:hover .play { transform: scale(1.1); background: var(--sky); }
 .tile .count { position: absolute; top: 12px; right: 12px; font-size: 12px; background: rgba(0,0,0,.55); padding: 4px 9px; border-radius: 999px; }
 .tile .ig { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(45deg, #f58529, #dd2a7b, #8134af); }
 .tile .ig svg { width: 17px; height: 17px; }
@@ -257,4 +257,72 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .js .rv { opacity: 1; transform: none; }
+}
+
+/* ---------------------------------------------------------------- swipe carousels */
+.car { position: relative; }
+.car-track { display: flex; align-items: flex-start; gap: 22px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
+  padding: 8px max(20px, calc((100vw - 1180px) / 2)) 18px; scrollbar-width: none; overscroll-behavior-x: contain; cursor: grab; }
+.car-track::-webkit-scrollbar { display: none; }
+.car-track.drag { cursor: grabbing; scroll-snap-type: none; scroll-behavior: auto; }
+.car-track.drag * { pointer-events: none; }
+.card-c { flex: none; scroll-snap-align: center; transition: transform .5s cubic-bezier(.2,.7,.2,1), opacity .5s; }
+.js .car .card-c.rv.in:not(.cur) { opacity: .55; transform: scale(.94); }
+.car-arrows { display: flex; gap: 10px; }
+.car-arrows[hidden] { display: none; }
+.car-btn { width: 48px; height: 48px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; transition: background .2s, transform .2s; }
+.car-btn:hover { background: var(--grad); transform: scale(1.06); }
+.car-dots { display: flex; justify-content: center; gap: 8px; margin: 8px 0 0; min-height: 8px; }
+.car-dots i { width: 8px; height: 8px; border-radius: 99px; background: rgba(255,255,255,.22); cursor: pointer; transition: width .35s, background .35s; }
+.car-dots i.on { width: 28px; background: var(--grad); }
+
+/* films */
+.films { padding-bottom: 60px; }
+.film { width: min(820px, 74vw, (100vh - 300px) * 16 / 9); border-radius: 22px; overflow: hidden; background: var(--card); border: 1px solid var(--line); box-shadow: 0 40px 80px -40px rgba(0,0,0,.8); }
+.film-media { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+.film-media img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s cubic-bezier(.2,.7,.2,1), opacity .4s; }
+.film:hover .film-media img { transform: scale(1.04); }
+.film-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.55)); pointer-events: none; transition: opacity .3s; }
+.film-play { position: absolute; inset: 0; border: 0; background: none; cursor: pointer; z-index: 1; }
+.film .play { position: absolute; top: 50%; left: 50%; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%; background: rgba(255,255,255,.16); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.4); display: grid; place-items: center; transition: transform .3s, background .3s; }
+.film .play::before { content: ""; border-left: 24px solid #fff; border-top: 15px solid transparent; border-bottom: 15px solid transparent; margin-left: 7px; }
+.film .play::after { content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); animation: ring 2.2s ease-out infinite; }
+.film-play:hover .play { transform: scale(1.1); background: var(--sky); }
+.film iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 2; animation: zin .35s ease; }
+.film.playing .film-media::after, .film.playing .film-play { display: none; }
+.film-cap { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "badge wa" "title wa" "meta wa"; column-gap: 16px; padding: 18px 22px 20px; align-items: center; }
+.film-cap .badge { grid-area: badge; justify-self: start; font: 700 11px var(--head); letter-spacing: .1em; text-transform: uppercase; color: var(--ice); margin-bottom: 4px; }
+.film-cap b { grid-area: title; font: 700 clamp(17px, 2vw, 22px) var(--head); line-height: 1.25; }
+.film-cap > span:not(.badge) { grid-area: meta; color: var(--muted); font-size: 13.5px; }
+.film-wa { grid-area: wa; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: rgba(37,211,102,.12); color: #5ee08f; text-decoration: none; font: 700 13.5px var(--head); border: 1px solid rgba(37,211,102,.3); white-space: nowrap; transition: background .2s; }
+.film-wa:hover { background: rgba(37,211,102,.22); }
+
+/* instagram */
+.insta { background: radial-gradient(60% 70% at 80% 30%, rgba(221,42,123,.12), transparent 70%), var(--bg); padding-top: 70px; }
+.ig-card { position: relative; width: 340px; height: 610px; border-radius: 20px; overflow: hidden; background: #fff; box-shadow: 0 30px 60px -30px rgba(0,0,0,.8); }
+.ig-card.reel { height: 780px; }
+.ig-card::before { content: ""; position: absolute; inset: 0; border-radius: 20px; padding: 2px; background: linear-gradient(45deg, #f58529, #dd2a7b, #8134af, #515bd4); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; z-index: 3; pointer-events: none; }
+.ig-card iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; transition: opacity .5s; background: #fff; }
+.ig-card.ld iframe { opacity: 1; }
+.ig-skel { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; color: #334155; background: linear-gradient(110deg, #f1f5f9 30%, #fff 50%, #f1f5f9 70%) 0 0 / 300% 100%; animation: shimmer 1.6s linear infinite; }
+.ig-card.ld .ig-skel { display: none; }
+@keyframes shimmer { to { background-position: -150% 0; } }
+.ig-ring { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; color: #fff; background: linear-gradient(45deg, #f58529, #dd2a7b, #8134af); }
+.ig-ring svg { width: 30px; height: 30px; }
+.ig-skel i { width: 180px; height: 10px; border-radius: 6px; background: #e2e8f0; }
+.ig-skel i + i { width: 120px; }
+.ig-open { position: absolute; right: 12px; bottom: 12px; z-index: 4; padding: 7px 12px; border-radius: 999px; background: rgba(15,23,42,.82); color: #fff; font: 600 12px var(--head); text-decoration: none; opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; }
+.ig-card:hover .ig-open, .ig-card.cur .ig-open { opacity: 1; transform: none; }
+.insta .more-links .mbtn { background: linear-gradient(45deg, #f58529, #dd2a7b, #8134af); box-shadow: 0 12px 30px -10px rgba(221,42,123,.6); }
+
+@media (max-width: 600px) {
+  .car-track { gap: 14px; padding-left: 20px; padding-right: 20px; }
+  .film { width: 86vw; border-radius: 16px; }
+  .film .play { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
+  .film-cap { grid-template-columns: 1fr; grid-template-areas: "badge" "title" "meta" "wa"; padding: 14px 16px 16px; }
+  .film-wa { justify-self: start; margin-top: 12px; }
+  .car-arrows { display: none; }
+  .ig-card { width: 80vw; height: calc(80vw * 1.25 + 175px); }
+  .ig-card.reel { height: calc(80vw * 1.78 + 175px); }
+  .film { width: 86vw; }
 }

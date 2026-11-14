@@ -152,3 +152,27 @@ def test_booking_enquiry_becomes_agency_lead(mw):
     assert c.post("/mp/enquiry", data={"name": "X", "phone": "123"}, headers={"Origin": SITE}).status_code == 400
     assert c.post("/mp/enquiry", data={"name": "X", "phone": "9847012345"},
                   headers={"Origin": "https://evil.example"}).status_code == 403
+
+
+def test_paste_link_and_move_to_top(mw, monkeypatch):
+    sup = mw["sup"]
+    monkeypatch.setattr(mp, "youtube_title", lambda vid: "Ameen & Hiba – Wedding Film")
+    r = sup.post("/media/link", {"url": "https://youtu.be/dQw4w9WgXcQ?si=abc", "category": "Wedding"})
+    assert "Film added: Ameen &amp; Hiba – Wedding Film" in r.text
+    r = sup.post("/media/link", {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"})
+    assert "already on the page" in r.text
+    r = sup.post("/media/link", {"url": "https://www.instagram.com/reel/C1a2B3c4D5e/?igsh=x", "category": "Live Show"})
+    assert "Instagram post added: Instagram reel" in r.text
+    assert "Paste a YouTube" in sup.post("/media/link", {"url": "https://example.com/x"}).text
+    works = Browser().get("/mp/data.json").json["works"]
+    assert [(w["kind"], w["lid"]) for w in works] == [("instagram", "reel/C1a2B3c4D5e"), ("youtube", "dQw4w9WgXcQ")]
+    assert works[1]["cover"]["src"].startswith("https://i.ytimg.com/vi/dQw4w9WgXcQ/")
+    # an older work moved to the top comes first
+    sup.post("/media/work/new", {"title": "Old album", "event_date": "2020-01-01"})
+    wid = q(mw["db"], "SELECT id FROM media_works WHERE title = 'Old album'")[0][0]
+    assert Browser().get("/mp/data.json").json["works"][-1]["title"] == "Old album"
+    sup.post(f"/media/work/{wid}/quick", {"action": "top"})
+    first = Browser().get("/mp/data.json").json["works"][0]
+    assert first["title"] == "Old album" and first["pinned"]
+    sup.post(f"/media/work/{wid}/quick", {"action": "untop"})
+    assert Browser().get("/mp/data.json").json["works"][-1]["title"] == "Old album"
