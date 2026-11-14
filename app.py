@@ -3808,6 +3808,7 @@ import updates  # noqa: E402
 import perf  # noqa: E402
 import capture  # noqa: E402
 import jobs  # noqa: E402
+import media_page  # noqa: E402
 
 cafe.init(sys.modules[__name__])
 production.init(sys.modules[__name__])
@@ -3818,6 +3819,7 @@ updates.init(sys.modules[__name__])
 perf.init(sys.modules[__name__])
 capture.init(sys.modules[__name__])
 jobs.init(sys.modules[__name__])
+media_page.init(sys.modules[__name__])
 
 crm_db.migrate(DB_PATH)
 

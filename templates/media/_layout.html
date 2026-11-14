@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block title %}Media Page{% endblock %} · Realview Media Production</title>
+<link rel="icon" href="{{ url_for('static', filename='media/logo-mark.png') }}">
+<style>
+:root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f4f7fb; --blue:#2849a0; --sky:#1a8bd0; --ok:#16a34a; --bad:#dc2626; }
+* { box-sizing: border-box; }
+body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+a { color:var(--blue); }
+.top { background:#0b1020; color:#fff; position:sticky; top:0; z-index:5; }
+.top .in { max-width:1100px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.top img { height:34px; }
+.top b { font-size:15px; letter-spacing:.02em; }
+.top nav { display:flex; gap:4px; flex-wrap:wrap; margin-left:auto; align-items:center; }
+.top nav a, .top nav button { color:#cbd5e1; text-decoration:none; padding:7px 10px; border-radius:8px; font-size:14px; background:none; border:0; cursor:pointer; font-family:inherit; }
+.top nav a.on, .top nav a:hover { background:rgba(255,255,255,.1); color:#fff; }
+main { max-width:1100px; margin:0 auto; padding:18px 16px 60px; }
+h1 { font-size:22px; margin:6px 0 14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+h1 .sp { flex:1; }
+h2 { font-size:17px; margin:0 0 10px; }
+.card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:16px; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--ink); text-decoration:none; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; }
+.btn.pri { background:linear-gradient(135deg,var(--blue),var(--sky)); color:#fff; border:0; }
+.btn.sm { padding:5px 9px; font-size:12.5px; border-radius:8px; }
+.btn.bad { color:var(--bad); }
+.flash { padding:10px 14px; border-radius:10px; margin-bottom:12px; background:#eff6ff; border:1px solid #bfdbfe; }
+.flash.success { background:#f0fdf4; border-color:#bbf7d0; } .flash.error { background:#fef2f2; border-color:#fecaca; } .flash.warning { background:#fffbeb; border-color:#fde68a; }
+label { display:block; font-weight:600; font-size:13.5px; margin:12px 0 4px; }
+label small { font-weight:400; color:var(--muted); }
+input[type=text], input[type=url], input[type=date], input[type=tel], input[type=password], input:not([type]), select, textarea {
+  width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:10px; font:inherit; background:#fff; }
+textarea { min-height:90px; }
+.row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0 14px; }
+.check { display:flex; align-items:center; gap:8px; font-weight:500; margin:10px 0; }
+.check input { width:18px; height:18px; }
+.muted { color:var(--muted); } .small { font-size:12.5px; }
+.chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.chips a { padding:6px 12px; border-radius:999px; background:#fff; border:1px solid var(--line); text-decoration:none; color:var(--ink); font-size:13px; }
+.chips a.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+.work { background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+.work.off { opacity:.55; }
+.work .pic { position:relative; aspect-ratio:4/3; background:#0b1020 center/cover no-repeat; display:block; }
+.work .tag { position:absolute; left:8px; top:8px; background:rgba(0,0,0,.65); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:999px; }
+.work .star { position:absolute; right:8px; top:8px; background:#f59e0b; color:#fff; font-size:11.5px; padding:2px 8px; border-radius:999px; }
+.work .kind { position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65); color:#fff; font-size:11.5px; padding:2px 8px; border-radius:999px; }
+.work .bd { padding:10px 12px; flex:1; }
+.work .bd b { display:block; }
+.work .acts { display:flex; gap:6px; flex-wrap:wrap; padding:0 12px 12px; }
+.work .acts form { display:inline; }
+.photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+.photos .ph { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff; font-size:12.5px; }
+.photos img { width:100%; aspect-ratio:1; object-fit:cover; display:block; }
+.photos .ph div { padding:6px 8px; display:grid; gap:2px; }
+table { width:100%; border-collapse:collapse; } th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+.hint { background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; padding:10px 12px; font-size:13px; color:#475569; margin-top:6px; }
+.save-bar { position:sticky; bottom:0; background:rgba(244,247,251,.95); padding:12px 0; display:flex; gap:10px; }
+@media (max-width:640px) { .top nav { margin-left:0; width:100%; } h1 { font-size:19px; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="in">
+  <img src="{{ url_for('static', filename='media/logo-mark.png') }}" alt=""><b>Realview Media Production</b>
+  {% if g.mp %}<nav>
+    <a href="{{ url_for('mp_home') }}" class="{{ 'on' if request.endpoint in ('mp_home','mp_work_new','mp_work_edit') }}">🎬 Works</a>
+    <a href="{{ url_for('mp_settings') }}" class="{{ 'on' if request.endpoint == 'mp_settings' }}">⚙️ Page settings</a>
+    {% if g.mp.kind == 'super' %}<a href="{{ url_for('mp_editors') }}" class="{{ 'on' if request.endpoint == 'mp_editors' }}">👤 Editors</a>
+    <a href="{{ url_for('dashboard') }}">← CRM</a>{% endif %}
+    <a href="https://www.realviewcreativestudio.in/realview-media-production/" target="_blank" rel="noopener">🌐 View page</a>
+    {% if g.mp.kind == 'editor' %}<form method="post" action="{{ url_for('mp_logout') }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Log out</button></form>{% endif %}
+  </nav>{% endif %}
+</div></header>
+<main>
+{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}<div class="flash {{ c }}">{{ m }}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% extends 'media/_layout.html' %}{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:40px auto">
+  <h1>🎬 Media Page login</h1>
+  <p class="muted small">For the people who update the Realview Media Production website page.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username</label><input name="username" autocomplete="username" autocapitalize="none" required>
+    <label>Password</label><input type="password" name="password" autocomplete="current-password" required>
+    <p><button class="btn pri" style="width:100%;justify-content:center">Log in</button></p>
+  </form>
+  <p class="muted small">Forgot the password? Ask the Real View admin to set a new one.</p>
+</div>
+{% endblock %}

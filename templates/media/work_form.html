@@ -1,0 +1,32 @@
+{% extends 'media/_layout.html' %}{% block title %}{{ 'Edit work' if w else 'Add work' }}{% endblock %}
+{% block content %}
+<h1>{{ '✏️ Edit work' if w else '＋ Add work' }} <span class="sp"></span><a class="btn" href="{{ url_for('mp_home') }}">← Back</a></h1>
+<form method="post" enctype="multipart/form-data" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Title <small>(shown on the website, e.g. "Wedding at Tirur", "Live Show – Kozhikode")</small></label>
+  <input name="title" value="{{ w.title if w }}" maxlength="120" required>
+  <div class="row">
+    <div><label>Category</label><input name="category" list="cats" value="{{ w.category if w else cats[0] }}" maxlength="40">
+      <datalist id="cats">{% for c in cats %}<option value="{{ c }}">{% endfor %}</datalist></div>
+    <div><label>Date</label><input type="date" name="event_date" value="{{ w.event_date if w and w.event_date else today }}"></div>
+    <div><label>Place</label><input name="place" value="{{ w.place if w and w.place }}" maxlength="120" placeholder="e.g. Tirur, Malappuram"></div>
+  </div>
+  <label>Short note <small>(optional, 1–2 lines)</small></label>
+  <textarea name="about" maxlength="400" style="min-height:60px">{{ w.about if w and w.about }}</textarea>
+  <label>YouTube or Instagram link <small>(optional)</small></label>
+  <input name="link_url" type="url" value="{{ w.link_url if w and w.link_url }}" placeholder="https://youtu.be/…  or  https://www.instagram.com/reel/…">
+  <div class="hint">YouTube: the video picture comes by itself. Instagram: also add 1 photo below as the cover so it looks good in the gallery.</div>
+  <label>Photos <small>(choose many at once · up to {{ max_photos }} · any size, made small automatically)</small></label>
+  <input type="file" name="photos" accept="image/*" multiple>
+  {% if photos %}
+  <label>Photos of this work <small>(tick 🗑 to delete · choose the cover)</small></label>
+  <div class="photos">{% for p in photos %}
+    <div class="ph"><img src="/media/{{ p.thumb }}" alt="" loading="lazy">
+      <div><label class="check" style="margin:0;font-weight:500"><input type="radio" name="cover" value="{{ p.id }}" {{ 'checked' if (w.cover|string) == (p.id|string) or (not w.cover and loop.first) }}> Cover</label>
+      <label class="check" style="margin:0;font-weight:500"><input type="checkbox" name="delete_photo" value="{{ p.id }}"> 🗑 Delete</label></div></div>
+  {% endfor %}</div>{% endif %}
+  <label class="check"><input type="checkbox" name="featured" {{ 'checked' if w and w.featured }}> ⭐ Featured (big, at the top of the page)</label>
+  <label class="check"><input type="checkbox" name="hidden" {{ 'checked' if w and w.hidden }}> 🙈 Hide from the website</label>
+  <div class="save-bar"><button class="btn pri">💾 Save</button><a class="btn" href="{{ url_for('mp_home') }}">Cancel</a></div>
+</form>
+{% endblock %}

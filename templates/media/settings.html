@@ -1,0 +1,52 @@
+{% extends 'media/_layout.html' %}{% block title %}Page settings{% endblock %}
+{% block content %}
+<h1>⚙️ Page settings</h1>
+<form method="post" enctype="multipart/form-data">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="card"><h2>Top of the page</h2>
+  <label>Page name</label><input name="brand" value="{{ st.brand }}">
+  <label>Headline</label><input name="hero_title" value="{{ st.hero_title }}">
+  <label>Line under the headline</label><input name="hero_text" value="{{ st.hero_text }}">
+  <label>Showreel YouTube link <small>(optional · plays from the "Watch showreel" button)</small></label><input name="showreel" type="url" value="{{ st.showreel }}">
+  <label>Area you serve</label><input name="area" value="{{ st.area }}">
+</div>
+<div class="card"><h2>Lead photographer</h2>
+  <div class="row">
+    <div><label>Name</label><input name="name" value="{{ st.name }}"></div>
+    <div><label>Title</label><input name="role" value="{{ st.role }}"></div>
+  </div>
+  <label>About <small>(2–3 lines)</small></label><textarea name="bio">{{ st.bio }}</textarea>
+  <label>Photo <small>(portrait; leave empty to keep the current one)</small></label>
+  {% if st.photo %}<p><img src="/media/{{ st.photo }}" alt="" style="height:140px;border-radius:10px"> <label class="check"><input type="checkbox" name="photo_remove"> Remove (use the default photo)</label></p>{% else %}<p class="muted small">Now: the default photo on the website.</p>{% endif %}
+  <input type="file" name="photo_file" accept="image/*">
+  <div class="row">
+    <div><label>Phone (Call button)</label><input name="phone" type="tel" value="{{ st.phone }}"></div>
+    <div><label>WhatsApp number (all booking buttons)</label><input name="whatsapp" type="tel" value="{{ st.whatsapp }}"></div>
+  </div>
+  <div class="row">
+    <div><label>Instagram link</label><input name="instagram" type="url" value="{{ st.instagram }}"></div>
+    <div><label>YouTube channel link</label><input name="youtube" type="url" value="{{ st.youtube }}"></div>
+  </div>
+</div>
+<div class="card"><h2>Ready WhatsApp messages</h2>
+  <label>Booking buttons</label><textarea name="wa_default">{{ st.wa_default }}</textarea>
+  <label>From a work in the gallery <small>({work} becomes the work's title)</small></label><textarea name="wa_work">{{ st.wa_work }}</textarea>
+</div>
+<div class="card"><h2>Categories</h2>
+  <label>One per line <small>(the filters on the page; only those with works are shown)</small></label><textarea name="categories">{{ st.categories }}</textarea>
+</div>
+<div class="card"><h2>Services</h2>
+  <label>One per line: <code>Title | short text</code></label><textarea name="services" style="min-height:160px">{{ st.services }}</textarea>
+</div>
+<div class="card"><h2>Packages</h2>
+  <label class="check"><input type="checkbox" name="packages_on" {{ 'checked' if st.packages_on == '1' }}> Show packages on the website</label>
+  <label>One per line: <code>Name | Price | item, item, item</code></label>
+  <textarea name="packages" placeholder="Classic | ₹45,000 | Candid photos, Highlight film, 1 photographer">{{ st.packages }}</textarea>
+</div>
+<div class="card"><h2>FAQ</h2>
+  <label>One per line: <code>Question | Answer</code> <small>(the FAQ section shows only when filled)</small></label>
+  <textarea name="faq" style="min-height:140px" placeholder="How do I book a date? | Send us your date and place on WhatsApp. A date is confirmed with an advance.">{{ st.faq }}</textarea>
+</div>
+<div class="save-bar"><button class="btn pri">💾 Save settings</button></div>
+</form>
+{% endblock %}

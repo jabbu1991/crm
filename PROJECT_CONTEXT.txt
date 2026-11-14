@@ -493,3 +493,14 @@ FAMILY MODULE (built 8 Nov 2026) — family.py, templates/family/*, static/famil
 - Admin: Members (filters, Excel, WhatsApp, + child), edit / merge / delete, Achievers (print), Cultural programs,
   Accounts (income & expense; paid fees counted automatically; staff ticks View / Add; edit + delete Admin only),
   QR poster, 🧹 Clear all (Admin, type CLEAR) for testing.
+
+======================================================================
+REALVIEW MEDIA PRODUCTION PAGE (14 Nov 2026)
+======================================================================
+- Website page /realview-media-production/ (dark + logo blues): wedding & live-show photography/films of
+  Azeez Kodinhi (+91 70255 04627, instagram realview__wedding, youtube @azeezrealview4509). Content comes from
+  the CRM: media_page.py, Super Admin menu "🎬 Media Page" (/media). Public JSON /mp/data.json; booking form
+  -> /mp/enquiry -> agency lead in campaign "Media Production Enquiries" (code MEDIA) + WhatsApp message.
+- Editors (Media Page -> Editors): own username/password, log in at /media/login, see ONLY this page.
+- Works: title, category, date, place, YouTube/Instagram link, photos (shrunk, in uploads so backed up),
+  Featured/Hidden/cover. DB v31 adds media_settings, media_works, media_photos, media_editors, media_log.

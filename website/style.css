@@ -367,3 +367,7 @@ a { color: var(--accent); }
 .form-success p { margin: 0 0 10px; } .form-success p:last-child { margin: 0; }
 .btn-wa { background: #25d366; color: #fff; box-shadow: none; }
 .form-success[hidden] { display: none; }
+
+/* Services: link card to the Realview Media Production page */
+a.card-link { display: block; text-decoration: none; color: inherit; background: linear-gradient(135deg, #0b1020, #1b2a5c); border-color: transparent; }
+a.card-link h3 { color: #fff; } a.card-link p { color: #9fc3ff; } a.card-link .num { background: rgba(255,255,255,.12); color: #fff; }

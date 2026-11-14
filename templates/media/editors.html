@@ -1,0 +1,29 @@
+{% extends 'media/_layout.html' %}{% block title %}Editors{% endblock %}
+{% block content %}
+<h1>👤 Editors</h1>
+<p class="muted">Editors log in at <b>{{ login_url }}</b> and see <b>only</b> this Media Page (works and page settings). They never see the CRM.</p>
+<div class="card"><h2>Add an editor</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add">
+  <div class="row">
+    <div><label>Name</label><input name="name" required placeholder="Azeez Kodinhi"></div>
+    <div><label>Username</label><input name="username" required autocapitalize="none" placeholder="azeez"></div>
+    <div><label>Password <small>(8+ characters)</small></label><input name="password" required minlength="8"></div>
+  </div>
+  <p><button class="btn pri">＋ Add editor</button></p>
+</form></div>
+<div class="card"><h2>Editors</h2>
+{% if not editors %}<p class="muted">No editors yet.</p>{% else %}
+<table><tr><th>Name</th><th>Username</th><th>Last login</th><th></th></tr>
+{% for e in editors %}<tr>
+  <td>{{ e.name }}{{ ' (disabled)' if not e.active }}</td><td>{{ e.username }}</td><td class="small">{{ e.last_login_at|ist if e.last_login_at else '—' }}</td>
+  <td><form method="post" style="display:flex;gap:6px;flex-wrap:wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ e.id }}">
+    <button class="btn sm" name="action" value="toggle">{{ 'Disable' if e.active else 'Enable' }}</button>
+    <input name="password" placeholder="New password" minlength="8" style="width:150px;padding:5px 8px">
+    <button class="btn sm" name="action" value="password">Set password</button>
+    <button class="btn sm bad" name="action" value="delete" onclick="return confirm('Remove this editor?')">Remove</button></form></td>
+</tr>{% endfor %}</table>{% endif %}
+</div>
+<div class="card"><h2>History</h2>
+<table>{% for h in history %}<tr><td class="small" style="white-space:nowrap">{{ h.created_at|ist }}</td><td class="small">{{ h.who }}</td><td class="small">{{ h.action }}</td></tr>{% else %}<tr><td class="muted">Nothing yet.</td></tr>{% endfor %}</table>
+</div>
+{% endblock %}
