@@ -329,3 +329,15 @@ svg { width: 1.1em; height: 1.1em; flex: none; }
   .ig-card.reel { height: calc(80vw * 1.78 + 175px); }
   .film { width: 86vw; }
 }
+
+/* carousel cards: springy bounce on hover (computer) and when a card arrives in the middle (phone swipe) */
+.js .car .card-c.rv.in { transition: transform .65s cubic-bezier(.34, 1.56, .64, 1), opacity .4s ease, box-shadow .45s ease; transition-delay: 0s; }
+.js .car .card-c.rv.in.cur { animation: cardpop .7s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes cardpop { 0% { transform: scale(.94); } 55% { transform: scale(1.025); } 80% { transform: scale(.995); } 100% { transform: none; } }
+@media (hover: hover) {
+  .js .car .card-c.rv.in:hover { transform: translateY(-14px) scale(1.035); opacity: 1; animation: none; }
+  .js .car .film.rv.in:hover { box-shadow: 0 50px 90px -40px rgba(26, 155, 224, .55), 0 0 0 1px rgba(143, 208, 255, .35); }
+  .js .car .ig-card.rv.in:hover { box-shadow: 0 45px 80px -35px rgba(221, 42, 123, .55); }
+  .js .car .film.rv.in:hover .play { animation: playbounce .6s cubic-bezier(.34, 1.56, .64, 1); }
+}
+@keyframes playbounce { 0% { transform: scale(1); } 45% { transform: scale(1.18); } 70% { transform: scale(.95); } 100% { transform: scale(1.1); } }
