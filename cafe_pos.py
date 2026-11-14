@@ -146,6 +146,8 @@ def set_order_lines(db, order_id, wanted, allow_unavailable=False, public=False)
                           (w["item_id"], _org())).fetchone()
         if not item:
             raise BillError("An item is no longer on the menu. Reload the page.")
+        if public and not item["show_menu"]:
+            raise BillError("An item is no longer on the menu. Reload the page.")
         if not item["available"] and not allow_unavailable:
             raise BillError(f"'{item['name']}' is not available now (switched OFF).")
         unit = item["unit"] or "pc"

@@ -253,6 +253,7 @@ def item_form_data(item=None):
     data["unit"] = f.get("unit") if f.get("unit") in UNITS else "pc"
     data["barcode"] = re.sub(r"\s+", "", f.get("barcode") or "")[:40] or None
     data["pinned"] = 1 if f.get("pinned") else 0
+    data["show_menu"] = 1 if f.get("show_menu") or not f.get("show_menu_field") else 0   # the box is on the form
     errors = []
     if data["barcode"]:
         other = H.scalar("SELECT name FROM menu_items WHERE org_id = ? AND active = 1 AND barcode = ? AND id != ?",
@@ -310,13 +311,13 @@ def _apply_new_category(data, new_cat):
 
 
 ITEM_COLS = ("name", "description", "category_id", "price", "offer_price", "offer_from", "offer_to", "food_type",
-             "tags", "gst_rate", "available", "sort", "serial", "unit", "barcode", "pinned")
+             "tags", "gst_rate", "available", "sort", "serial", "unit", "barcode", "pinned", "show_menu")
 
 
 @bp.route("/cafe/menu/item/new", methods=["GET", "POST"])
 @cafe_view("menu_edit")
 def item_new():
-    data = {"available": 1, "gst_rate": get_settings()["default_gst"], "category_id": request.args.get("cat", type=int),
+    data = {"available": 1, "show_menu": 1, "gst_rate": get_settings()["default_gst"], "category_id": request.args.get("cat", type=int),
             "price": None, "offer_price": None, "serial": next_serial(), "unit": "pc"}
     if request.method == "POST":
         data, errors, new_cat = item_form_data()
@@ -366,6 +367,9 @@ def item_action(iid, action):
     if action == "toggle":
         H.execute("UPDATE menu_items SET available = ?, updated_at = ? WHERE id = ? AND org_id = ?",
                   (0 if item["available"] else 1, H.now(), iid, H.org_id()))
+    elif action == "show":                 # 👁 shown to customers ⇄ counter billing only
+        H.execute("UPDATE menu_items SET show_menu = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+                  (0 if item["show_menu"] else 1, H.now(), iid, H.org_id()))
     elif action == "delete":
         H.execute("UPDATE menu_items SET active = 0, updated_at = ? WHERE id = ? AND org_id = ?",
                   (H.now(), iid, H.org_id()))
@@ -373,7 +377,7 @@ def item_action(iid, action):
     else:
         abort(404)
     if request.headers.get("X-Requested-With") == "fetch":
-        return jsonify(ok=True, available=not item["available"])
+        return jsonify(ok=True, available=not item["available"], show=not item["show_menu"])
     return redirect(H.safe_next(url_for("cafe.menu")) + f"#item{iid}")
 
 

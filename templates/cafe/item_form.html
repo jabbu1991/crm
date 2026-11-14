@@ -42,7 +42,10 @@
   </div>
   <div class="row-2">
     <label>Barcode <small>(optional: click here and scan the packet)</small><input name="barcode" value="{{ data.barcode or '' }}" maxlength="40" autocomplete="off" inputmode="numeric" onkeydown="if (event.key === 'Enter') event.preventDefault()"></label>
+    <div>
     <label class="check pin-check"><input type="checkbox" name="pinned" value="1" {{ 'checked' if data.pinned }}> 📌 Pin to top (always first in billing and on the menu)</label>
+    <input type="hidden" name="show_menu_field" value="1"><label class="check"><input type="checkbox" name="show_menu" value="1" {{ 'checked' if data.show_menu or data.show_menu is not defined or data.show_menu is none }}> 👁 Show to customers on the menu <small class="muted">(off: counter billing only)</small></label>
+    </div>
   </div>
   <label>Photo<input type="file" name="photo" accept="image/*"><span class="photo-hint">📷 {{ hint }}</span>
     <small class="muted">Any photo works: it is cropped square and shrunk to under 20 KB automatically.</small></label>

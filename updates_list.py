@@ -9,6 +9,10 @@ Screens are in English, so the notes are too.
 """
 
 SHIPPED = [
+    {"key": "2026-11-14-cafe-hide-item", "date": "2026-11-14", "module": "cafe", "audience": "admins",
+     "title": "👁 Hide an item from customers",
+     "body": "Menu: tap 👁 next to an item to hide it from the customer menu and QR menu (it turns 🙈). "
+             "It stays in counter billing. Tap again to show it."},
     {"key": "2026-11-13-quick-add-followup", "date": "2026-11-13", "module": "crm", "audience": "all",
      "title": "⚡ Quick Add: follow-up date, campaign optional",
      "body": "Quick Add (＋ Lead) now sets the follow-up to the next day (change it if needed). Choosing a campaign "

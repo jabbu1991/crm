@@ -789,6 +789,35 @@ def test_public_order_with_weight(cw):
     assert tuple(row) == (24000, 0.5)
 
 
+def test_hide_item_from_customers_keeps_it_in_billing(cw):
+    w = cw
+    b = w["cafe"]
+    settings(b, online_on="1")
+    add_item(b, "Staff Meal", "50")
+    add_item(b, "Tea", "15")
+    sm = item_id(w, "Staff Meal")
+    assert "Staff Meal" in Browser().get("/m/chai").text
+    assert "Tap to hide" in b.get("/cafe/menu").text
+    b.post(f"/cafe/menu/item/{sm}/show", {})                      # 🙈 hide
+    assert w["db"]().execute("SELECT show_menu FROM menu_items WHERE id = ?", (sm,)).fetchone()[0] == 0
+    page = Browser().get("/m/chai").text
+    assert "Staff Meal" not in page and "Tea" in page
+    assert "Staff Meal" in b.get("/cafe/pos").text and "🙈 Billing only" in b.get("/cafe/menu").text
+    # a customer cannot order it; the counter can bill it
+    r = Browser().post("/m/chai/order", {"payload": json.dumps({"type": "takeaway", "name": "Anu", "phone": "9876543210",
+                       "items": [{"item_id": sm, "qty": 1}]})}, follow=False)
+    assert not r.get_json()["ok"]
+    pos(b, {"action": "bill", "order_type": "takeaway", "payment_mode": "Cash", "items": [{"item_id": sm, "qty": 1}]})
+    assert w["db"]().execute("SELECT COUNT(*) FROM cafe_order_items WHERE item_id = ?", (sm,)).fetchone()[0] == 1
+    # the edit form keeps it hidden unless the box is ticked; ticking shows it again
+    b.post(f"/cafe/menu/item/{sm}/edit", {"name": "Staff Meal", "price": "50", "available": "1", "unit": "pc",
+                                          "show_menu_field": "1"})
+    assert "Staff Meal" not in Browser().get("/m/chai").text
+    b.post(f"/cafe/menu/item/{sm}/edit", {"name": "Staff Meal", "price": "50", "available": "1", "unit": "pc",
+                                          "show_menu_field": "1", "show_menu": "1"})
+    assert "Staff Meal" in Browser().get("/m/chai").text
+
+
 # ------------------------------------------------------------------ round 4: speed, split / later payments, My Card
 
 def test_gzip_and_static_cache(cw):

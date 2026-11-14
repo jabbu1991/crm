@@ -417,6 +417,7 @@ def item_dict(r, day=None):
         "photo": url_for("media", name=r["photo"]) if r["photo"] else "",
         "type": r["food_type"] or "", "tags": tags, "available": bool(r["available"]), "gst": r["gst_rate"],
         "sno": r["serial"], "unit": r["unit"] or "pc", "barcode": r["barcode"] or "", "pin": bool(r["pinned"]),
+        "show": bool(r["show_menu"]),
         "pk": r["packing"] if "packing" in r.keys() else 0,
     }
 
@@ -462,7 +463,8 @@ def menu_data(oid, for_public=False, sort=None):
     elif sort == "menu":
         order = {it["id"]: n for n, it in enumerate(out)}
         out.sort(key=lambda it: (not it["pin"], order[it["id"]]))
-    if for_public:  # serial numbers and barcodes are for staff only
+    if for_public:  # serial numbers and barcodes are for staff only; hidden items are for counter billing only
+        out = [i for i in out if i["show"]]
         for i in out:
             i.pop("sno", None)
             i.pop("barcode", None)
@@ -496,7 +498,7 @@ def save_photo(field, box, fit, max_kb=PHOTO_MAX_KB):
 def live_banners(oid, cats_items=None):
     day = today()
     rows = H.query("""SELECT b.*, i.name item_name FROM menu_banners b LEFT JOIN menu_items i ON i.id = b.item_id
-                      AND i.active = 1 WHERE b.org_id = ? AND b.active = 1 ORDER BY b.sort, b.id""", (oid,))
+                      AND i.active = 1 AND i.show_menu = 1 WHERE b.org_id = ? AND b.active = 1 ORDER BY b.sort, b.id""", (oid,))
     out = []
     for b in rows:
         if b["start_date"] and day < b["start_date"] or b["end_date"] and day > b["end_date"]:
